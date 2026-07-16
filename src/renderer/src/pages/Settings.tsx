@@ -45,7 +45,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
   const updatesApi = api.updates
   // keys are read by the main process (main/tray.ts) — keep the literals in sync
   const [closeBehavior, setCloseBehavior] = useState(() =>
-    uiGet('window.closeBehavior') === 'tray' ? 'tray' : 'quit'
+    uiGet('window.closeBehavior') === 'quit' ? 'quit' : 'tray'
   )
   const [minimizeBehavior, setMinimizeBehavior] = useState(() =>
     uiGet('window.minimizeBehavior') === 'tray' ? 'tray' : 'taskbar'

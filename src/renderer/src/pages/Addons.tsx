@@ -98,19 +98,19 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showLibraryStatus, setShowLibraryStatus] = useState(
-    () => uiGet('addons.showLibraryStatus') !== '0'
+    () => uiGet('addons.showLibraryStatus') === '1'
   )
   const [showCanonicalId, setShowCanonicalId] = useState(
-    () => uiGet('addons.showCanonicalId') !== '0'
+    () => uiGet('addons.showCanonicalId') === '1'
   )
   const [showCategory, setShowCategory] = useState(
-    () => uiGet('addons.showCategory') !== '0'
+    () => uiGet('addons.showCategory') === '1'
   )
   const [showVersionCount, setShowVersionCount] = useState(
-    () => uiGet('addons.showVersionCount') !== '0'
+    () => uiGet('addons.showVersionCount') === '1'
   )
   const [showDescription, setShowDescription] = useState(
-    () => uiGet('addons.showDescription') !== '0'
+    () => uiGet('addons.showDescription') === '1'
   )
   const [showVersionBadge, setShowVersionBadge] = useState(
     () => uiGet('addons.showVersionBadge') !== '0'

@@ -43,7 +43,7 @@ export default function InstallsPage({
   const [projectsPopoverFor, setProjectsPopoverFor] = useState<string | null>(null)
   const [progressById, setProgressById] = useState<Record<string, InstallProgress>>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [showBranch, setShowBranch] = useState(() => uiGet('installs.showBranch') !== '0')
+  const [showBranch, setShowBranch] = useState(() => uiGet('installs.showBranch') === '1')
   const [installedFilter, setInstalledFilter] = useState<'all' | 'installed' | 'not-installed'>(
     () => (uiGet('installs.installedFilter') as 'all' | 'installed' | 'not-installed' | undefined) ?? 'all'
   )

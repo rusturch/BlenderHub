@@ -59,8 +59,8 @@ export default function ProjectsPage({
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showDate, setShowDate] = useState(() => readFlag('projects.showDate', true))
-  const [showSize, setShowSize] = useState(() => readFlag('projects.showSize', true))
-  const [showPath, setShowPath] = useState(() => readFlag('projects.showPath', false))
+  const [showSize, setShowSize] = useState(() => readFlag('projects.showSize', false))
+  const [showPath, setShowPath] = useState(() => readFlag('projects.showPath', true))
   const [showVersion, setShowVersion] = useState(() => readFlag('projects.showVersion', true))
   const [cardSize, setCardSize] = useState(() => {
     const stored = Number(uiGet('projects.cardSize'))

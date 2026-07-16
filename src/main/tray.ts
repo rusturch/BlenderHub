@@ -13,7 +13,7 @@ import type { Page } from '../shared/types'
 // window instead. Both preferences live in ui-state.json (renderer writes them
 // from Settings via the existing ui:set-state channel — no extra IPC needed).
 
-export const CLOSE_BEHAVIOR_KEY = 'window.closeBehavior' // 'quit' (default) | 'tray'
+export const CLOSE_BEHAVIOR_KEY = 'window.closeBehavior' // 'tray' (default) | 'quit'
 export const MINIMIZE_BEHAVIOR_KEY = 'window.minimizeBehavior' // 'taskbar' (default) | 'tray'
 
 // 32x32 orange rounded square with a white "B" (matches the sidebar logo);
@@ -171,7 +171,7 @@ function syncTray(): void {
 
 export function setupTray(): void {
   void readUiState().then((state) => {
-    closeToTray = state[CLOSE_BEHAVIOR_KEY] === 'tray'
+    closeToTray = state[CLOSE_BEHAVIOR_KEY] !== 'quit'
     minimizeToTray = state[MINIMIZE_BEHAVIOR_KEY] === 'tray'
     syncTray()
   })
