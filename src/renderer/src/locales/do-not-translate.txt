@@ -1,0 +1,20 @@
+# Keys whose text must stay identical in every language: brand names,
+# Blender release-cycle terms shown as version badges, technical tokens.
+# These keys live only in en.json — every other language falls back to the
+# en value at runtime. npm run i18n:export skips them (translators never
+# see them) and i18n:import keeps them from en.json and strips them from
+# the other locale files.
+# One key per line, # starts a comment. Not a dictionary: the *.json glob
+# in lib/i18n.tsx must not pick this file up, so keep the .txt extension.
+
+# Blender release-cycle badges (Installs filter tabs)
+installs.filterStable
+installs.filterCandidate
+installs.filterRc
+installs.filterBeta
+installs.filterAlpha
+installs.filterExperimental
+
+# Brand names
+addons.tabSuperhive
+addons.tabBlenderOrg

@@ -379,8 +379,6 @@
 
   "addons.title": "Аддоны",
   "addons.tabManual": "Свои",
-  "addons.tabSuperhive": "Superhive",
-  "addons.tabBlenderOrg": "Blender.org",
   "addons.tabBuiltin": "Встроенные",
   "addons.tierHeuristic": "Сгруппирован автоматически по совпадению имени или автора между версиями — проверь",
   "addons.tierSuggested": "Оставлен отдельно — идентичность между версиями под вопросом",
