@@ -12,7 +12,10 @@ files:
 win:
   target: portable
 portable:
-  artifactName: ${name}-${version}-portable.${ext}
+  # version-less on purpose: self-update swaps the exe in place, so a versioned
+  # file name would go stale after the first update. Must match portableExeName()
+  # in src/shared/launcher-updates.ts.
+  artifactName: BlenderHub.${ext}
   # true = each launch unpacks into its own unique temp dir ($PLUGINSDIR; false
   # would still mean a per-BUILD shared dir in this electron-builder version).
   # With a shared dir a second launch of the same exe (easy to do while the app

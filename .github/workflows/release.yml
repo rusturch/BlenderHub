@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # the updater derives the asset filename from the release tag, so the tag
+      # the updater compares its own version against the release tag, so the tag
       # and package.json version must agree — fail fast when they drift. It also
       # only parses plain numeric tags: one published v1.2.3-beta would break the
       # update check for every installed client, so suffixed tags are refused.
@@ -51,7 +51,7 @@ jobs:
       - name: Write sha256 next to the exe
         shell: pwsh
         run: |
-          $exe = Get-ChildItem dist/*-portable.exe | Select-Object -First 1
+          $exe = Get-ChildItem dist/BlenderHub.exe | Select-Object -First 1
           if (-not $exe) { Write-Error 'portable exe not found in dist/'; exit 1 }
           $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
           # "<hex>  <filename>" — the format the launcher's checksum parser expects
@@ -66,8 +66,8 @@ jobs:
             --draft `
             --generate-notes `
             --title "Blender Hub $env:GITHUB_REF_NAME" `
-            (Get-ChildItem dist/*-portable.exe).FullName `
-            (Get-ChildItem dist/*-portable.exe.sha256).FullName
+            (Get-ChildItem dist/BlenderHub.exe).FullName `
+            (Get-ChildItem dist/BlenderHub.exe.sha256).FullName
 
   # macOS build — a .dmg can only be produced on a macOS runner (not on Windows/Linux).
   # Caveats for personal use:

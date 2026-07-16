@@ -1,9 +1,13 @@
 import { compareVersionsDesc } from './blender-builds'
 import { GITHUB_REPO } from './app-config'
 
-/** matches electron-builder.yml portable.artifactName: ${name}-${version}-portable.${ext} */
-export function portableExeName(version: string): string {
-  return `blender-hub-${version}-portable.exe`
+/**
+ * Matches electron-builder.yml portable.artifactName. Version-less on purpose:
+ * self-update swaps the exe in place, so a versioned name would go stale after
+ * the first update. Releases up to v0.1.1 shipped blender-hub-<version>-portable.exe.
+ */
+export function portableExeName(): string {
+  return 'BlenderHub.exe'
 }
 
 export function releasesLatestUrl(): string {

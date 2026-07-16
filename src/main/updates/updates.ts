@@ -132,7 +132,7 @@ export async function downloadUpdate(
   if (downloadInFlight) throw new Error('The update is already downloading')
   downloadInFlight = true
   try {
-    const fileName = portableExeName(latest.version)
+    const fileName = portableExeName()
     const stagedPath = stagedPathFor(exePath)
 
     // the exe + its checksum live at the release's public direct asset URLs
