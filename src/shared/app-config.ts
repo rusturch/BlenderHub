@@ -20,12 +20,18 @@
  */
 export const GITHUB_REPO = 'rusturch/BlenderHub'
 
-/** Discord invite opened by the sidebar "Join Discord" button. */
-export const DISCORD_INVITE_URL = 'https://discord.gg/HTz878hsB4'
+/**
+ * Discord invite opened by the sidebar "Join Discord" button. Leave empty to
+ * keep the button disabled ("coming soon").
+ */
+export const DISCORD_INVITE_URL = ''
 
 /**
  * Optional support / donation link (Boosty, Patreon, Ko-fi, …). Leave empty to
  * keep the sidebar "Support Us" button disabled ("coming soon"); fill it in and
  * the button becomes active and opens this URL.
  */
-export const SUPPORT_URL: string = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ&start_radio=1'
+export const SUPPORT_URL: string = ''
+
+/** Temporary: hides the Discord/Support Us buttons entirely until the links above are set. */
+export const SHOW_COMMUNITY_LINKS = false

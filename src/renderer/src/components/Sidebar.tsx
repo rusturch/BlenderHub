@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from '../lib/i18n'
 import { uiGet, uiSet } from '../lib/ui-store'
 import { getLauncherApi } from '../lib/preview-fallback'
-import { DISCORD_INVITE_URL, SUPPORT_URL } from '../../../shared/app-config'
+import { DISCORD_INVITE_URL, SHOW_COMMUNITY_LINKS, SUPPORT_URL } from '../../../shared/app-config'
 import type { Page } from '../../../shared/types'
 
 export type { Page }
@@ -269,32 +269,47 @@ export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarP
           <ActivityIcon className="h-5 w-5 shrink-0" />
           {!collapsed && t('nav.activity')}
         </button>
-        <button
-          title={collapsed ? t('nav.joinDiscord') : undefined}
-          onClick={() => window.open(DISCORD_INVITE_URL, '_blank', 'noopener')}
-          className={navButtonClass(false)}
-        >
-          <ChatIcon className="h-5 w-5 shrink-0" />
-          {!collapsed && t('nav.joinDiscord')}
-        </button>
-        {SUPPORT_URL ? (
-          <button
-            title={collapsed ? t('nav.supportUs') : undefined}
-            onClick={() => window.open(SUPPORT_URL, '_blank', 'noopener')}
-            className={navButtonClass(false)}
-          >
-            <HeartIcon className="h-5 w-5 shrink-0" />
-            {!collapsed && t('nav.supportUs')}
-          </button>
-        ) : (
-          <button
-            title={t('nav.comingSoon')}
-            disabled
-            className="flex cursor-not-allowed items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 opacity-60"
-          >
-            <HeartIcon className="h-5 w-5 shrink-0" />
-            {!collapsed && t('nav.supportUs')}
-          </button>
+        {SHOW_COMMUNITY_LINKS && (
+          <>
+            {DISCORD_INVITE_URL ? (
+              <button
+                title={collapsed ? t('nav.joinDiscord') : undefined}
+                onClick={() => window.open(DISCORD_INVITE_URL, '_blank', 'noopener')}
+                className={navButtonClass(false)}
+              >
+                <ChatIcon className="h-5 w-5 shrink-0" />
+                {!collapsed && t('nav.joinDiscord')}
+              </button>
+            ) : (
+              <button
+                title={t('nav.comingSoon')}
+                disabled
+                className="flex cursor-not-allowed items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 opacity-60"
+              >
+                <ChatIcon className="h-5 w-5 shrink-0" />
+                {!collapsed && t('nav.joinDiscord')}
+              </button>
+            )}
+            {SUPPORT_URL ? (
+              <button
+                title={collapsed ? t('nav.supportUs') : undefined}
+                onClick={() => window.open(SUPPORT_URL, '_blank', 'noopener')}
+                className={navButtonClass(false)}
+              >
+                <HeartIcon className="h-5 w-5 shrink-0" />
+                {!collapsed && t('nav.supportUs')}
+              </button>
+            ) : (
+              <button
+                title={t('nav.comingSoon')}
+                disabled
+                className="flex cursor-not-allowed items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 opacity-60"
+              >
+                <HeartIcon className="h-5 w-5 shrink-0" />
+                {!collapsed && t('nav.supportUs')}
+              </button>
+            )}
+          </>
         )}
         <div className="my-1 border-t border-white/5" />
         <button
