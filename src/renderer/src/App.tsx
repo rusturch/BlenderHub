@@ -1,0 +1,74 @@
+import { useEffect, useState } from 'react'
+import Sidebar from './components/Sidebar'
+import type { Page } from './components/Sidebar'
+import TitleBar from './components/TitleBar'
+import { DialogProvider } from './components/Dialog'
+import { LanguageProvider } from './lib/i18n'
+import { getLauncherApi } from './lib/preview-fallback'
+import ProjectsPage from './pages/Projects'
+import InstallsPage from './pages/Installs'
+import AddonsPage from './pages/Addons'
+import SyncPage from './pages/Sync'
+import ActivityPage from './pages/Activity'
+import SettingsPage from './pages/Settings'
+
+export default function App() {
+  const [page, setPage] = useState<Page>('projects')
+  const [projectsVersion, setProjectsVersion] = useState<string>('all')
+  const [installsSearch, setInstallsSearch] = useState<string>('')
+  const [settingsHighlight, setSettingsHighlight] = useState<string | null>(null)
+
+  const navigate = (target: Page): void => {
+    // plain sidebar navigation clears any prefilled install search / settings focus
+    if (target === 'installs') setInstallsSearch('')
+    setSettingsHighlight(null)
+    setPage(target)
+  }
+
+  const openSettings = (highlight?: string): void => {
+    setSettingsHighlight(highlight ?? null)
+    setPage('settings')
+  }
+
+  const showProjectsForVersion = (version: string): void => {
+    setProjectsVersion(version)
+    setPage('projects')
+  }
+
+  const showInstallsForVersion = (version: string): void => {
+    setInstallsSearch(version)
+    setPage('installs')
+  }
+
+  // the tray's page shortcuts land here regardless of which page is currently open
+  useEffect(() => getLauncherApi().api.tray.onNavigate(navigate), [])
+
+  return (
+    <LanguageProvider>
+      <DialogProvider>
+        <div className="flex h-full flex-col">
+          <TitleBar onUpdateClick={() => openSettings('updates')} />
+          <div className="flex min-h-0 flex-1">
+            <Sidebar current={page} onNavigate={navigate} onUpdateClick={() => openSettings('updates')} />
+            <main className="min-w-0 flex-1">
+              {page === 'projects' && (
+                <ProjectsPage
+                  versionFilter={projectsVersion}
+                  onVersionFilterChange={setProjectsVersion}
+                  onShowInstalls={showInstallsForVersion}
+                />
+              )}
+              {page === 'installs' && (
+                <InstallsPage onShowProjects={showProjectsForVersion} initialSearch={installsSearch} />
+              )}
+              {page === 'addons' && <AddonsPage onOpenSettings={openSettings} />}
+              {page === 'sync' && <SyncPage onShowInstalls={showInstallsForVersion} />}
+              {page === 'activity' && <ActivityPage />}
+              {page === 'settings' && <SettingsPage highlight={settingsHighlight ?? undefined} />}
+            </main>
+          </div>
+        </div>
+      </DialogProvider>
+    </LanguageProvider>
+  )
+}

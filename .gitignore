@@ -1,0 +1,15 @@
+node_modules/
+out/
+dist/
+
+# portable app state (installed Blender builds, config, add-on library, backups)
+data/
+# cross-volume legacy-migration staging dir (paths.ts: migrateLegacyDataDir)
+data.migrating/
+*.log
+.DS_Store
+Thumbs.db
+
+# generated translator hand-off table (npm run i18n:export)
+translations.csv
+

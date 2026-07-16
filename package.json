@@ -1,0 +1,52 @@
+{
+  "name": "blender-hub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cross-platform launcher for Blender: versions, projects, add-ons and settings sync",
+  "author": "Ruslan Turchin",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rusturch/BlenderHub.git"
+  },
+  "homepage": "https://github.com/rusturch/BlenderHub",
+  "bugs": {
+    "url": "https://github.com/rusturch/BlenderHub/issues"
+  },
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev --watch",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "i18n:export": "node scripts/i18n-csv.mjs export",
+    "i18n:import": "node scripts/i18n-csv.mjs import",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "4.0.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "2.0.0",
+    "@tailwindcss/vite": "4.3.2",
+    "@types/node": "26.1.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "43.0.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "tailwindcss": "4.3.2",
+    "typescript": "6.0.3",
+    "vite": "7.3.6"
+  }
+}

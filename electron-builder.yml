@@ -1,0 +1,29 @@
+appId: com.rusturch.blender-hub
+productName: Blender Hub
+directories:
+  buildResources: build
+  output: dist
+files:
+  - 'out/**'
+  - 'package.json'
+# Windows ships as a portable exe (no installer): the app keeps all its state in
+# a data/ folder next to the exe, so the whole folder can be moved between
+# machines or dropped into a cloud-synced directory.
+win:
+  target: portable
+portable:
+  artifactName: ${name}-${version}-portable.${ext}
+  # true = each launch unpacks into its own unique temp dir ($PLUGINSDIR; false
+  # would still mean a per-BUILD shared dir in this electron-builder version).
+  # With a shared dir a second launch of the same exe (easy to do while the app
+  # hides in the tray) wipes the files out from under the running instance (#7870).
+  unpackDirName: true
+mac:
+  category: public.app-category.graphics-design
+  target: dmg
+linux:
+  target:
+    - AppImage
+  category: Graphics
+  maintainer: Ruslan Turchin <63288413+rusturch@users.noreply.github.com>
+npmRebuild: false
