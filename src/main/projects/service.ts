@@ -79,6 +79,45 @@ async function loadCustomThumbnail(imagePath: string): Promise<string | null> {
   }
 }
 
+// Cheap folder + individual-file listing sorted by last-modified — no thumbnail or
+// .blend header parsing, unlike scanProjectFiles. Used by the tray's flat recent-
+// projects list, which just needs paths and dates, not full project cards.
+export async function listRecentProjectFiles(
+  folders: string[],
+  individualFiles: string[],
+  hiddenFiles: string[],
+  limit: number
+): Promise<{ path: string; mtimeMs: number }[]> {
+  const hidden = new Set(hiddenFiles.map((path) => resolve(path)))
+  const found = new Map<string, string>()
+  for (const root of folders) {
+    const files: string[] = []
+    await collectBlendFiles(root, files, 0)
+    for (const file of files) {
+      if (!found.has(file) && !hidden.has(resolve(file))) found.set(file, root)
+    }
+  }
+  for (const file of individualFiles) {
+    if (file.toLowerCase().endsWith('.blend') && !found.has(file) && !hidden.has(resolve(file))) {
+      found.set(file, dirname(file))
+    }
+  }
+  const stats = await Promise.all(
+    [...found.keys()].map(async (file) => {
+      try {
+        const fileStat = await stat(file)
+        return { path: resolve(file), mtimeMs: fileStat.mtimeMs }
+      } catch {
+        return null
+      }
+    })
+  )
+  return stats
+    .filter((entry): entry is { path: string; mtimeMs: number } => entry !== null)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, limit)
+}
+
 export async function scanProjectFiles(
   folders: string[],
   individualFiles: string[] = [],

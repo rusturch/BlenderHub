@@ -1,12 +1,17 @@
-import { spawn } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { existsSync } from 'fs'
 import { basename } from 'path'
-import { app, BrowserWindow, Menu, nativeImage, Notification, Tray } from 'electron'
-import type { MenuItemConstructorOptions } from 'electron'
+import { promisify } from 'util'
+import { app, BrowserWindow, Menu, nativeImage, nativeTheme, Notification, screen, Tray } from 'electron'
+import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 import { onUiStateSet, readUiState } from './ui-state'
 import { readBlendInfo } from './blender/blend-parser'
 import { listInstalled } from './blender/installs'
-import { getOverrides, getRecentlyOpened, recordProjectOpened } from './projects/store'
+import { getHiddenFiles, getOverrides, getProjectFiles, getProjectFolders, recordProjectOpened } from './projects/store'
+import { listRecentProjectFiles } from './projects/service'
+import { TRAY_PAGES_KEY, parseTrayPages } from '../shared/tray-menu'
+import trayBlack from '../../resources/tray-black.png?asset'
+import trayWhite from '../../resources/tray-white.png?asset'
 import type { Page } from '../shared/types'
 
 // Optional stay-in-tray behavior: the close and minimize buttons can hide the
@@ -16,10 +21,16 @@ import type { Page } from '../shared/types'
 export const CLOSE_BEHAVIOR_KEY = 'window.closeBehavior' // 'tray' (default) | 'quit'
 export const MINIMIZE_BEHAVIOR_KEY = 'window.minimizeBehavior' // 'taskbar' (default) | 'tray'
 
-// 32x32 orange rounded square with a white "B" (matches the sidebar logo);
-// embedded as a data URL because the repo ships no icon assets yet
-const TRAY_ICON_DATA_URL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAGkSURBVFhHxZexS8QwFMYziiaeo6OL4Kibi+Ao/gOuNzoKLnKXUMVBcHK7TXFwFkS4wcFNJ1cnoS5eWvU8ULAiwulrSWhfsLWxzT34LV/y+r6+PEpDSE6ErfF5yVlTCrZtDWdNeA5+9q/x4NG5ULDTQLBh9dBu0GKLuKYOcBtwFpmJFcPZnu+RsUzxnqDrxsYaCTnr6OLQdidvjpDtieXYQCDYJV50Aqc+gbMwFhxCYCqx6BJo/wYWXULgY4FFl5Qy8HaxM/y4PTMA/XF/1tj/F0oZgGJ58XK4auQUYW2g31mKeb851hqs45wirA2k9ZEaeDpY0Nrr+aaRU4S1ATWA/ykOWBvA8Xl/FXcD5xRhbUAN4eBkLWMk3J028vKwNpDWof0qwBTOy6MSA7gzOC8PawNqCL+e77QGc4BzirA2gAPWyp4/UMoATLkavjQ2hRWlDNQBkYJuYdElpNeeXMGiS8jAa0xh0SXJXzGnPl5wAmdRcikZ0THA/OnLSSDoEd5QJ1LQa10cIpkF2sUb6wCKS68xkzGgIrmg0gFOqgTOokzbf+IbuLCsi0svJaUAAAAASUVORK5CYII='
+const execFileAsync = promisify(execFile)
+
+// The icon is a plain silhouette, so it has to match the surface behind it or it
+// disappears. On Windows that surface is the taskbar, whose light/dark setting is a
+// separate registry value from the app theme nativeTheme reports — elsewhere the app
+// theme is the closest thing to the panel's own.
+const WINDOWS_THEME_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize'
+const TRAY_ICON_BASE_SIZE = 16
+
+let lightBackground = false
 
 // the tray is native OS chrome, out of reach of the renderer's i18n context — a tiny,
 // static lookup mirrors the couple of dictionaries that matter (kept in sync by hand;
@@ -27,12 +38,11 @@ const TRAY_ICON_DATA_URL =
 type TrayLang = 'en' | 'ru'
 const TRAY_LABELS: Record<
   TrayLang,
-  { openHub: string; quit: string; recentProjects: string; noRecentProjects: string; nav: Record<Page, string> }
+  { openHub: string; quit: string; noRecentProjects: string; nav: Record<Page, string> }
 > = {
   en: {
     openHub: 'Open Blender Hub',
     quit: 'Quit',
-    recentProjects: 'Recent Projects',
     noRecentProjects: 'No recent projects',
     nav: {
       projects: 'Projects',
@@ -46,7 +56,6 @@ const TRAY_LABELS: Record<
   ru: {
     openHub: 'Открыть Blender Hub',
     quit: 'Выход',
-    recentProjects: 'Последние проекты',
     noRecentProjects: 'Нет недавних проектов',
     nav: {
       projects: 'Проекты',
@@ -59,7 +68,6 @@ const TRAY_LABELS: Record<
   }
 }
 
-const NAV_PAGES: Page[] = ['projects', 'installs', 'addons', 'sync', 'activity', 'settings']
 const RECENT_PROJECTS_LIMIT = 5
 
 let closeToTray = false
@@ -113,17 +121,24 @@ async function openProjectFromTray(filePath: string, lang: TrayLang): Promise<vo
     .catch(() => {})
 }
 
+// flat top-level items (no "Recent Projects" submenu to drill into), sourced from
+// the same folders/files the Projects page scans — most recently MODIFIED on disk,
+// not most recently opened through the launcher
 async function recentProjectItems(lang: TrayLang): Promise<MenuItemConstructorOptions[]> {
-  // a couple extra beyond what's shown may point at since-deleted files — filter, then cap
-  const recents = (await getRecentlyOpened(RECENT_PROJECTS_LIMIT + 10)).filter((entry) =>
-    existsSync(entry.path)
-  )
+  const [folders, individualFiles, hiddenFiles, overrides] = await Promise.all([
+    getProjectFolders(),
+    getProjectFiles(),
+    getHiddenFiles(),
+    getOverrides()
+  ])
+  const recents = await listRecentProjectFiles(folders, individualFiles, hiddenFiles, RECENT_PROJECTS_LIMIT)
   if (recents.length === 0) {
     return [{ label: TRAY_LABELS[lang].noRecentProjects, enabled: false }]
   }
-  const overrides = await getOverrides()
-  return recents.slice(0, RECENT_PROJECTS_LIMIT).map(({ path }) => ({
-    label: overrides[path]?.displayName ?? basename(path),
+  return recents.map(({ path }) => ({
+    // same fallback as Projects.tsx: displayName override, else the filename with
+    // the .blend extension dropped (a label doesn't need to repeat "it's a .blend")
+    label: overrides[path]?.displayName ?? basename(path).replace(/\.blend$/i, ''),
     click: () => void openProjectFromTray(path, lang)
   }))
 }
@@ -132,13 +147,23 @@ async function buildTrayMenu(): Promise<Menu> {
   const state = await readUiState()
   const lang: TrayLang = state['launcher.language'] === 'ru' ? 'ru' : 'en'
   const labels = TRAY_LABELS[lang]
+  // which tabs to offer is a user setting (Settings → Window & tray); with none
+  // enabled the whole section — its separator included — drops out
+  const navPages = parseTrayPages(state[TRAY_PAGES_KEY])
+  const navSection: MenuItemConstructorOptions[] =
+    navPages.length === 0
+      ? []
+      : [
+          ...navPages.map(
+            (page): MenuItemConstructorOptions => ({ label: labels.nav[page], click: () => navigateTo(page) })
+          ),
+          { type: 'separator' }
+        ]
   return Menu.buildFromTemplate([
+    ...(await recentProjectItems(lang)),
+    { type: 'separator' },
+    ...navSection,
     { label: labels.openHub, click: showWindow },
-    { type: 'separator' },
-    ...NAV_PAGES.map((page): MenuItemConstructorOptions => ({ label: labels.nav[page], click: () => navigateTo(page) })),
-    { type: 'separator' },
-    { label: labels.recentProjects, submenu: await recentProjectItems(lang) },
-    { type: 'separator' },
     { label: labels.quit, click: () => app.quit() }
   ])
 }
@@ -150,9 +175,39 @@ export function refreshTrayMenu(): void {
   void buildTrayMenu().then((menu) => tray?.setContextMenu(menu))
 }
 
+async function readLightBackground(): Promise<boolean> {
+  if (process.platform !== 'win32') return !nativeTheme.shouldUseDarkColors
+  try {
+    const { stdout } = await execFileAsync('reg', [
+      'query',
+      WINDOWS_THEME_KEY,
+      '/v',
+      'SystemUsesLightTheme'
+    ])
+    const value = /SystemUsesLightTheme\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(stdout)
+    return value ? parseInt(value[1], 16) === 1 : false
+  } catch {
+    return !nativeTheme.shouldUseDarkColors
+  }
+}
+
+/** The tray asks for a 16px icon scaled by the display. Handing it that exact size keeps
+ * the resize in Skia's hands — Windows stretches a mismatched bitmap far more crudely. */
+function trayIcon(): NativeImage {
+  const size = Math.round(TRAY_ICON_BASE_SIZE * screen.getPrimaryDisplay().scaleFactor)
+  return nativeImage
+    .createFromPath(lightBackground ? trayBlack : trayWhite)
+    .resize({ width: size, height: size, quality: 'best' })
+}
+
+async function refreshTrayIcon(): Promise<void> {
+  lightBackground = await readLightBackground()
+  tray?.setImage(trayIcon())
+}
+
 function ensureTray(): void {
   if (tray) return
-  tray = new Tray(nativeImage.createFromDataURL(TRAY_ICON_DATA_URL))
+  tray = new Tray(trayIcon())
   tray.setToolTip('Blender Hub')
   refreshTrayMenu()
   tray.on('click', showWindow)
@@ -170,11 +225,14 @@ function syncTray(): void {
 }
 
 export function setupTray(): void {
-  void readUiState().then((state) => {
+  // the theme is read before the tray exists so the first icon it gets already matches
+  void Promise.all([readUiState(), readLightBackground()]).then(([state, light]) => {
+    lightBackground = light
     closeToTray = state[CLOSE_BEHAVIOR_KEY] !== 'quit'
     minimizeToTray = state[MINIMIZE_BEHAVIOR_KEY] === 'tray'
     syncTray()
   })
+  nativeTheme.on('updated', () => void refreshTrayIcon())
   onUiStateSet((key, value) => {
     if (key === CLOSE_BEHAVIOR_KEY) {
       closeToTray = value === 'tray'
@@ -182,7 +240,7 @@ export function setupTray(): void {
     } else if (key === MINIMIZE_BEHAVIOR_KEY) {
       minimizeToTray = value === 'tray'
       syncTray()
-    } else if (key === 'launcher.language') {
+    } else if (key === 'launcher.language' || key === TRAY_PAGES_KEY) {
       refreshTrayMenu()
     }
   })

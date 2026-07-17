@@ -1,8 +1,7 @@
 import type { StorageCategory } from '../../../../shared/types'
 
 
-export const SUPERHIVE_DOCS_URL =
-  'https://support.superhivemarket.com/article/335-connecting-superhive-as-a-remote-repository-in-blender'
+export const SUPERHIVE_DOCS_URL = 'https://superhivemarket.com/account/auth_token'
 
 export const pathBoxClass =
   'min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-[#111111] px-3 py-1.5 text-xs text-zinc-300'

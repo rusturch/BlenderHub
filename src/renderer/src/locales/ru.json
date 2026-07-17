@@ -26,6 +26,7 @@
   "settings.trayHint": "Blender Hub может оставаться работать в системном трее — удобно, пока идёт загрузка или установка. Клик по иконке в трее возвращает окно.",
   "settings.trayOnClose": "При закрытии окна",
   "settings.trayOnMinimize": "При сворачивании",
+  "settings.trayPages": "Вкладки в меню трея",
   "settings.trayActionQuit": "Выйти",
   "settings.trayActionTray": "Спрятать в трей",
   "settings.trayActionTaskbar": "На панель задач",

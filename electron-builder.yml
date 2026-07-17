@@ -5,6 +5,9 @@ directories:
   output: dist
 files:
   - 'out/**'
+  # window and tray icons: electron-vite rewrites their imports to paths relative to
+  # out/main, so the folder has to ship next to it rather than be bundled in
+  - 'resources/**'
   - 'package.json'
 # Windows ships as a portable exe (no installer): the app keeps all its state in
 # a data/ folder next to the exe, so the whole folder can be moved between

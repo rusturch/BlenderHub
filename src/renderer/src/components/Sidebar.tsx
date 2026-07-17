@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from '../lib/i18n'
 import { uiGet, uiSet } from '../lib/ui-store'
 import { getLauncherApi } from '../lib/preview-fallback'
+import logo from '../assets/icon.png'
 import { DISCORD_INVITE_URL, SHOW_COMMUNITY_LINKS, SUPPORT_URL } from '../../../shared/app-config'
 import type { Page } from '../../../shared/types'
 
@@ -224,9 +225,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarP
       className={`flex ${collapsed ? 'w-16' : 'w-56'} shrink-0 flex-col border-r border-white/5 bg-[#181818] transition-[width] duration-150`}
     >
       <div className="flex h-[68px] shrink-0 items-center gap-2.5 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blender text-sm font-bold text-white">
-          B
-        </div>
+        <img src={logo} alt="" className="h-8 w-8 shrink-0" />
         {!collapsed && (
           <div className="min-w-0 leading-tight">
             <p className="truncate font-logo text-sm font-bold text-zinc-100">

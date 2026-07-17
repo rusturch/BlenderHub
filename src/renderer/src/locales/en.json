@@ -26,6 +26,7 @@
   "settings.trayHint": "Keep Blender Hub running in the system tray — handy while a download or install is in progress. Click the tray icon to bring the window back.",
   "settings.trayOnClose": "When closing the window",
   "settings.trayOnMinimize": "When minimizing",
+  "settings.trayPages": "Tabs in the tray menu",
   "settings.trayActionQuit": "Quit",
   "settings.trayActionTray": "Hide to tray",
   "settings.trayActionTaskbar": "To taskbar",

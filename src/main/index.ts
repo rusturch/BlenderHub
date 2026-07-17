@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import icon from '../../resources/icon.png?asset'
 import { registerBlenderIpc } from './blender/ipc'
 import { registerProjectsIpc } from './projects/ipc'
 import { registerAddonsIpc } from './addons/ipc'
@@ -23,6 +24,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0d0d0d',
+    icon,
     title: 'Blender Hub', // used for the taskbar/Alt-Tab only — no caption text is drawn (see titleBarStyle below)
     // hides the native OS caption (title text) while keeping real, OS-drawn
     // minimize/maximize/close buttons as an overlay; renderer draws its own

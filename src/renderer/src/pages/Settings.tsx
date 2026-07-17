@@ -6,8 +6,10 @@ import { useTranslation, AVAILABLE_LANGUAGES, languageLabel } from '../lib/i18n'
 import { cleanErrorMessage, formatBytes } from '../lib/format'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
+import { TRAY_PAGES_KEY, TRAY_PAGE_IDS, parseTrayPages, serializeTrayPages } from '../../../shared/tray-menu'
 import type {
   BlendFileInfo,
+  Page,
   ProjectFolder,
   StorageUsage,
   SuperhiveStatus,
@@ -50,6 +52,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
   const [minimizeBehavior, setMinimizeBehavior] = useState(() =>
     uiGet('window.minimizeBehavior') === 'tray' ? 'tray' : 'taskbar'
   )
+  const [trayPages, setTrayPages] = useState<Page[]>(() => parseTrayPages(uiGet(TRAY_PAGES_KEY)))
 
   const changeCloseBehavior = useCallback((value: string) => {
     setCloseBehavior(value)
@@ -60,6 +63,17 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
     setMinimizeBehavior(value)
     uiSet('window.minimizeBehavior', value)
   }, [])
+
+  const toggleTrayPage = useCallback(
+    (page: Page) => {
+      const next = TRAY_PAGE_IDS.filter((candidate) =>
+        candidate === page ? !trayPages.includes(candidate) : trayPages.includes(candidate)
+      )
+      setTrayPages(next)
+      uiSet(TRAY_PAGES_KEY, serializeTrayPages(next))
+    },
+    [trayPages]
+  )
 
   const refreshFolders = useCallback(async () => {
     try {
@@ -475,6 +489,29 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
                   { id: 'tray', label: t('settings.trayActionTray') }
                 ]}
               />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-zinc-300">{t('settings.trayPages')}</span>
+              <div
+                title={isDesktop ? undefined : desktopOnlyTitle}
+                className={`flex flex-wrap items-center gap-3 ${isDesktop ? '' : 'opacity-40'}`}
+              >
+                {TRAY_PAGE_IDS.map((page) => (
+                  <label
+                    key={page}
+                    className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={trayPages.includes(page)}
+                      onChange={() => toggleTrayPage(page)}
+                      disabled={!isDesktop}
+                      className="accent-blender disabled:cursor-not-allowed"
+                    />
+                    {t(`nav.${page}`)}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         </SectionCard>
