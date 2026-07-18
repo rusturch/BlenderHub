@@ -1,6 +1,5 @@
-import { compareVersionsDesc, mapBuilderEntries } from '../../shared/blender-builds'
+import { compareVersionsDesc, isReleasedCycle, mapBuilderEntries } from '../../shared/blender-builds'
 import type { BuilderApiEntry } from '../../shared/blender-builds'
-import { minorOf } from '../../shared/blender-archive'
 import type { RemoteBuild } from '../../shared/types'
 import { fetchArchiveBuilds } from './archive-api'
 import { getCurrentTarget } from './target'
@@ -47,10 +46,13 @@ export async function fetchAllBuilds(): Promise<RemoteBuild[]> {
   const patch = patchResult.status === 'fulfilled' ? patchResult.value : []
   const archive = archiveResult.status === 'fulfilled' ? archiveResult.value : []
 
-  // the daily feed already carries the freshest build of the active series —
-  // archive entries for those minors would only duplicate them one patch behind
-  const dailyMinors = new Set(daily.map((build) => minorOf(build.version)))
-  const archiveOnly = archive.filter((build) => !dailyMinors.has(minorOf(build.version)))
+  // a daily stable/lts entry is the same release the archive lists — drop only
+  // that exact version's archive row (the daily one wins: it carries inline
+  // sha256); every other patch stays and feeds the "Other versions" drawer
+  const dailyReleasedVersions = new Set(
+    daily.filter((build) => isReleasedCycle(build.releaseCycle)).map((build) => build.version)
+  )
+  const archiveOnly = archive.filter((build) => !dailyReleasedVersions.has(build.version))
 
   const merged = [...daily, ...experimental, ...patch, ...archiveOnly].sort(
     (a, b) => compareVersionsDesc(a.version, b.version) || b.fileMtime - a.fileMtime

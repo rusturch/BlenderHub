@@ -1,37 +1,3 @@
-export function FolderOpenIcon({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 5h5l2 2h9a1 1 0 0 1 1 1v2H6l-3 8V6a1 1 0 0 1 1-1Z" />
-      <path d="m3 18 3-8h16l-3 8H3Z" />
-    </svg>
-  )
-}
-export function TrashIcon({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 7h16" />
-      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-      <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
-      <path d="M10 11v6M14 11v6" />
-    </svg>
-  )
-}
 export function GearIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg
@@ -48,7 +14,16 @@ export function GearIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
-export function InfoIcon({ className = 'h-4 w-4' }: { className?: string }) {
+export function DotsIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="5" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="12" cy="19" r="1.6" />
+    </svg>
+  )
+}
+export function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg
       className={className}
@@ -59,9 +34,7 @@ export function InfoIcon({ className = 'h-4 w-4' }: { className?: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 8h.01" />
-      <path d="M11 12h1v4h1" />
+      <path d="m6 9 6 6 6-6" />
     </svg>
   )
 }

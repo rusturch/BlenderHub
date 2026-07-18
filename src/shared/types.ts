@@ -44,7 +44,8 @@ export interface RunningBlender {
 export interface BuildsApi {
   listRemote: (refresh?: boolean) => Promise<RemoteBuild[]>
   listInstalled: () => Promise<InstalledBuild[]>
-  install: (buildId: string) => Promise<InstalledBuild>
+  /** keepExisting skips the automatic retirement of superseded copies ("keep both") */
+  install: (buildId: string, keepExisting?: boolean) => Promise<InstalledBuild>
   /** null — dialog cancelled; [] — builds found only inside the installs dir (auto-adopted) */
   locate: () => Promise<InstalledBuild[] | null>
   launch: (installId: string) => Promise<void>

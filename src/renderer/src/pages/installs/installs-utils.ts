@@ -1,7 +1,20 @@
 import { buildNotesUrl } from '../../lib/blender-links'
-import { STABLE_CYCLES } from '../../../../shared/blender-builds'
-import type { BuildsApi, InstalledBuild } from '../../../../shared/types'
+import { cycleClass, STABLE_CYCLES } from '../../../../shared/blender-builds'
+import type { BuildsApi, InstalledBuild, RemoteBuild } from '../../../../shared/types'
 import type { DisplayRow } from './types'
+
+// Which tab a catalog build belongs to. Cycle tabs take both hosts: everything
+// download.blender.org serves is a released build, so it belongs with the daily
+// feed's stable/lts rather than in a separate source-shaped tab. PR builds are
+// special-interest and stay under Experimental only.
+export function buildMatchesTab(build: RemoteBuild, tab: string): boolean {
+  if (tab === 'all') return build.source !== 'patch'
+  if (tab === 'experimental') return build.source === 'experimental' || build.source === 'patch'
+  return (
+    (build.source === 'daily' || build.source === 'archive') &&
+    cycleClass(build.releaseCycle) === cycleClass(tab)
+  )
+}
 
 // Same-build identity among INSTALLED copies that the remote catalog no longer lists
 // (an old archive patch, an unusual Located version): stable/lts/candidate/rc are one
@@ -12,7 +25,7 @@ export function installedIdentityKey(build: {
   branch?: string
   commit?: string
 }): string {
-  if (STABLE_CYCLES.has(build.releaseCycle)) return `${build.version}|${build.releaseCycle}`
+  if (STABLE_CYCLES.has(build.releaseCycle)) return `${build.version}|${cycleClass(build.releaseCycle)}`
   return `${build.version}|${build.releaseCycle}|${build.branch ?? ''}|${build.commit ?? ''}`
 }
 export interface LocateOutcome {
@@ -52,13 +65,17 @@ export async function locateWithDedup(
 }
 
 // installed-only ("orphan") rows have no RemoteBuild to hand buildNotesUrl, but the
-// docs page only ever keys off major.minor — build the same link from the row itself
+// docs page only ever keys off major.minor — build the same link from the version
 // (a PR link is impossible here: we no longer know if an orphan came from 'patch')
-export function notesUrlForRow(row: DisplayRow): string | null {
-  if (row.remoteBuild) return buildNotesUrl(row.remoteBuild)
-  const [major, minor] = row.version.split('.')
+export function notesUrlForBuild(build: RemoteBuild | null, version: string): string | null {
+  if (build) return buildNotesUrl(build)
+  const [major, minor] = version.split('.')
   if (!major || minor === undefined) return null
   return `https://developer.blender.org/docs/release_notes/${major}.${minor}/`
+}
+
+export function notesUrlForRow(row: DisplayRow): string | null {
+  return notesUrlForBuild(row.remoteBuild, row.version)
 }
 
 // best-known release date for the row, in ms — the catalog build's file date when we

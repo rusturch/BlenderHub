@@ -1,10 +1,5 @@
-import {
-  latestPatchPerMinor,
-  minorOf,
-  parseArchiveFolderBuilds,
-  parseReleaseFolders
-} from '../../../shared/blender-archive'
-import { compareVersionsDesc, mapBuilderEntries } from '../../../shared/blender-builds'
+import { parseArchiveFolderBuilds, parseReleaseFolders } from '../../../shared/blender-archive'
+import { compareVersionsDesc, isReleasedCycle, mapBuilderEntries } from '../../../shared/blender-builds'
 import type { BuilderApiEntry } from '../../../shared/blender-builds'
 import { releasesLatestUrl } from '../../../shared/launcher-updates'
 import type { LauncherApi, RemoteBuild, StorageCategory } from '../../../shared/types'
@@ -46,7 +41,14 @@ async function fetchArchiveViaProxy(platform: string): Promise<RemoteBuild[]> {
       }
     })
   )
-  return latestPatchPerMinor(perFolder.flat())
+  // mirrors builds-api.ts: keep every patch, the renderer picks series rows.
+  // The browser cannot know its architecture, so ALL_ARCHITECTURES matches several
+  // files per release — keep one row per version or every patch doubles up
+  const byVersion = new Map<string, RemoteBuild>()
+  for (const build of perFolder.flat()) {
+    if (!byVersion.has(build.version)) byVersion.set(build.version, build)
+  }
+  return [...byVersion.values()]
 }
 
 // Read-only stand-in for the preload API when the UI runs in a plain browser
@@ -69,8 +71,10 @@ function createPreviewFallbackApi(): LauncherApi {
       const experimental = experimentalResult.status === 'fulfilled' ? experimentalResult.value : []
       const patch = patchResult.status === 'fulfilled' ? patchResult.value : []
       const archive = archiveResult.status === 'fulfilled' ? archiveResult.value : []
-      const dailyMinors = new Set(daily.map((build) => minorOf(build.version)))
-      const archiveOnly = archive.filter((build) => !dailyMinors.has(minorOf(build.version)))
+      const dailyReleasedVersions = new Set(
+        daily.filter((build) => isReleasedCycle(build.releaseCycle)).map((build) => build.version)
+      )
+      const archiveOnly = archive.filter((build) => !dailyReleasedVersions.has(build.version))
       return [...daily, ...experimental, ...patch, ...archiveOnly].sort(
         (a, b) => compareVersionsDesc(a.version, b.version) || b.fileMtime - a.fileMtime
       )

@@ -8,7 +8,7 @@ import { readConfig, updateConfig } from '../config'
 import { downloadToFile, fetchExpectedChecksum, throttle } from '../download'
 import { assertTrustedSource } from './builds-api'
 import { detectBlenderAt, listLocated, mapLimit, removeLocated } from './locate'
-import { compareVersionsDesc, STABLE_CYCLES } from '../../shared/blender-builds'
+import { compareVersionsDesc, isReleasedCycle, STABLE_CYCLES } from '../../shared/blender-builds'
 import { minorOf } from '../../shared/blender-archive'
 import type { InstalledBuild, InstallProgress, RemoteBuild } from '../../shared/types'
 
@@ -192,6 +192,8 @@ function extractArchive(archivePath: string, destination: string): Promise<void>
 // commit by commit and the old one vanishes from the catalog anyway — plus stable-cycle
 // dirs of the same minor with a lower version (patch releases). Trashed, not rm'd:
 // same recoverable disposal as a manual uninstall. Keeps one live build per line.
+// A released build also retires the candidate that previewed its exact version;
+// a candidate/rc never retires a released copy (see the guard below).
 export async function replaceSupersededBuilds(
   installsRoot: string,
   justInstalledDir: string,
@@ -209,16 +211,21 @@ export async function replaceSupersededBuilds(
     } catch {
       continue // no (or broken) meta — not ours to touch here, adoption handles it
     }
+    // one-way street between cycles: installing a candidate/rc must never retire a
+    // released copy — the stable stays put until the released next patch arrives
+    if (!isReleasedCycle(build.releaseCycle) && isReleasedCycle(meta.releaseCycle)) continue
     // branch alone is not enough: archive releases carry a branch but no commit,
     // and a commitless match must never retire anything newer (downgrades) —
     // only true rolling pairs (commit on both sides) replace by branch
     const sameBranch =
       Boolean(build.branch) && Boolean(build.commit) && Boolean(meta.commit) && meta.branch === build.branch
+    const cmp = compareVersionsDesc(meta.version, build.version)
     const olderPatch =
       stablePatch &&
       STABLE_CYCLES.has(meta.releaseCycle) &&
       minorOf(meta.version) === minorOf(build.version) &&
-      compareVersionsDesc(meta.version, build.version) > 0
+      // strictly older, or the candidate preview of the exact version being released
+      (cmp > 0 || (cmp === 0 && isReleasedCycle(build.releaseCycle) && !isReleasedCycle(meta.releaseCycle)))
     if (!sameBranch && !olderPatch) continue
     try {
       await shell.trashItem(path)
@@ -232,7 +239,8 @@ export async function replaceSupersededBuilds(
 
 export async function installBuild(
   build: RemoteBuild,
-  onProgress: (progress: InstallProgress) => void
+  onProgress: (progress: InstallProgress) => void,
+  keepExisting = false
 ): Promise<InstalledBuild> {
   assertTrustedSource(build.url)
   if (build.checksumUrl) assertTrustedSource(build.checksumUrl)
@@ -296,7 +304,8 @@ export async function installBuild(
       }
       await writeFile(join(contentDir, META_FILE), JSON.stringify(meta, null, 2))
       await rename(contentDir, finalDir)
-      const replaced = await replaceSupersededBuilds(installsRoot, dirName, build)
+      // "keep both": the user explicitly chose to leave superseded copies in place
+      const replaced = keepExisting ? [] : await replaceSupersededBuilds(installsRoot, dirName, build)
       report({ phase: 'done', ...(replaced.length > 0 ? { replaced } : {}) })
       return {
         id: dirName,

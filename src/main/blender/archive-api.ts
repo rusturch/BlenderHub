@@ -1,4 +1,4 @@
-import { latestPatchPerMinor, parseArchiveFolderBuilds, parseReleaseFolders } from '../../shared/blender-archive'
+import { parseArchiveFolderBuilds, parseReleaseFolders } from '../../shared/blender-archive'
 import type { RemoteBuild } from '../../shared/types'
 import { getCurrentTarget } from './target'
 
@@ -23,5 +23,7 @@ export async function fetchArchiveBuilds(): Promise<RemoteBuild[]> {
     })
   )
 
-  return latestPatchPerMinor(perFolder.flat())
+  // every patch stays: the newest of a minor is the visible series row, the rest
+  // feed the "Other versions" drawer (the renderer decides, not the fetch)
+  return perFolder.flat()
 }

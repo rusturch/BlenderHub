@@ -21,9 +21,24 @@ interface AlertOptions {
   okLabel?: string
 }
 
+export interface ChoiceButton {
+  id: string
+  label: string
+  kind?: 'primary' | 'secondary' | 'danger'
+}
+
+interface ChooseOptions {
+  title: string
+  message: ReactNode
+  variant?: DialogVariant
+  /** rendered left to right; backdrop click resolves null */
+  buttons: ChoiceButton[]
+}
+
 interface DialogContextValue {
   confirm: (options: ConfirmOptions) => Promise<boolean>
   alert: (options: AlertOptions | string) => Promise<void>
+  choose: (options: ChooseOptions) => Promise<string | null>
 }
 
 const DialogContext = createContext<DialogContextValue | null>(null)
@@ -54,6 +69,7 @@ const VARIANT_BOX: Record<Exclude<DialogVariant, 'none'>, string> = {
 type PendingDialog =
   | { kind: 'confirm'; options: ConfirmOptions; resolve: (value: boolean) => void }
   | { kind: 'alert'; options: AlertOptions; resolve: () => void }
+  | { kind: 'choose'; options: ChooseOptions; resolve: (value: string | null) => void }
 
 export function DialogProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
@@ -72,16 +88,23 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const close = useCallback((result: boolean) => {
+  const choose = useCallback((options: ChooseOptions) => {
+    return new Promise<string | null>((resolve) => {
+      setPending({ kind: 'choose', options, resolve })
+    })
+  }, [])
+
+  const close = useCallback((result: boolean | string | null) => {
     setPending((current) => {
       if (!current) return null
-      if (current.kind === 'confirm') current.resolve(result)
+      if (current.kind === 'confirm') current.resolve(result === true)
+      else if (current.kind === 'choose') current.resolve(typeof result === 'string' ? result : null)
       else current.resolve()
       return null
     })
   }, [])
 
-  const value = useMemo(() => ({ confirm, alert: alertFn }), [confirm, alertFn])
+  const value = useMemo(() => ({ confirm, alert: alertFn, choose }), [confirm, alertFn, choose])
 
   const variant = pending?.options.variant ?? 'none'
   const tone: DialogTone = (pending?.kind === 'confirm' && pending.options.tone) || 'default'
@@ -114,17 +137,39 @@ export function DialogProvider({ children }: { children: ReactNode }) {
               </div>
             )}
             <div className="mt-4 flex justify-end gap-2">
-              {pending.kind === 'confirm' && (
-                <button
-                  onClick={() => close(false)}
-                  className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5"
-                >
-                  {pending.options.cancelLabel ?? t('common.cancel')}
-                </button>
+              {pending.kind === 'choose' ? (
+                pending.options.buttons.map((button) => (
+                  <button
+                    key={button.id}
+                    onClick={() => close(button.id)}
+                    className={
+                      button.kind === 'danger'
+                        ? 'rounded-lg bg-red-500/90 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-500'
+                        : button.kind === 'primary'
+                          ? 'rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90'
+                          : 'rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5'
+                    }
+                  >
+                    {button.label}
+                  </button>
+                ))
+              ) : (
+                <>
+                  {pending.kind === 'confirm' && (
+                    <button
+                      onClick={() => close(false)}
+                      className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                    >
+                      {pending.options.cancelLabel ?? t('common.cancel')}
+                    </button>
+                  )}
+                  <button onClick={() => close(true)} className={primaryButtonClass}>
+                    {pending.kind === 'confirm'
+                      ? (pending.options.confirmLabel ?? t('common.confirm'))
+                      : (pending.options.okLabel ?? t('common.ok'))}
+                  </button>
+                </>
               )}
-              <button onClick={() => close(true)} className={primaryButtonClass}>
-                {pending.kind === 'confirm' ? (pending.options.confirmLabel ?? t('common.confirm')) : (pending.options.okLabel ?? t('common.ok'))}
-              </button>
             </div>
           </div>
         </div>

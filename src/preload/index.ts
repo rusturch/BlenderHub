@@ -40,7 +40,8 @@ const api: LauncherApi = {
   builds: {
     listRemote: (refresh = false): Promise<RemoteBuild[]> => ipcRenderer.invoke('builds:list-remote', refresh),
     listInstalled: (): Promise<InstalledBuild[]> => ipcRenderer.invoke('builds:list-installed'),
-    install: (buildId: string): Promise<InstalledBuild> => ipcRenderer.invoke('builds:install', buildId),
+    install: (buildId: string, keepExisting = false): Promise<InstalledBuild> =>
+      ipcRenderer.invoke('builds:install', buildId, keepExisting),
     locate: (): Promise<InstalledBuild[] | null> => ipcRenderer.invoke('builds:locate'),
     launch: (installId: string): Promise<void> => ipcRenderer.invoke('builds:launch', installId),
     uninstall: (installId: string): Promise<void> => ipcRenderer.invoke('builds:uninstall', installId),

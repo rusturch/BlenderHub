@@ -64,14 +64,21 @@ export function registerBlenderIpc(): void {
 
   ipcMain.handle('builds:list-installed', () => listInstalled())
 
-  ipcMain.handle('builds:install', async (_event, rawId: unknown) => {
+  ipcMain.handle('builds:install', async (_event, rawId: unknown, rawKeepExisting: unknown) => {
     const buildId = requireString(rawId, 'build id')
+    if (rawKeepExisting !== undefined && typeof rawKeepExisting !== 'boolean') {
+      throw new Error('keepExisting must be a boolean')
+    }
     const build = remoteCache?.builds.find((candidate) => candidate.id === buildId)
     if (!build) throw new Error('Unknown build — refresh the list and try again')
     if (installsInFlight.has(buildId)) throw new Error('This build is already being installed')
     installsInFlight.add(buildId)
     try {
-      return await installBuild(build, (progress) => broadcast('builds:install-progress', progress))
+      return await installBuild(
+        build,
+        (progress) => broadcast('builds:install-progress', progress),
+        rawKeepExisting === true
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       broadcast('builds:install-progress', { buildId, phase: 'error', error: message } satisfies InstallProgress)

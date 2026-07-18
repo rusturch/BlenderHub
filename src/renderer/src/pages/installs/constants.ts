@@ -3,12 +3,14 @@ export const FILTER_LABEL_KEYS: Record<string, string> = {
   all: 'installs.filterAll',
   stable: 'installs.filterStable',
   candidate: 'installs.filterCandidate',
-  rc: 'installs.filterRc',
   beta: 'installs.filterBeta',
   alpha: 'installs.filterAlpha',
-  experimental: 'installs.filterExperimental',
-  archive: 'installs.filterArchive'
+  experimental: 'installs.filterExperimental'
 }
+// widest cycle name of the set below — rides invisibly inside every badge so the
+// badges form an even column and whatever follows them lines up across rows
+export const LONGEST_CYCLE = 'candidate'
+
 export const CYCLE_STYLES: Record<string, string> = {
   stable: 'bg-emerald-500/15 text-emerald-400',
   lts: 'bg-emerald-500/15 text-emerald-400',

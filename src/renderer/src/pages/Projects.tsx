@@ -3,7 +3,7 @@ import PageLayout, { EmptyState } from '../components/PageLayout'
 import Dropdown from '../components/Dropdown'
 import { useDialog } from '../components/Dialog'
 import { DownloadIcon, FolderIcon } from '../components/Sidebar'
-import { compareVersionsDesc } from '../../../shared/blender-builds'
+import { compareVersionsDesc, pickNativeInstall } from '../../../shared/blender-builds'
 import { cleanErrorMessage, formatBytes } from '../lib/format'
 import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
@@ -166,14 +166,7 @@ export default function ProjectsPage({
   const bestInstallFor = useCallback(
     (file: BlendFileInfo): InstalledBuild | null => {
       if (installedSorted.length === 0) return null
-      if (file.blenderVersion) {
-        const exact = installedSorted.find(
-          (build) =>
-            build.version === file.blenderVersion || build.version.startsWith(`${file.blenderVersion}.`)
-        )
-        if (exact) return exact
-      }
-      return installedSorted[0]
+      return pickNativeInstall(installedSorted, file.blenderVersion) ?? installedSorted[0]
     },
     [installedSorted]
   )
@@ -193,15 +186,7 @@ export default function ProjectsPage({
   )
 
   const nativeInstallFor = useCallback(
-    (file: BlendFileInfo): InstalledBuild | null => {
-      if (!file.blenderVersion) return null
-      return (
-        installedSorted.find(
-          (build) =>
-            build.version === file.blenderVersion || build.version.startsWith(`${file.blenderVersion}.`)
-        ) ?? null
-      )
-    },
+    (file: BlendFileInfo): InstalledBuild | null => pickNativeInstall(installedSorted, file.blenderVersion),
     [installedSorted]
   )
 

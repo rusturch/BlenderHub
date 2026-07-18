@@ -10,6 +10,7 @@ import { listInstalled } from './blender/installs'
 import { getHiddenFiles, getOverrides, getProjectFiles, getProjectFolders, recordProjectOpened } from './projects/store'
 import { listRecentProjectFiles } from './projects/service'
 import { TRAY_PAGES_KEY, parseTrayPages } from '../shared/tray-menu'
+import { pickNativeInstall } from '../shared/blender-builds'
 import trayBlack from '../../resources/tray-black.png?asset'
 import trayWhite from '../../resources/tray-white.png?asset'
 import type { Page } from '../shared/types'
@@ -100,8 +101,7 @@ async function resolveInstallFor(filePath: string): Promise<{ executable: string
     listInstalled()
   ])
   if (builds.length === 0) return null
-  const native = version && builds.find((b) => b.version === version || b.version.startsWith(`${version}.`))
-  return native || builds[0]
+  return pickNativeInstall(builds, version) ?? builds[0]
 }
 
 async function openProjectFromTray(filePath: string, lang: TrayLang): Promise<void> {

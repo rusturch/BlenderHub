@@ -10,7 +10,6 @@
 # Blender release-cycle badges (Installs filter tabs)
 installs.filterStable
 installs.filterCandidate
-installs.filterRc
 installs.filterBeta
 installs.filterAlpha
 installs.filterExperimental

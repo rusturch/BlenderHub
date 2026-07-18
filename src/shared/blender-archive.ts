@@ -1,4 +1,4 @@
-import { compareVersionsDesc, PREFERRED_EXTENSION } from './blender-builds'
+import { PREFERRED_EXTENSION } from './blender-builds'
 import type { RemoteBuild } from './types'
 
 // Oldest release series worth listing (first modern LTS)
@@ -76,17 +76,6 @@ export function parseArchiveFolderBuilds(
     })
   }
   return builds
-}
-
-/** Keep only the newest patch release of every minor series (3.6.9, not all of 3.6.x). */
-export function latestPatchPerMinor(builds: RemoteBuild[]): RemoteBuild[] {
-  const byMinor = new Map<string, RemoteBuild>()
-  for (const build of builds) {
-    const minor = build.version.split('.').slice(0, 2).join('.')
-    const known = byMinor.get(minor)
-    if (!known || compareVersionsDesc(build.version, known.version) < 0) byMinor.set(minor, build)
-  }
-  return [...byMinor.values()]
 }
 
 export function minorOf(version: string): string {

@@ -1,21 +1,42 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageLayout from '../components/PageLayout'
 import Dropdown from '../components/Dropdown'
 import { FilterSelect } from '../components/FilterSelect'
 import { useDialog } from '../components/Dialog'
 import { FolderIcon } from '../components/Sidebar'
+import RunningBlenderGate from '../components/RunningBlenderGate'
 import SyncOfferDialog from '../components/SyncOfferDialog'
 import { cleanErrorMessage, formatBytes, formatDate } from '../lib/format'
 import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
 import { minorOf } from '../../../shared/blender-archive'
-import { compareVersionsDesc, isSameBuild, isUpdateFor } from '../../../shared/blender-builds'
-import type { BlendFileInfo, InstalledBuild, InstallProgress, RemoteBuild } from '../../../shared/types'
-import { CycleBadge, ProgressLine } from './installs/cells'
+import {
+  compareVersionsDesc,
+  cycleClass,
+  isReleasedCycle,
+  isSameBuild,
+  isUpdateFor,
+  STABLE_CYCLES
+} from '../../../shared/blender-builds'
+import type {
+  BlendFileInfo,
+  InstalledBuild,
+  InstallProgress,
+  RemoteBuild,
+  RunningBlender
+} from '../../../shared/types'
+import { ActionLabel, CycleBadge, ProgressLine, ProjectCountLabel } from './installs/cells'
 import { FILTER_LABEL_KEYS } from './installs/constants'
-import { FolderOpenIcon, GearIcon, InfoIcon, RefreshIcon, TrashIcon } from './installs/icons'
-import { installedIdentityKey, locateWithDedup, notesUrlForRow, releaseDateOfRow } from './installs/installs-utils'
+import { ChevronDownIcon, DotsIcon, GearIcon, RefreshIcon } from './installs/icons'
+import {
+  buildMatchesTab,
+  installedIdentityKey,
+  locateWithDedup,
+  notesUrlForBuild,
+  notesUrlForRow,
+  releaseDateOfRow
+} from './installs/installs-utils'
 import type { DisplayRow } from './installs/types'
 
 export default function InstallsPage({
@@ -28,7 +49,7 @@ export default function InstallsPage({
   const { api, isDesktop } = getLauncherApi()
   const buildsApi = api.builds
   const projectsApi = api.projects
-  const { confirm: confirmDialog, alert: alertDialog } = useDialog()
+  const { confirm: confirmDialog, alert: alertDialog, choose: chooseDialog } = useDialog()
   const { t } = useTranslation()
   const [remote, setRemote] = useState<RemoteBuild[] | null>(null)
   const [remoteError, setRemoteError] = useState<string | null>(null)
@@ -38,12 +59,26 @@ export default function InstallsPage({
   const [query, setQuery] = useState(initialSearch ?? '')
   const [sortKey, setSortKey] = useState<'version' | 'date'>('version')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  // "Other versions" drawers open per series; in-memory only, resets with the page
+  const [expandedSeries, setExpandedSeries] = useState<ReadonlySet<string>>(new Set())
+  // shared across top rows and drawer sub-rows — every row/entry key is unique
+  const [moreMenuFor, setMoreMenuFor] = useState<string | null>(null)
+  const [runningGate, setRunningGate] = useState<{
+    minors: string[]
+    initial: RunningBlender[]
+    resume: () => void
+  } | null>(null)
   const [locating, setLocating] = useState(false)
   const [projectFiles, setProjectFiles] = useState<BlendFileInfo[]>([])
   const [projectsPopoverFor, setProjectsPopoverFor] = useState<string | null>(null)
   const [progressById, setProgressById] = useState<Record<string, InstallProgress>>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showBranch, setShowBranch] = useState(() => uiGet('installs.showBranch') === '1')
+  const [showProjectCount, setShowProjectCount] = useState(() => uiGet('installs.showProjectCount') === '1')
+  const [showProjectCountAll, setShowProjectCountAll] = useState(
+    () => uiGet('installs.showProjectCountAll') === '1'
+  )
+  const [showSize, setShowSize] = useState(() => uiGet('installs.showSize') === '1')
   const [installedFilter, setInstalledFilter] = useState<'all' | 'installed' | 'not-installed'>(
     () => (uiGet('installs.installedFilter') as 'all' | 'installed' | 'not-installed' | undefined) ?? 'all'
   )
@@ -55,6 +90,18 @@ export default function InstallsPage({
   useEffect(() => {
     uiSet('installs.showBranch', showBranch ? '1' : '0')
   }, [showBranch])
+
+  useEffect(() => {
+    uiSet('installs.showProjectCount', showProjectCount ? '1' : '0')
+  }, [showProjectCount])
+
+  useEffect(() => {
+    uiSet('installs.showProjectCountAll', showProjectCountAll ? '1' : '0')
+  }, [showProjectCountAll])
+
+  useEffect(() => {
+    uiSet('installs.showSize', showSize ? '1' : '0')
+  }, [showSize])
 
   useEffect(() => {
     uiSet('installs.installedFilter', installedFilter)
@@ -158,8 +205,8 @@ export default function InstallsPage({
   }, [buildsApi, refreshInstalled, refreshRemote, refreshProjectFiles, offerSyncForNewMinors])
 
   const startInstall = useCallback(
-    async (build: RemoteBuild) => {
-      if (!buildsApi) return
+    async (build: RemoteBuild, keepExisting = false): Promise<boolean> => {
+      if (!buildsApi) return false
       // one copy of an exact build is enough — block a duplicate add with a warning.
       // (a new commit of a rolling build is NOT isSameBuild, so it still installs/replaces)
       const already = installed.some((entry) => entry.remoteId === build.id || isSameBuild(entry, build))
@@ -167,22 +214,132 @@ export default function InstallsPage({
         await alertDialog(
           t('installs.alreadyInstalled', { version: build.version, cycle: build.releaseCycle })
         )
-        return
+        return false
       }
       setProgressById((previous) => ({
         ...previous,
         [build.id]: { buildId: build.id, phase: 'downloading', receivedBytes: 0, totalBytes: build.fileSize }
       }))
       try {
-        await buildsApi.install(build.id)
+        await buildsApi.install(build.id, keepExisting)
+        return true
       } catch (error) {
         setProgressById((previous) => ({
           ...previous,
           [build.id]: { buildId: build.id, phase: 'error', error: cleanErrorMessage(error) }
         }))
+        return false
       }
     },
     [buildsApi, installed, alertDialog, t]
+  )
+
+  // Replacing copies out from under a running Blender risks locked folders and a
+  // half-retired line — same gate as Add-ons Apply / Sync: run now when the
+  // affected minors are closed, otherwise park the continuation in the dialog.
+  const gateOnRunning = useCallback(
+    async (minors: string[], run: () => Promise<void>) => {
+      let found: RunningBlender[] = []
+      try {
+        found = await api.builds.listRunning(minors)
+      } catch {
+        // detection failed — proceed exactly as before the guard existed
+      }
+      if (found.length > 0) setRunningGate({ minors, initial: found, resume: () => void run() })
+      else await run()
+    },
+    [api]
+  )
+
+  // An Update replaces the copies of its line — gate it on a running Blender of
+  // that series before starting.
+  const startUpdate = useCallback(
+    (update: RemoteBuild) => {
+      void gateOnRunning([minorOf(update.version)], async () => {
+        await startInstall(update)
+      })
+    },
+    [gateOnRunning, startInstall]
+  )
+
+  // Every Install goes through here. Whenever the install would displace or
+  // shadow existing copies of the series, the user chooses explicitly:
+  // "replace" lets the main process retire superseded copies as usual and
+  // uninstalls the survivors the user wanted gone; "keep both" installs with
+  // keepExisting so nothing is touched. Located copies are never removed.
+  const requestInstall = useCallback(
+    async (build: RemoteBuild) => {
+      if (!buildsApi) return
+      const buildReleased = isReleasedCycle(build.releaseCycle)
+      const seriesCopies = installed.filter(
+        (copy) =>
+          copy.managed &&
+          STABLE_CYCLES.has(copy.releaseCycle) &&
+          minorOf(copy.version) === minorOf(build.version)
+      )
+      // copies the install auto-retires (mirrors replaceSupersededBuilds)
+      const retired = buildReleased
+        ? seriesCopies.filter((copy) => {
+            const cmp = compareVersionsDesc(copy.version, build.version)
+            return cmp > 0 || (cmp === 0 && !isReleasedCycle(copy.releaseCycle))
+          })
+        : []
+      // copies that survive, but the user may want gone: newer ones (a downgrade),
+      // and for a candidate install — the released copies of the series it previews
+      const survivors = seriesCopies.filter(
+        (copy) =>
+          compareVersionsDesc(copy.version, build.version) < 0 ||
+          (!buildReleased && isReleasedCycle(copy.releaseCycle))
+      )
+      if (retired.length === 0 && survivors.length === 0) {
+        await startInstall(build)
+        return
+      }
+      const current = [...new Set([...retired, ...survivors].map((copy) => copy.version))].join(', ')
+      const downgrade = survivors.length > 0 && buildReleased
+      const messageKey = !buildReleased
+        ? 'installs.candidateInstallMessage'
+        : downgrade
+          ? 'installs.downgradeMessage'
+          : 'installs.upgradeMessage'
+      const titleKey = !buildReleased
+        ? 'installs.candidateInstallTitle'
+        : downgrade
+          ? 'installs.downgradeTitle'
+          : 'installs.upgradeTitle'
+      // a plain upgrade recommends replacing; a downgrade or candidate recommends keeping both
+      const replaceKind = downgrade || !buildReleased ? 'danger' : 'primary'
+      const keepKind = downgrade || !buildReleased ? 'primary' : 'secondary'
+      const choice = await chooseDialog({
+        title: t(titleKey, { version: build.version }),
+        message: t(messageKey, { version: build.version, current }),
+        variant: 'warning',
+        buttons: [
+          { id: 'cancel', label: t('common.cancel') },
+          { id: 'replace', label: t('installs.downgradeReplace', { current }), kind: replaceKind },
+          { id: 'keep', label: t('installs.downgradeKeepBoth'), kind: keepKind }
+        ]
+      })
+      if (choice !== 'replace' && choice !== 'keep') return
+      if (choice === 'keep') {
+        await startInstall(build, true)
+        return
+      }
+      // replacing pulls installed copies out from under a possibly running Blender
+      await gateOnRunning([minorOf(build.version)], async () => {
+        const ok = await startInstall(build, false)
+        if (!ok) return
+        for (const copy of survivors) {
+          try {
+            await buildsApi.uninstall(copy.id)
+          } catch (error) {
+            await alertDialog(cleanErrorMessage(error))
+          }
+        }
+        refreshInstalled()
+      })
+    },
+    [buildsApi, installed, startInstall, gateOnRunning, chooseDialog, alertDialog, refreshInstalled, t]
   )
 
   const removeInstall = useCallback(
@@ -241,12 +398,65 @@ export default function InstallsPage({
   }, [buildsApi, refreshInstalled, alertDialog, offerSyncForNewMinors, t])
 
   const filters = useMemo(() => {
-    const dailyCycles = new Set(
-      (remote ?? []).filter((build) => build.source === 'daily').map((build) => build.releaseCycle)
+    // both hosts feed the cycle tabs, by class — the archive is all released
+    // builds, so it lands on Stable instead of a source-shaped tab of its own
+    const present = new Set(
+      (remote ?? [])
+        .filter((build) => build.source === 'daily' || build.source === 'archive')
+        .map((build) => cycleClass(build.releaseCycle))
     )
-    const cycleTabs = ['stable', 'candidate', 'rc', 'beta', 'alpha'].filter((cycle) => dailyCycles.has(cycle))
-    return ['all', ...cycleTabs, 'experimental', 'archive']
+    const cycleTabs = ['stable', 'candidate', 'beta', 'alpha'].filter((cycle) => present.has(cycle))
+    return ['all', ...cycleTabs, 'experimental']
   }, [remote])
+
+  // newest released (stable/lts) version per minor across ALL sources — used to
+  // de-emphasize a candidate's Install button while its series has a released
+  // build, and anchor the "Other versions" drawer: the newest released build is
+  // the series representative, everything older feeds the drawer
+  const releasedNewestByMinor = useMemo(() => {
+    const map = new Map<string, RemoteBuild>()
+    for (const build of remote ?? []) {
+      if (build.source === 'patch' || build.source === 'experimental') continue
+      if (!isReleasedCycle(build.releaseCycle)) continue
+      const minor = minorOf(build.version)
+      const known = map.get(minor)
+      if (!known || compareVersionsDesc(build.version, known.version) < 0) map.set(minor, build)
+    }
+    return map
+  }, [remote])
+
+  // every stable-cycle member of a series (released patches and the current
+  // candidate), newest first — element 0 is the series representative that owns
+  // the top row, the rest render inside the "Other versions" drawer. At equal
+  // versions the released build outranks its candidate
+  const seriesMembersByMinor = useMemo(() => {
+    const map = new Map<string, RemoteBuild[]>()
+    for (const build of remote ?? []) {
+      if (build.source === 'patch' || build.source === 'experimental') continue
+      if (!STABLE_CYCLES.has(build.releaseCycle)) continue
+      const minor = minorOf(build.version)
+      const list = map.get(minor)
+      if (list) list.push(build)
+      else map.set(minor, [build])
+    }
+    for (const list of map.values())
+      list.sort(
+        (a, b) =>
+          compareVersionsDesc(a.version, b.version) ||
+          Number(isReleasedCycle(b.releaseCycle)) - Number(isReleasedCycle(a.releaseCycle)) ||
+          b.fileMtime - a.fileMtime
+      )
+    return map
+  }, [remote])
+
+  // a series is represented by its newest member VISIBLE on the current tab —
+  // on Stable that is the newest released build even while a candidate leads the
+  // series on All (members are already sorted newest-first)
+  const seriesRepFor = useCallback(
+    (minor: string, tab: string): RemoteBuild | undefined =>
+      seriesMembersByMinor.get(minor)?.find((member) => buildMatchesTab(member, tab)),
+    [seriesMembersByMinor]
+  )
 
   const copiesForRemote = useCallback(
     (build: RemoteBuild): InstalledBuild[] =>
@@ -275,8 +485,49 @@ export default function InstallsPage({
     return groups
   }, [remote, installed])
 
+  // Updates ride installed copies' rows — claimed and orphaned alike (with the
+  // full archive history in the catalog, claimed is the norm for old patches).
+  // A copy whose line already has a newer installed copy gets no Update nudge —
+  // the newer one is right there, and with installed builds excluded from the
+  // targets the button would absurdly point at an intermediate patch.
+  const updateByCopyId = useMemo(() => {
+    const coveredIds = new Set<string>()
+    for (const entry of installed) {
+      const covered = installed.some((other) => {
+        if (other.id === entry.id) return false
+        if (!STABLE_CYCLES.has(other.releaseCycle) || !STABLE_CYCLES.has(entry.releaseCycle)) return false
+        if (minorOf(other.version) !== minorOf(entry.version)) return false
+        if (!isReleasedCycle(other.releaseCycle) && isReleasedCycle(entry.releaseCycle)) return false
+        const cmp = compareVersionsDesc(other.version, entry.version)
+        return cmp < 0 || (cmp === 0 && isReleasedCycle(other.releaseCycle) && !isReleasedCycle(entry.releaseCycle))
+      })
+      if (covered) coveredIds.add(entry.id)
+    }
+    const map = new Map<string, RemoteBuild>()
+    for (const build of remote ?? []) {
+      if (copiesForRemote(build).length > 0) continue
+      for (const entry of installed) {
+        if (coveredIds.has(entry.id) || !isUpdateFor(build, entry)) continue
+        const known = map.get(entry.id)
+        const cmp = known ? compareVersionsDesc(build.version, known.version) : 0
+        // equal versions: the released build wins the Update slot over a candidate
+        const wins =
+          cmp === 0 &&
+          (isReleasedCycle(build.releaseCycle) !== isReleasedCycle(known?.releaseCycle ?? '')
+            ? isReleasedCycle(build.releaseCycle)
+            : build.fileMtime > (known?.fileMtime ?? 0))
+        if (!known || cmp < 0 || wins) {
+          map.set(entry.id, build)
+        }
+      }
+    }
+    return map
+  }, [remote, installed, copiesForRemote])
+
   const mergedVisible = useMemo(() => {
     const q = query.trim().toLowerCase()
+    // a concrete x.y.z query pulls matching drawer-only patches into the top list
+    const patchQuery = /^\d+\.\d+\.\d+/.test(q)
     const matchesQuery = (version: string, branch: string, cycle: string, commit: string): boolean =>
       !q ||
       version.toLowerCase().includes(q) ||
@@ -284,84 +535,78 @@ export default function InstallsPage({
       cycle.toLowerCase().includes(q) ||
       commit.toLowerCase().includes(q)
 
+    const matchesTabFor = (build: RemoteBuild): boolean => buildMatchesTab(build, filter)
+
     const rows: DisplayRow[] = []
+    // update targets advertised by a rendered row: their own Install row is then
+    // suppressed — the Update button IS their appearance, one line per build
+    const carriedUpdateIds = new Set<string>()
 
-    // A not-yet-installed catalog build that supersedes installed copies gets no
-    // "Install" row — it rides on those copies' rows as an Update button instead.
-    const claimed = new Set<string>()
+    // pass 1: installed copies the catalog still lists → one row per copy.
+    // Collapsed series: copies of non-representative members live inside the
+    // "Other versions" drawer with the rest of the series, not the top list —
+    // only a concrete x.y.z search surfaces them as top rows
     for (const build of remote ?? []) {
-      for (const copy of copiesForRemote(build)) claimed.add(copy.id)
-    }
-    const updateByCopyId = new Map<string, RemoteBuild>()
-    for (const build of remote ?? []) {
-      if (copiesForRemote(build).length > 0) continue
-      for (const entry of installed) {
-        if (claimed.has(entry.id) || !isUpdateFor(build, entry)) continue
-        const known = updateByCopyId.get(entry.id)
-        const cmp = known ? compareVersionsDesc(build.version, known.version) : 0
-        if (!known || cmp < 0 || (cmp === 0 && build.fileMtime > known.fileMtime)) {
-          updateByCopyId.set(entry.id, build)
-        }
-      }
-    }
-
-    for (const build of remote ?? []) {
-      // PR builds (patch) are special-interest — they live under Experimental only
-      const matchesTab =
-        filter === 'all'
-          ? build.source !== 'patch'
-          : filter === 'experimental'
-            ? build.source === 'experimental' || build.source === 'patch'
-            : filter === 'archive'
-              ? build.source === 'archive'
-              : build.source === 'daily' && build.releaseCycle === filter
-      if (!matchesTab || !matchesQuery(build.version, build.branch, build.releaseCycle, build.commit)) continue
+      if (!matchesTabFor(build)) continue
       const copies = copiesForRemote(build)
-      if (copies.length === 0) {
-        // outdated copies carry this build as their Update button (rendered by the
-        // orphan pass below, under All + their own cycle tab) — no "Install" row
-        // wherever such a copy is visible, so the line shows up exactly once
-        const supersededVisible = installed.some(
-          (entry) =>
-            updateByCopyId.get(entry.id)?.id === build.id &&
-            (filter === 'all' || filter === entry.releaseCycle)
-        )
-        if (supersededVisible) continue
-        // not installed yet → a single "Install" row
+      if (copies.length === 0) continue
+      const seriesRep = seriesRepFor(minorOf(build.version), filter)
+      const drawerBound =
+        STABLE_CYCLES.has(build.releaseCycle) &&
+        build.source !== 'patch' &&
+        build.source !== 'experimental' &&
+        seriesRep !== undefined &&
+        build.id !== seriesRep.id
+      if (drawerBound && !patchQuery) continue
+      // claimed copies may differ from the catalog entry in cycle label or commit
+      // (an lts copy claimed by an archive "stable" row), and their update rides
+      // here — search must see all three
+      const copyUpdates = copies.map((copy) => updateByCopyId.get(copy.id) ?? null)
+      const matchesRow =
+        matchesQuery(build.version, build.branch, build.releaseCycle, build.commit) ||
+        copies.some((c) => matchesQuery(c.version, c.branch ?? '', c.releaseCycle, c.commit ?? '')) ||
+        copyUpdates.some((u) => u !== null && matchesQuery(u.version, u.branch, u.releaseCycle, u.commit))
+      if (!matchesRow) continue
+      copies.forEach((copy, index) => {
+        const update = copyUpdates[index]
+        if (update) carriedUpdateIds.add(update.id)
         rows.push({
-          key: `remote:${build.id}`,
-          version: build.version,
-          releaseCycle: build.releaseCycle,
-          branch: build.branch,
-          commit: build.commit,
+          key: `copy:${copy.id}`,
+          version: copy.version,
+          releaseCycle: copy.releaseCycle,
+          branch: copy.branch ?? '',
+          commit: copy.commit ?? '',
           remoteBuild: build,
-          update: null,
-          copy: null
+          update,
+          copy
         })
-      } else {
-        // installed in one or more folders → one row per copy (separate positions)
-        for (const copy of copies) {
-          rows.push({
-            key: `copy:${copy.id}`,
-            version: copy.version,
-            releaseCycle: copy.releaseCycle,
-            branch: copy.branch ?? '',
-            commit: copy.commit ?? '',
-            remoteBuild: build,
-            update: null,
-            copy
-          })
-        }
-      }
+      })
     }
 
+    // pass 2: orphans — installed copies the catalog no longer lists
     for (const copies of orphanGroups.values()) {
       const rep = copies[0]
       // unknown original source (archive/daily/experimental) — only ever shown under
-      // All and its own cycle tab, never Experimental/Archive specifically
-      const matchesTab = filter === 'all' || filter === rep.releaseCycle
-      if (!matchesTab || !matchesQuery(rep.version, rep.branch ?? '', rep.releaseCycle, rep.commit ?? '')) continue
+      // All and its own cycle tab; class comparison, so an "lts" copy belongs on the
+      // stable tab and a mixed stable+lts group cannot flip with its representative
+      const matchesTab = filter === 'all' || cycleClass(filter) === cycleClass(rep.releaseCycle)
+      if (!matchesTab) continue
+      // a stable-cycle orphan of a series the catalog knows collapses into that
+      // series' drawer like every other non-representative copy
+      const seriesRep = STABLE_CYCLES.has(rep.releaseCycle)
+        ? seriesRepFor(minorOf(rep.version), filter)
+        : undefined
+      if (seriesRep !== undefined && !patchQuery) continue
+      // the superseding build has no Install row of its own (it rides here as the
+      // Update button), so searching for the NEW version must surface this row
+      const update = updateByCopyId.get(rep.id) ?? null
+      const matchesRow =
+        matchesQuery(rep.version, rep.branch ?? '', rep.releaseCycle, rep.commit ?? '') ||
+        (update !== null && matchesQuery(update.version, update.branch, update.releaseCycle, update.commit))
+      if (!matchesRow) continue
       for (const copy of copies) {
+        const copyUpdate = updateByCopyId.get(copy.id) ?? null
+        if (copyUpdate) carriedUpdateIds.add(copyUpdate.id)
         rows.push({
           key: `copy:${copy.id}`,
           version: copy.version,
@@ -369,16 +614,58 @@ export default function InstallsPage({
           branch: copy.branch ?? '',
           commit: copy.commit ?? '',
           remoteBuild: null,
-          update: updateByCopyId.get(copy.id) ?? null,
+          update: copyUpdate,
           copy
         })
       }
     }
 
+    // pass 3: not-installed catalog builds → single Install rows
+    for (const build of remote ?? []) {
+      if (!matchesTabFor(build)) continue
+      if (copiesForRemote(build).length > 0) continue
+      // every series member except the tab's representative (the newest member,
+      // candidate included) lives in the "Other versions" drawer rather than the
+      // top list — a concrete x.y.z search pulls any of them back up
+      const rep = seriesRepFor(minorOf(build.version), filter)
+      const drawerOnly =
+        build.source !== 'patch' &&
+        build.source !== 'experimental' &&
+        STABLE_CYCLES.has(build.releaseCycle) &&
+        rep !== undefined &&
+        build.id !== rep.id
+      if (drawerOnly && !patchQuery) continue
+      // a rendered row already advertises this build as its Update — shown once,
+      // unless an explicit x.y.z search asks for the build itself
+      if (carriedUpdateIds.has(build.id) && !patchQuery) continue
+      if (!matchesQuery(build.version, build.branch, build.releaseCycle, build.commit)) continue
+      rows.push({
+        key: `remote:${build.id}`,
+        version: build.version,
+        releaseCycle: build.releaseCycle,
+        branch: build.branch,
+        commit: build.commit,
+        remoteBuild: build,
+        update: null,
+        copy: null
+      })
+    }
+
+    // a collapsed series counts as installed when any of its (drawer-hidden)
+    // copies is — otherwise the Installed filter would show nothing for it
+    const seriesHasInstalledCopies = (minor: string): boolean =>
+      installed.some((copy) => STABLE_CYCLES.has(copy.releaseCycle) && minorOf(copy.version) === minor)
     const byInstalled =
       installedFilter === 'all'
         ? rows
-        : rows.filter((row) => (installedFilter === 'installed' ? row.copy !== null : row.copy === null))
+        : rows.filter((row) =>
+            installedFilter === 'installed'
+              ? row.copy !== null ||
+                (row.remoteBuild !== null &&
+                  STABLE_CYCLES.has(row.releaseCycle) &&
+                  seriesHasInstalledCopies(minorOf(row.version)))
+              : row.copy === null
+          )
     // copies of the same version (equal under the chosen key) keep a stable order by path
     const factor = sortDir === 'asc' ? -1 : 1
     byInstalled.sort((a, b) => {
@@ -389,7 +676,57 @@ export default function InstallsPage({
       return primary || (a.copy?.path ?? '').localeCompare(b.copy?.path ?? '')
     })
     return byInstalled
-  }, [remote, installed, filter, query, installedFilter, sortKey, sortDir, copiesForRemote, orphanGroups])
+  }, [
+    remote,
+    installed,
+    filter,
+    query,
+    installedFilter,
+    sortKey,
+    sortDir,
+    copiesForRemote,
+    orphanGroups,
+    seriesRepFor,
+    updateByCopyId
+  ])
+
+  // exactly one "Other versions" toggle per series — on the first visible row that
+  // represents the tab's series representative (its Install row, an installed
+  // copy of it, or the outdated copy carrying it as the Update target)
+  const drawerRowByKey = useMemo(() => {
+    const map = new Map<string, string>()
+    const seen = new Set<string>()
+    for (const row of mergedVisible) {
+      const minor = minorOf(row.version)
+      if (seen.has(minor)) continue
+      const rep = seriesRepFor(minor, filter)
+      if (!rep) continue
+      // the drawer only ever holds the series' PAST — members newer than this
+      // tab's representative (e.g. a daily-served release above the newest archive
+      // row on the Archive tab) belong to other tabs, never under an older row
+      const hasDrawerContent = (seriesMembersByMinor.get(minor) ?? []).some(
+        (member) => member.id !== rep.id && compareVersionsDesc(member.version, rep.version) >= 0
+      )
+      if (!hasDrawerContent) continue
+      const represents =
+        row.remoteBuild?.id === rep.id ||
+        row.update?.id === rep.id ||
+        (row.copy !== null && isSameBuild(row.copy, rep))
+      if (!represents) continue
+      seen.add(minor)
+      map.set(row.key, minor)
+    }
+    return map
+  }, [mergedVisible, seriesMembersByMinor, seriesRepFor, filter])
+
+  const toggleSeries = useCallback((minor: string) => {
+    setExpandedSeries((previous) => {
+      const next = new Set(previous)
+      if (next.has(minor)) next.delete(minor)
+      else next.add(minor)
+      return next
+    })
+  }, [])
 
   const projectsByMinor = useMemo(() => {
     const map = new Map<string, BlendFileInfo[]>()
@@ -509,6 +846,40 @@ export default function InstallsPage({
                   />
                   {t('installs.branch')}
                 </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                  <input
+                    type="checkbox"
+                    checked={showProjectCount}
+                    onChange={(event) => setShowProjectCount(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('installs.projectCount')}
+                </label>
+                <label
+                  className={`flex items-center gap-2 rounded py-1.5 pl-7 pr-2 text-sm transition-colors ${
+                    showProjectCount
+                      ? 'cursor-pointer text-zinc-300 hover:bg-white/5'
+                      : 'cursor-not-allowed text-zinc-600'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={showProjectCountAll}
+                    disabled={!showProjectCount}
+                    onChange={(event) => setShowProjectCountAll(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('installs.projectCountNotInstalled')}
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                  <input
+                    type="checkbox"
+                    checked={showSize}
+                    onChange={(event) => setShowSize(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('installs.buildSize')}
+                </label>
               </Dropdown>
             </div>
           </div>
@@ -553,16 +924,25 @@ export default function InstallsPage({
               {mergedVisible.map((row, index) => {
                 const copy = row.copy
                 const isInstalled = copy !== null
-                const progressSource = row.remoteBuild ?? row.update
-                const progress = progressSource ? progressById[progressSource.id] : undefined
-                const inFlight = progress !== undefined && progress.phase !== 'error' && progress.phase !== 'done'
+                const updateProgress = row.update ? progressById[row.update.id] : undefined
+                const remoteProgress = row.remoteBuild ? progressById[row.remoteBuild.id] : undefined
+                // the copy is about to be replaced by its own update: no second
+                // Update click, and no acting on files the install is retiring
+                const updateBusy =
+                  updateProgress !== undefined &&
+                  updateProgress.phase !== 'error' &&
+                  updateProgress.phase !== 'done'
+                const inFlight =
+                  remoteProgress !== undefined &&
+                  remoteProgress.phase !== 'error' &&
+                  remoteProgress.phase !== 'done'
                 const notesUrl = notesUrlForRow(row)
                 const branchMeta = showBranch
                   ? [row.branch, row.commit ? row.commit.slice(0, 10) : ''].filter(Boolean).join(' · ')
                   : ''
                 const sizeDate = row.remoteBuild
                   ? [
-                      formatBytes(row.remoteBuild.fileSize),
+                      showSize ? formatBytes(row.remoteBuild.fileSize) : '',
                       row.remoteBuild.fileMtime > 0 ? formatDate(row.remoteBuild.fileMtime) : ''
                     ]
                       .filter(Boolean)
@@ -570,23 +950,145 @@ export default function InstallsPage({
                   : ''
                 const usedBy = projectsByMinor.get(minorOf(row.version)) ?? []
                 const projectsOpen = projectsPopoverFor === row.key
+                // visible Update target: the new version, or version + cycle when only
+                // the cycle changes (released build superseding its own candidate);
+                // rolling updates (same version, new commit) keep the plain verb
+                const updateTarget = row.update
+                  ? row.update.version !== row.version
+                    ? row.update.version
+                    : cycleClass(row.update.releaseCycle) !== cycleClass(row.releaseCycle)
+                      ? `${row.update.version} ${row.update.releaseCycle}`
+                      : null
+                  : null
+                // a candidate whose series has a released build is the opt-in choice,
+                // not the recommended one — its Install goes neutral, accent stays
+                // on the released row so each series has one obvious button
+                const releasedOfSeries =
+                  !isInstalled && row.remoteBuild && cycleClass(row.releaseCycle) === 'candidate'
+                    ? (releasedNewestByMinor.get(minorOf(row.version))?.version ?? null)
+                    : null
+                const drawerMinor = drawerRowByKey.get(row.key) ?? null
+                const drawerExpanded = drawerMinor !== null && expandedSeries.has(drawerMinor)
+                // the drawer interleaves the series' other catalog versions and every
+                // installed copy of them (collapsed from the top list), newest first
+                const drawerEntries: {
+                  key: string
+                  version: string
+                  releaseCycle: string
+                  build: RemoteBuild | null
+                  copy: InstalledBuild | null
+                }[] = []
+                const drawerRep = drawerMinor !== null ? seriesRepFor(drawerMinor, filter) : undefined
+                if (drawerMinor !== null && drawerRep !== undefined) {
+                  for (const member of seriesMembersByMinor.get(drawerMinor) ?? []) {
+                    if (
+                      member.id === row.remoteBuild?.id ||
+                      member.id === row.update?.id ||
+                      (row.copy !== null && isSameBuild(row.copy, member))
+                    )
+                      continue
+                    // the drawer holds the series' past only — never a member newer
+                    // than this tab's representative
+                    if (compareVersionsDesc(member.version, drawerRep.version) < 0) continue
+                    // ...and only members this tab shows, so Stable never lists a candidate
+                    if (!buildMatchesTab(member, filter)) continue
+                    const memberCopies = copiesForRemote(member)
+                    if (memberCopies.length === 0) {
+                      drawerEntries.push({
+                        key: `build:${member.id}`,
+                        version: member.version,
+                        releaseCycle: member.releaseCycle,
+                        build: member,
+                        copy: null
+                      })
+                    } else {
+                      for (const memberCopy of memberCopies) {
+                        drawerEntries.push({
+                          key: `copy:${memberCopy.id}`,
+                          version: memberCopy.version,
+                          releaseCycle: memberCopy.releaseCycle,
+                          build: member,
+                          copy: memberCopy
+                        })
+                      }
+                    }
+                  }
+                  for (const group of orphanGroups.values()) {
+                    for (const orphan of group) {
+                      if (!STABLE_CYCLES.has(orphan.releaseCycle)) continue
+                      if (minorOf(orphan.version) !== drawerMinor) continue
+                      if (orphan.id === row.copy?.id) continue
+                      if (compareVersionsDesc(orphan.version, drawerRep.version) < 0) continue
+                      drawerEntries.push({
+                        key: `copy:${orphan.id}`,
+                        version: orphan.version,
+                        releaseCycle: orphan.releaseCycle,
+                        build: null,
+                        copy: orphan
+                      })
+                    }
+                  }
+                  drawerEntries.sort(
+                    (a, b) =>
+                      compareVersionsDesc(a.version, b.version) ||
+                      (a.copy?.path ?? '').localeCompare(b.copy?.path ?? '')
+                  )
+                }
+                const seriesHasInstalled = drawerEntries.some((entry) => entry.copy !== null)
+                // the update target draws its own progress when it has a drawer row of
+                // its own; otherwise this carrier row is the only place to show it
+                const updateShownInDrawer =
+                  row.update !== null &&
+                  drawerEntries.some((entry) => entry.copy === null && entry.build?.id === row.update?.id)
+                const progress = remoteProgress ?? (updateShownInDrawer ? undefined : updateProgress)
                 return (
+                  <Fragment key={row.key}>
                   <div
-                    key={row.key}
-                    className={`flex items-center gap-4 bg-[#131313] px-4 py-3 ${index > 0 ? 'border-t border-white/5' : ''}`}
+                    onClick={(event) => {
+                      // the whole row toggles its series drawer; clicks that land on
+                      // any button (actions, popover trigger) are theirs alone
+                      if (drawerMinor === null) return
+                      if ((event.target as HTMLElement).closest('button')) return
+                      toggleSeries(drawerMinor)
+                    }}
+                    className={`flex items-center gap-4 bg-[#131313] px-4 py-3 ${index > 0 ? 'border-t border-white/5' : ''} ${
+                      drawerMinor !== null ? 'cursor-pointer hover:bg-[#161616]' : ''
+                    }`}
                   >
                     <div className="w-56 shrink-0">
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${isInstalled ? 'bg-emerald-400' : 'bg-transparent'}`}
-                          title={isInstalled ? t('installs.installed') : undefined}
-                        />
+                        {/* The dot speaks for what the row itself shows: expanded, the
+                            installed sub-rows carry their own dots, so it only stays lit
+                            for this build. Collapsed, it also stands in for a hidden
+                            installed member — marked by a faint arrow below it, out of
+                            flow so the dot never shifts. */}
+                        <span className="relative h-1.5 w-1.5 shrink-0">
+                          <span
+                            className={`block h-1.5 w-1.5 rounded-full ${
+                              isInstalled || (seriesHasInstalled && !drawerExpanded)
+                                ? 'bg-emerald-400'
+                                : 'bg-transparent'
+                            }`}
+                            title={
+                              isInstalled || (seriesHasInstalled && !drawerExpanded)
+                                ? t('installs.installed')
+                                : undefined
+                            }
+                          />
+                          {seriesHasInstalled && !drawerExpanded && (
+                            <ChevronDownIcon className="pointer-events-none absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 text-emerald-400/40" />
+                          )}
+                        </span>
                         <span className="relative shrink-0 text-sm font-semibold text-zinc-100">
                           <span className="invisible">{longestVersion}</span>
                           <span className="absolute inset-y-0 left-0">{row.version}</span>
                         </span>
                         <CycleBadge cycle={row.releaseCycle} />
-                        {isInstalled && (
+                        {showProjectCount &&
+                          (isInstalled || seriesHasInstalled || showProjectCountAll) && (
+                          // display:contents keeps layout; the span only fences popover
+                          // clicks (its list items are not buttons) off the row toggle
+                          <span className="contents" onClick={(event) => event.stopPropagation()}>
                           <Dropdown
                             className="shrink-0"
                             open={projectsOpen}
@@ -598,13 +1100,8 @@ export default function InstallsPage({
                                 onClick={() => setProjectsPopoverFor(projectsOpen ? null : row.key)}
                                 className="flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300 transition-colors hover:bg-white/20"
                               >
-                                <FolderIcon className="h-3 w-3" />
-                                {t(
-                                  usedBy.length === 1
-                                    ? 'installs.projectCountOne'
-                                    : 'installs.projectCountMany',
-                                  { count: usedBy.length }
-                                )}
+                                <FolderIcon className="h-3 w-3 shrink-0" />
+                                <ProjectCountLabel count={usedBy.length} />
                               </button>
                             }
                           >
@@ -641,6 +1138,7 @@ export default function InstallsPage({
                               </button>
                             )}
                           </Dropdown>
+                          </span>
                         )}
                       </div>
                       {branchMeta && (
@@ -661,24 +1159,11 @@ export default function InstallsPage({
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {notesUrl && (
-                        <button
-                          onClick={() => window.open(notesUrl, '_blank', 'noopener')}
-                          title={
-                            row.remoteBuild?.source === 'patch'
-                              ? t('installs.showPrDetails')
-                              : t('installs.releaseNotes')
-                          }
-                          className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
-                        >
-                          <InfoIcon />
-                        </button>
-                      )}
                       {copy ? (
                         <>
-                          {row.update && !inFlight && (
+                          {row.update && !updateBusy && (
                             <button
-                              onClick={() => row.update && startInstall(row.update)}
+                              onClick={() => row.update && startUpdate(row.update)}
                               disabled={!isDesktop}
                               title={
                                 isDesktop
@@ -697,44 +1182,286 @@ export default function InstallsPage({
                               }
                               className="rounded-lg border border-blender/40 px-3 py-1 text-xs font-medium text-blender transition-colors hover:bg-blender/10 disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              {t('installs.update')}
+                              {updateTarget
+                                ? t('installs.updateTo', { target: updateTarget })
+                                : t('installs.update')}
                             </button>
                           )}
                           <button
+                            disabled={updateBusy}
+                            title={updateBusy ? t('installs.busyUpdating') : undefined}
                             onClick={() =>
                               buildsApi.launch(copy.id).catch((error) => alertDialog(cleanErrorMessage(error)))
                             }
-                            className="rounded-lg bg-blender px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blender/90"
+                            className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            {t('installs.launch')}
-                          </button>
-                          <button
-                            title={t('installs.openFolder')}
-                            onClick={() => buildsApi.openFolder(copy.id).catch(() => undefined)}
-                            className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
-                          >
-                            <FolderOpenIcon />
-                          </button>
-                          <button
-                            title={copy.managed ? t('installs.uninstall') : t('installs.removeFromList')}
-                            onClick={() => removeInstall(copy)}
-                            className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                          >
-                            <TrashIcon />
+                            <ActionLabel>{t('installs.launch')}</ActionLabel>
                           </button>
                         </>
                       ) : inFlight ? null : (
                         <button
-                          onClick={() => row.remoteBuild && startInstall(row.remoteBuild)}
+                          onClick={() => row.remoteBuild && requestInstall(row.remoteBuild)}
                           disabled={!isDesktop}
-                          title={isDesktop ? undefined : t('installs.desktopOnly')}
-                          className="rounded-lg border border-blender/40 px-3 py-1 text-xs font-medium text-blender transition-colors hover:bg-blender/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={
+                            !isDesktop
+                              ? t('installs.desktopOnly')
+                              : releasedOfSeries
+                                ? t('installs.preReleaseInstallHint', { version: releasedOfSeries })
+                                : undefined
+                          }
+                          className="rounded-lg border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          {t('common.install')}
+                          <ActionLabel>{t('common.install')}</ActionLabel>
                         </button>
                       )}
+                      {(notesUrl || copy) && (
+                        <Dropdown
+                          open={moreMenuFor === row.key}
+                          onClose={() => setMoreMenuFor(null)}
+                          align="right"
+                          menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-[#212121] py-1 text-sm shadow-xl"
+                          trigger={
+                            <button
+                              onClick={() => setMoreMenuFor(moreMenuFor === row.key ? null : row.key)}
+                              title={t('installs.moreActions')}
+                              className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                            >
+                              <DotsIcon />
+                            </button>
+                          }
+                        >
+                          {notesUrl && (
+                            <button
+                              onClick={() => {
+                                setMoreMenuFor(null)
+                                window.open(notesUrl, '_blank', 'noopener')
+                              }}
+                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                            >
+                              {row.remoteBuild?.source === 'patch'
+                                ? t('installs.showPrDetails')
+                                : t('installs.releaseNotes')}
+                            </button>
+                          )}
+                          {copy && (
+                            <button
+                              disabled={updateBusy}
+                              onClick={() => {
+                                setMoreMenuFor(null)
+                                buildsApi.openFolder(copy.id).catch(() => undefined)
+                              }}
+                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                            >
+                              {t('installs.openFolder')}
+                            </button>
+                          )}
+                          {copy && (
+                            <button
+                              disabled={updateBusy}
+                              onClick={() => {
+                                setMoreMenuFor(null)
+                                removeInstall(copy)
+                              }}
+                              className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                            >
+                              {copy.managed ? t('installs.uninstall') : t('installs.removeFromList')}
+                            </button>
+                          )}
+                        </Dropdown>
+                      )}
+                      {/* plain indicator — the whole row is the toggle; rows without a
+                          drawer keep an invisible one so action clusters line up. Its
+                          left margin is set to match the row's own right padding (px-4),
+                          on top of the shared flex gap — otherwise the bare glyph sits
+                          close to its neighbor but far from the row edge on the other side */}
+                      <ChevronDownIcon
+                        className={`ml-2.5 h-4 w-4 shrink-0 transition-transform ${
+                          drawerMinor === null
+                            ? 'invisible'
+                            : drawerExpanded
+                              ? 'rotate-180 text-blender'
+                              : 'text-zinc-500'
+                        }`}
+                      />
                     </div>
                   </div>
+                  {drawerExpanded && drawerMinor !== null && (
+                    <div className="border-t border-white/5 bg-[#0e0e0e] py-1 pl-10 pr-4">
+                      {drawerEntries.map((entry) => {
+                        const entryCopy = entry.copy
+                        const entryUpdate = entryCopy ? (updateByCopyId.get(entryCopy.id) ?? null) : null
+                        // progress renders only on the row of the build being installed —
+                        // the update target has its own drawer row, mirroring it on the
+                        // carrier would read as two parallel installs
+                        const entryProgress = entryCopy
+                          ? undefined
+                          : entry.build
+                            ? progressById[entry.build.id]
+                            : undefined
+                        const entryInFlight =
+                          entryProgress !== undefined &&
+                          entryProgress.phase !== 'error' &&
+                          entryProgress.phase !== 'done'
+                        const entryUpdateProgress = entryUpdate ? progressById[entryUpdate.id] : undefined
+                        const entryUpdateBusy =
+                          entryUpdateProgress !== undefined &&
+                          entryUpdateProgress.phase !== 'error' &&
+                          entryUpdateProgress.phase !== 'done'
+                        const entryNotesUrl = notesUrlForBuild(entry.build, entry.version)
+                        const entryTarget = entryUpdate
+                          ? entryUpdate.version !== entry.version
+                            ? entryUpdate.version
+                            : cycleClass(entryUpdate.releaseCycle) !== cycleClass(entry.releaseCycle)
+                              ? `${entryUpdate.version} ${entryUpdate.releaseCycle}`
+                              : null
+                          : null
+                        return (
+                          <div key={entry.key} className="flex items-center gap-4 py-1.5">
+                            <div className="flex w-44 shrink-0 items-center gap-2">
+                              <span
+                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                  entryCopy ? 'bg-emerald-400' : 'bg-transparent'
+                                }`}
+                                title={entryCopy ? t('installs.installed') : undefined}
+                              />
+                              <span className="text-[13px] font-semibold text-zinc-300">{entry.version}</span>
+                              <CycleBadge cycle={entry.releaseCycle} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              {entryProgress ? (
+                                <ProgressLine progress={entryProgress} />
+                              ) : entryCopy ? (
+                                <p className="truncate text-[11px] text-zinc-600" title={entryCopy.path}>
+                                  {entryCopy.path}
+                                </p>
+                              ) : entry.build ? (
+                                <p className="truncate text-[11px] text-zinc-600">
+                                  {[
+                                    showSize ? formatBytes(entry.build.fileSize) : '',
+                                    entry.build.fileMtime > 0 ? formatDate(entry.build.fileMtime) : ''
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              {entryCopy ? (
+                                <>
+                                  {entryUpdate && !entryUpdateBusy && (
+                                    <button
+                                      onClick={() => startUpdate(entryUpdate)}
+                                      title={t('installs.updateHint', {
+                                        build: t('installs.buildName', {
+                                          version: entryUpdate.version,
+                                          cycle: entryUpdate.releaseCycle
+                                        })
+                                      })}
+                                      className="rounded-lg border border-blender/40 px-3 py-1 text-xs font-medium text-blender transition-colors hover:bg-blender/10"
+                                    >
+                                      {entryTarget
+                                        ? t('installs.updateTo', { target: entryTarget })
+                                        : t('installs.update')}
+                                    </button>
+                                  )}
+                                  <button
+                                    disabled={entryUpdateBusy}
+                                    title={entryUpdateBusy ? t('installs.busyUpdating') : undefined}
+                                    onClick={() =>
+                                      buildsApi.launch(entryCopy.id).catch((error) =>
+                                        alertDialog(cleanErrorMessage(error))
+                                      )
+                                    }
+                                    className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                                  >
+                                    <ActionLabel>{t('installs.launch')}</ActionLabel>
+                                  </button>
+                                </>
+                              ) : entryInFlight || !entry.build ? null : (
+                                <button
+                                  onClick={() => entry.build && requestInstall(entry.build)}
+                                  disabled={!isDesktop}
+                                  title={
+                                    !isDesktop
+                                      ? t('installs.desktopOnly')
+                                      : cycleClass(entry.releaseCycle) === 'candidate'
+                                        ? t('installs.preReleaseInstallHint', {
+                                            version: releasedNewestByMinor.get(drawerMinor)?.version ?? ''
+                                          })
+                                        : undefined
+                                  }
+                                  className="shrink-0 rounded-lg border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  <ActionLabel>{t('common.install')}</ActionLabel>
+                                </button>
+                              )}
+                              {/* every sub-row carries the same menu as the top rows, even
+                                  when release notes are its only entry — the action cluster
+                                  keeps one shape down the drawer */}
+                              {(entryNotesUrl || entryCopy) && (
+                                <Dropdown
+                                  open={moreMenuFor === entry.key}
+                                  onClose={() => setMoreMenuFor(null)}
+                                  align="right"
+                                  menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-[#212121] py-1 text-sm shadow-xl"
+                                  trigger={
+                                    <button
+                                      onClick={() =>
+                                        setMoreMenuFor(moreMenuFor === entry.key ? null : entry.key)
+                                      }
+                                      title={t('installs.moreActions')}
+                                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                                    >
+                                      <DotsIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                  }
+                                >
+                                  {entryNotesUrl && (
+                                    <button
+                                      onClick={() => {
+                                        setMoreMenuFor(null)
+                                        window.open(entryNotesUrl, '_blank', 'noopener')
+                                      }}
+                                      className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                                    >
+                                      {entry.build?.source === 'patch'
+                                        ? t('installs.showPrDetails')
+                                        : t('installs.releaseNotes')}
+                                    </button>
+                                  )}
+                                  {entryCopy && (
+                                    <button
+                                      disabled={entryUpdateBusy}
+                                      onClick={() => {
+                                        setMoreMenuFor(null)
+                                        buildsApi.openFolder(entryCopy.id).catch(() => undefined)
+                                      }}
+                                      className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                                    >
+                                      {t('installs.openFolder')}
+                                    </button>
+                                  )}
+                                  {entryCopy && (
+                                    <button
+                                      disabled={entryUpdateBusy}
+                                      onClick={() => {
+                                        setMoreMenuFor(null)
+                                        removeInstall(entryCopy)
+                                      }}
+                                      className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                                    >
+                                      {entryCopy.managed ? t('installs.uninstall') : t('installs.removeFromList')}
+                                    </button>
+                                  )}
+                                </Dropdown>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  </Fragment>
                 )
               })}
             </div>
@@ -750,6 +1477,19 @@ export default function InstallsPage({
         sourceOptions={syncOffers[0].sourceOptions}
         api={api}
         onClose={() => setSyncOffers((queue) => queue.slice(1))}
+      />
+    )}
+    {runningGate && (
+      <RunningBlenderGate
+        api={api}
+        minors={runningGate.minors}
+        initial={runningGate.initial}
+        onProceed={() => {
+          const resume = runningGate.resume
+          setRunningGate(null)
+          resume()
+        }}
+        onCancel={() => setRunningGate(null)}
       />
     )}
     </>

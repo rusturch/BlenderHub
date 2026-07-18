@@ -24,6 +24,15 @@ export const PREFERRED_EXTENSION: Record<string, string> = {
 
 export const STABLE_CYCLES = new Set(['stable', 'lts', 'candidate', 'rc'])
 
+// 'lts' is a stable release with a longer support window and 'rc' is a synonym of
+// 'candidate' (the buildbot has used both) — one class each wherever cycles are
+// compared for identity or supersede direction.
+export const cycleClass = (cycle: string): string =>
+  cycle === 'lts' ? 'stable' : cycle === 'rc' ? 'candidate' : cycle
+
+/** Released to users (stable/lts), as opposed to a candidate/rc preview of the next patch. */
+export const isReleasedCycle = (cycle: string): boolean => cycleClass(cycle) === 'stable'
+
 // Daily/experimental/patch cycles get replaced by a new commit on the same branch
 // constantly — builder.blender.org only ever lists the latest one. "Rolling" builds
 // are auto-updated in place; stable/lts/candidate/rc are one-per-version (isSameBuild
@@ -35,7 +44,8 @@ export const isRollingCycle = (cycle: string): boolean => !STABLE_CYCLES.has(cyc
 // enough. Daily/experimental/patch builds move constantly under the same
 // version number, so those additionally require an exact branch + commit match.
 export function isSameBuild(installed: InstalledBuild, remote: RemoteBuild): boolean {
-  if (installed.version !== remote.version || installed.releaseCycle !== remote.releaseCycle) return false
+  if (installed.version !== remote.version) return false
+  if (cycleClass(installed.releaseCycle) !== cycleClass(remote.releaseCycle)) return false
   if (STABLE_CYCLES.has(remote.releaseCycle)) return true
   return (
     Boolean(installed.branch) &&
@@ -48,21 +58,39 @@ export function isSameBuild(installed: InstalledBuild, remote: RemoteBuild): boo
 // A catalog build that supersedes an installed copy of the same line, i.e. the
 // pair the UI shows as one row with an Update button. Rolling builds: same branch —
 // the catalog only ever lists a branch's newest commit, so a differing commit means
-// a newer one. Stable cycles: a higher version within the same minor (patch release).
+// a newer one. Stable cycles: a higher version within the same minor (patch release),
+// or the released build of the exact version an installed candidate previewed.
+// Direction matters: a candidate/rc never supersedes a released copy — it keeps its
+// own Install row so stable users are never nudged onto a pre-release.
 // PR/experimental-branch builds are their own lines and never update anything.
 export function isUpdateFor(remote: RemoteBuild, installed: InstalledBuild): boolean {
   if (remote.source === 'patch' || remote.source === 'experimental') return false
   if (installed.remoteId === remote.id || isSameBuild(installed, remote)) return false
+  if (!isReleasedCycle(remote.releaseCycle) && isReleasedCycle(installed.releaseCycle)) return false
   if (installed.branch && installed.commit && remote.branch && remote.commit) {
     return installed.branch === remote.branch
   }
   const minor = (version: string): string => version.split('.').slice(0, 2).join('.')
-  return (
-    STABLE_CYCLES.has(remote.releaseCycle) &&
-    STABLE_CYCLES.has(installed.releaseCycle) &&
-    minor(remote.version) === minor(installed.version) &&
-    compareVersionsDesc(remote.version, installed.version) < 0
+  if (!STABLE_CYCLES.has(remote.releaseCycle) || !STABLE_CYCLES.has(installed.releaseCycle)) return false
+  if (minor(remote.version) !== minor(installed.version)) return false
+  const cmp = compareVersionsDesc(remote.version, installed.version)
+  return cmp < 0 || (cmp === 0 && isReleasedCycle(remote.releaseCycle) && !isReleasedCycle(installed.releaseCycle))
+}
+
+// The "native install" for a project file: among installed builds matching the
+// file's Blender version (major.minor), a released copy wins over a side-by-side
+// candidate/rc, newest first — an RC installed for testing must never silently
+// capture project launches. Expects builds sorted newest-first; callers keep
+// their own fallback for when nothing matches.
+export function pickNativeInstall<T extends { version: string; releaseCycle: string }>(
+  builds: T[],
+  fileVersion: string | null | undefined
+): T | null {
+  if (!fileVersion) return null
+  const matches = builds.filter(
+    (build) => build.version === fileVersion || build.version.startsWith(`${fileVersion}.`)
   )
+  return matches.find((build) => isReleasedCycle(build.releaseCycle)) ?? matches[0] ?? null
 }
 
 export function compareVersionsDesc(a: string, b: string): number {

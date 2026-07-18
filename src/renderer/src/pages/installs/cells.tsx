@@ -1,16 +1,52 @@
 import { formatBytes } from '../../lib/format'
 import { useTranslation } from '../../lib/i18n'
 import type { InstallProgress } from '../../../../shared/types'
-import { CYCLE_STYLES } from './constants'
+import { CYCLE_STYLES, LONGEST_CYCLE } from './constants'
 
 export function CycleBadge({ cycle }: { cycle: string }) {
   return (
     <span
-      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+      className={`grid shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
         CYCLE_STYLES[cycle] ?? 'bg-white/10 text-zinc-400'
       }`}
     >
-      {cycle}
+      <span className="invisible col-start-1 row-start-1">{LONGEST_CYCLE}</span>
+      <span className="col-start-1 row-start-1 text-center">{cycle}</span>
+    </span>
+  )
+}
+// Two things move this label between rows: the digit count and the singular /
+// plural form. Both worst cases ride along invisibly (with tabular figures, so
+// any two-digit sample stands in for every count of that length), keeping the
+// chip one width down the list; a three-digit count simply widens it a little.
+export function ProjectCountLabel({ count }: { count: number }) {
+  const { t } = useTranslation()
+  const sample = 88
+  return (
+    <span className="grid tabular-nums">
+      <span className="invisible col-start-1 row-start-1">
+        {t('installs.projectCountOne', { count: sample })}
+      </span>
+      <span className="invisible col-start-1 row-start-1">
+        {t('installs.projectCountMany', { count: sample })}
+      </span>
+      <span className="col-start-1 row-start-1 text-center">
+        {t(count === 1 ? 'installs.projectCountOne' : 'installs.projectCountMany', { count })}
+      </span>
+    </span>
+  )
+}
+// Install and Launch never share a row, but they sit in the same column down the
+// list. Both labels ride along invisibly in the same grid cell, so every button
+// is exactly as wide as the longer of the two — even width, no padding to spare,
+// and it follows the active locale instead of a hardcoded minimum.
+export function ActionLabel({ children }: { children: string }) {
+  const { t } = useTranslation()
+  return (
+    <span className="grid">
+      <span className="invisible col-start-1 row-start-1">{t('common.install')}</span>
+      <span className="invisible col-start-1 row-start-1">{t('installs.launch')}</span>
+      <span className="col-start-1 row-start-1">{children}</span>
     </span>
   )
 }
