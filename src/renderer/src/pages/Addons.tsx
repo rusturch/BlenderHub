@@ -684,7 +684,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
           <button
             onClick={applyChanges}
             disabled={busy || refreshing}
-            className="rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90 disabled:opacity-50"
+            className="rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:opacity-50"
           >
             {applying ? t('addons.applying') : t('addons.applyCount', { count: pendingCount })}
           </button>
@@ -809,7 +809,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                       open={categoryMenuOpen}
                       onClose={() => setCategoryMenuOpen(false)}
                       align="left"
-                      menuClassName="w-80 rounded-lg border border-white/10 bg-[#212121] p-3 shadow-xl"
+                      menuClassName="w-80 rounded-lg border border-white/10 bg-surface-menu p-3 shadow-xl"
                       trigger={
                         <button
                           onClick={() => setCategoryMenuOpen((open) => !open)}
@@ -877,7 +877,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                     open={settingsOpen}
                     onClose={() => setSettingsOpen(false)}
                     align="right"
-                    menuClassName="w-56 rounded-lg border border-white/10 bg-[#212121] p-1 shadow-xl"
+                    menuClassName="w-56 rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
                     trigger={
                       <button
                         title={t('addons.displaySettings')}
@@ -954,7 +954,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
           </div>
 
           {(scanning || applying) && applyProgressActive && (
-            <div className="mb-4 rounded-xl border border-white/10 bg-[#131313] px-4 py-3">
+            <div className="mb-4 rounded-xl border border-white/10 bg-surface-card px-4 py-3">
               <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-blender transition-[width] duration-200"
@@ -970,7 +970,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
             </div>
           )}
           {scanning && scanProgress && !applyProgressActive && (
-            <div className="mb-4 rounded-xl border border-white/10 bg-[#131313] px-4 py-3">
+            <div className="mb-4 rounded-xl border border-white/10 bg-surface-card px-4 py-3">
               <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-blender transition-[width] duration-200"
@@ -1030,7 +1030,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                         layer and stay at the row's in-flow position — the border would sit
                         still while the sticky cells scroll away from it. A box-shadow paints
                         inside each cell's box and moves (sticks) with it. */}
-                    <tr className="bg-[#131313]">
+                    <tr className="bg-surface-card">
                       {/* header cells sit at z-20: above the body's sticky-left cells (z-10)
                           and the row-divider overlays (z-11) scrolling under them, while the
                           HEADER band of the edge shadow (z-30, split in HScrollEdgeShadows)
@@ -1038,19 +1038,19 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                           The corner is z-30 — strictly above the version cells: at an equal z
                           the later-DOM version headers would paint over it while sliding past
                           on horizontal scroll (the shadow band never overlaps the corner). */}
-                      <th ref={stickyColRef} className="sticky left-0 top-0 z-30 bg-[#131313] px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]">
+                      <th ref={stickyColRef} className="sticky left-0 top-0 z-30 bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 header-hairline">
                         {t('addons.colAddon')}
                       </th>
                       {/* p-0 + w-full trigger: the WHOLE header cell is the click target,
                           not just the label — the padding area must not be dead space */}
                       {data.map((version) => (
-                        <th key={version.minor} className="sticky top-0 z-20 bg-[#131313] p-0 text-center align-bottom shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]">
+                        <th key={version.minor} className="sticky top-0 z-20 bg-surface-card p-0 text-center align-bottom header-hairline">
                           <Dropdown
                             className="w-full"
                             open={versionMenu === version.minor}
                             onClose={() => setVersionMenu(null)}
                             align="left"
-                            menuClassName="w-44 rounded-lg border border-white/10 bg-[#212121] p-1 shadow-xl"
+                            menuClassName="w-44 rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
                             trigger={
                               <button
                                 onClick={() =>
@@ -1208,8 +1208,8 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                           <Fragment key={row.groupId}>
                           {/* row separators are painted by the divider overlays after the
                               table, not border-t — see the rowDividerTops effect */}
-                          <tr className="bg-[#131313]">
-                            <td className="sticky left-0 z-10 bg-[#131313] px-4 py-2.5">
+                          <tr className="bg-surface-card">
+                            <td className="sticky left-0 z-10 bg-surface-card px-4 py-2.5">
                               <div className="flex items-center gap-2">
                                 {expandable ? (
                                   <button
@@ -1353,14 +1353,14 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                             })}
                           </tr>
                           {descExpanded && (
-                            <tr className="bg-[#0a0a0a]">
+                            <tr className="bg-surface-inset">
                               <td colSpan={data.length + 1} className="p-0">
                                 {/* the cell spans the whole (wider-than-viewport) table — the text
                                     block pins itself to the visible left edge while scrolling.
                                     z-[11] + an opaque bg keep it above the edge-scroll shadow (z-10)
                                     that would dim it, while the row-divider overlays (same z-11 but
                                     later in the DOM) and the header (z-20) still paint above it. */}
-                                <div className="sticky left-0 z-[11] max-w-2xl bg-[#0a0a0a] px-4 py-2 pl-10 text-xs leading-relaxed text-zinc-400">
+                                <div className="sticky left-0 z-[11] max-w-2xl bg-surface-inset px-4 py-2 pl-10 text-xs leading-relaxed text-zinc-400">
                                   {row.description}
                                 </div>
                               </td>
@@ -1381,8 +1381,8 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                               const canUninstall = unit.removable.length > 0 || Boolean(unit.libEntry)
                               const isNewest = unit.key === newestUnitKey
                               return (
-                                <tr key={`${row.groupId}#${unit.key}`} className="bg-[#0a0a0a]">
-                                  <td className="sticky left-0 z-10 bg-[#0a0a0a] py-2 pl-12 pr-4">
+                                <tr key={`${row.groupId}#${unit.key}`} className="bg-surface-inset">
+                                  <td className="sticky left-0 z-10 bg-surface-inset py-2 pl-12 pr-4">
                                     <div className="flex items-center gap-2">
                                       <span className="text-xs text-zinc-400">{unit.label}</span>
                                       <span className="text-[10px] text-zinc-600">{tag}</span>

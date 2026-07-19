@@ -289,11 +289,24 @@ function createPreviewFallbackApi(): LauncherApi {
       localStorage.setItem(key, value)
     }
   }
+  const themes: LauncherApi['themes'] = {
+    // no data folder in the browser — built-in presets still work, user themes don't
+    list: async () => [],
+    save: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    remove: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    openDir: async () => {
+      throw new Error(DESKTOP_ONLY)
+    }
+  }
   const tray: LauncherApi['tray'] = {
     // the browser preview has no native tray — nothing ever fires
     onNavigate: () => () => {}
   }
-  return { builds, projects, addons, settingsSync, storage, uiState, updates, tray }
+  return { builds, projects, addons, settingsSync, storage, uiState, updates, themes, tray }
 }
 
 let fallbackApi: LauncherApi | null = null

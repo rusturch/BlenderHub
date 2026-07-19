@@ -110,8 +110,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const tone: DialogTone = (pending?.kind === 'confirm' && pending.options.tone) || 'default'
   const primaryButtonClass =
     tone === 'danger'
-      ? 'rounded-lg bg-red-500/90 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-500'
-      : 'rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90'
+      ? 'rounded-lg bg-red-500/90 px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-red-500'
+      : 'rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90'
 
   return (
     <DialogContext.Provider value={value}>
@@ -122,7 +122,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           onClick={() => close(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-white/10 bg-[#1c1c1c] p-5 shadow-2xl"
+            className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="text-base font-semibold text-zinc-100">
@@ -144,9 +144,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                     onClick={() => close(button.id)}
                     className={
                       button.kind === 'danger'
-                        ? 'rounded-lg bg-red-500/90 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-500'
+                        ? 'rounded-lg bg-red-500/90 px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-red-500'
                         : button.kind === 'primary'
-                          ? 'rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90'
+                          ? 'rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90'
                           : 'rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5'
                     }
                   >

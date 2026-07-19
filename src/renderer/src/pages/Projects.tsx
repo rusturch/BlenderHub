@@ -372,7 +372,7 @@ export default function ProjectsPage({
             open={addMenuOpen}
             onClose={() => setAddMenuOpen(false)}
             align="right"
-            menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-[#212121] py-1 shadow-xl"
+            menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl"
             trigger={
               <button
                 onClick={() => setAddMenuOpen((open) => !open)}
@@ -407,7 +407,7 @@ export default function ProjectsPage({
             onClick={openNewProject}
             disabled={!isDesktop || noInstalls}
             title={noInstalls ? t('projects.installFirst') : undefined}
-            className="flex items-center gap-1 rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1 rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <PlusIcon />
             {t('projects.newProject')}
@@ -473,7 +473,7 @@ export default function ProjectsPage({
                 open={settingsOpen}
                 onClose={() => setSettingsOpen(false)}
                 align="right"
-                menuClassName="w-52 rounded-lg border border-white/10 bg-[#212121] p-1 shadow-xl"
+                menuClassName="w-52 rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
                 trigger={
                   <button
                     title={t('projects.displaySettings')}
@@ -573,7 +573,7 @@ export default function ProjectsPage({
                 return (
                   <div
                     key={file.path}
-                    className="relative flex flex-col rounded-xl border border-white/5 bg-[#181818]"
+                    className="relative flex flex-col rounded-xl border border-white/5 bg-surface-panel"
                     onDoubleClick={() => {
                       if (!file.missing && selected) requestOpen(file, selected)
                     }}
@@ -609,7 +609,7 @@ export default function ProjectsPage({
                       open={cardMenuFor === file.path}
                       onClose={() => setCardMenuFor(null)}
                       align="right"
-                      menuClassName="min-w-52 overflow-hidden rounded-lg border border-white/10 bg-[#212121] py-1 text-sm shadow-xl"
+                      menuClassName="min-w-52 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
                       trigger={
                         <button
                           onClick={() => setCardMenuFor(cardMenuFor === file.path ? null : file.path)}
@@ -723,7 +723,7 @@ export default function ProjectsPage({
                         </>
                       )}
                     </Dropdown>
-                    <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-xl bg-[#0a0a0a]">
+                    <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-xl bg-surface-inset">
                       {file.missing ? (
                         <WarningIcon className="h-10 w-10 text-amber-500/50" />
                       ) : file.thumbnail ? (
@@ -771,7 +771,7 @@ export default function ProjectsPage({
                         {file.missing ? (
                           <button
                             onClick={() => findMissing(file)}
-                            className="flex items-center gap-1.5 rounded-lg bg-blender px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blender/90"
+                            className="flex items-center gap-1.5 rounded-lg bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90"
                           >
                             <SearchIcon className="h-3.5 w-3.5" />
                             {t('projects.findFile')}
@@ -786,7 +786,7 @@ export default function ProjectsPage({
                               ? t('projects.openWithVersion', { version: selected.version })
                               : t('projects.installFirst')
                           }
-                          className="rounded-lg bg-blender px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-lg bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           {t('common.open')}
                         </button>
@@ -806,7 +806,7 @@ export default function ProjectsPage({
                           open={menuFor === file.path}
                           onClose={() => setMenuFor(null)}
                           align="right"
-                          menuClassName="flex max-h-64 flex-col overflow-hidden rounded-lg border border-white/10 bg-[#212121] py-1 shadow-xl"
+                          menuClassName="flex max-h-64 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl"
                           trigger={
                             <button
                               onClick={() => setMenuFor(menuFor === file.path ? null : file.path)}
@@ -878,7 +878,7 @@ export default function ProjectsPage({
           onClick={() => !creating && setNewProjectOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-white/10 bg-[#1c1c1c] p-5 shadow-2xl"
+            className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="text-base font-semibold text-zinc-100">{t('projects.newProject')}</h2>
@@ -890,7 +890,7 @@ export default function ProjectsPage({
                   onChange={(event) => setNpName(event.target.value)}
                   autoFocus
                   placeholder={t('projects.namePlaceholder')}
-                  className="rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none"
+                  className="rounded-lg border border-white/10 bg-surface-input px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none"
                 />
               </label>
               <label className="flex flex-col gap-1.5">
@@ -898,8 +898,7 @@ export default function ProjectsPage({
                 <select
                   value={npInstallId}
                   onChange={(event) => setNpInstallId(event.target.value)}
-                  style={{ colorScheme: 'dark' }}
-                  className="rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-zinc-200 focus:border-blender/50 focus:outline-none"
+                  className="rounded-lg border border-white/10 bg-surface-input px-3 py-2 text-sm text-zinc-200 focus:border-blender/50 focus:outline-none"
                 >
                   {installedSorted.map((build) => (
                     <option key={build.id} value={build.id}>
@@ -915,7 +914,7 @@ export default function ProjectsPage({
                 <span className="text-xs font-medium text-zinc-400">{t('projects.location')}</span>
                 <div className="flex items-center gap-2">
                   <span
-                    className="min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-zinc-400"
+                    className="min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-surface-input px-3 py-2 text-sm text-zinc-400"
                     title={npFolder}
                   >
                     {npFolder || t('projects.noFolderSelected')}
@@ -941,7 +940,7 @@ export default function ProjectsPage({
               <button
                 onClick={submitNewProject}
                 disabled={creating || !npName.trim() || !npFolder || !npInstallId}
-                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {creating ? t('projects.creating') : t('projects.create')}
               </button>
@@ -956,7 +955,7 @@ export default function ProjectsPage({
           onClick={() => setRenameFor(null)}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-white/10 bg-[#1c1c1c] p-5 shadow-2xl"
+            className="w-full max-w-sm rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="text-base font-semibold text-zinc-100">{t('projects.displayName')}</h2>
@@ -971,7 +970,7 @@ export default function ProjectsPage({
               }}
               autoFocus
               placeholder={t('projects.displayNamePlaceholder')}
-              className="mt-3 w-full rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none"
+              className="mt-3 w-full rounded-lg border border-white/10 bg-surface-input px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none"
             />
             <p className="mt-2 text-[11px] text-zinc-500">{t('projects.displayNameHint')}</p>
             <div className="mt-4 flex justify-end gap-2">
@@ -983,7 +982,7 @@ export default function ProjectsPage({
               </button>
               <button
                 onClick={saveDisplayName}
-                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90"
+                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90"
               >
                 {t('projects.save')}
               </button>

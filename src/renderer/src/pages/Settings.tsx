@@ -17,6 +17,7 @@ import type {
   UpdateDownloadProgress
 } from '../../../shared/types'
 import { BehaviorToggle, SectionCard, StorageUsageCard } from './settings/cells'
+import { ThemeCard } from './settings/ThemeCard'
 import { ChevronDownIcon, XIcon } from './settings/icons'
 import { SUPERHIVE_DOCS_URL, pathBoxClass, primaryButtonClass, secondaryButtonClass } from './settings/constants'
 
@@ -433,11 +434,11 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
               open={languageMenuOpen}
               onClose={() => setLanguageMenuOpen(false)}
               align="right"
-              menuClassName="max-h-64 w-48 overflow-auto rounded-lg border border-white/10 bg-[#212121] p-1 shadow-xl"
+              menuClassName="max-h-64 w-48 overflow-auto rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
               trigger={
                 <button
                   onClick={() => setLanguageMenuOpen((open) => !open)}
-                  className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#111111] px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/5"
+                  className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/5"
                 >
                   {languageLabel(language)}
                   <ChevronDownIcon className="h-4 w-4 shrink-0 text-zinc-500" />
@@ -461,6 +462,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
             </Dropdown>
           }
         />
+
+        <ThemeCard />
 
         <SectionCard title={t('settings.tray')} hint={t('settings.trayHint')}>
           <div className="flex flex-col gap-3">
@@ -559,12 +562,12 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
                 disabled={!isDesktop}
                 autoComplete="off"
                 spellCheck={false}
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111111] px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none disabled:opacity-40"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none disabled:opacity-40"
               />
               <button
                 onClick={connectSuperhive}
                 disabled={!isDesktop || !superhiveToken.trim() || superhiveBusy}
-                className="shrink-0 rounded-lg bg-blender px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="shrink-0 rounded-lg bg-blender px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {superhiveBusy ? '…' : t('settings.superhiveConnect')}
               </button>
@@ -586,7 +589,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
               folders.map((folder) => (
                 <span
                   key={folder.path}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-[#212121] py-1 pl-3 pr-2 text-xs text-zinc-300"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-surface-menu py-1 pl-3 pr-2 text-xs text-zinc-300"
                 >
                   <span className="truncate" title={folder.path}>
                     {folder.name}

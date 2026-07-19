@@ -846,7 +846,7 @@ export default function InstallsPage({
                 open={settingsOpen}
                 onClose={() => setSettingsOpen(false)}
                 align="right"
-                menuClassName="w-48 rounded-lg border border-white/10 bg-[#212121] p-1 shadow-xl"
+                menuClassName="w-48 rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
                 trigger={
                   <button
                     title={t('installs.displaySettings')}
@@ -1082,8 +1082,8 @@ export default function InstallsPage({
                       if ((event.target as HTMLElement).closest('button')) return
                       toggleSeries(drawerMinor)
                     }}
-                    className={`flex items-center gap-4 bg-[#131313] px-4 py-3 ${index > 0 ? 'border-t border-white/5' : ''} ${
-                      drawerMinor !== null ? 'cursor-pointer hover:bg-[#161616]' : ''
+                    className={`flex items-center gap-4 bg-surface-card px-4 py-3 ${index > 0 ? 'border-t border-white/5' : ''} ${
+                      drawerMinor !== null ? 'cursor-pointer hover:bg-surface-hover' : ''
                     }`}
                   >
                     <div className="w-56 shrink-0">
@@ -1125,7 +1125,7 @@ export default function InstallsPage({
                             open={projectsOpen}
                             onClose={() => setProjectsPopoverFor(null)}
                             align="left"
-                            menuClassName="w-64 rounded-lg border border-white/10 bg-[#212121] p-2 shadow-xl"
+                            menuClassName="w-64 rounded-lg border border-white/10 bg-surface-menu p-2 shadow-xl"
                             trigger={
                               <button
                                 onClick={() => setProjectsPopoverFor(projectsOpen ? null : row.key)}
@@ -1232,7 +1232,7 @@ export default function InstallsPage({
                             onClick={() =>
                               buildsApi.launch(copy.id).catch((error) => alertDialog(cleanErrorMessage(error)))
                             }
-                            className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <ActionLabel>{t('installs.launch')}</ActionLabel>
                           </button>
@@ -1258,7 +1258,7 @@ export default function InstallsPage({
                           open={moreMenuFor === row.key}
                           onClose={() => setMoreMenuFor(null)}
                           align="right"
-                          menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-[#212121] py-1 text-sm shadow-xl"
+                          menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
                           trigger={
                             <button
                               onClick={() => setMoreMenuFor(moreMenuFor === row.key ? null : row.key)}
@@ -1325,7 +1325,7 @@ export default function InstallsPage({
                     </div>
                   </div>
                   {drawerExpanded && drawerMinor !== null && (
-                    <div className="border-t border-white/5 bg-[#0e0e0e] py-1 pl-10 pr-4">
+                    <div className="border-t border-white/5 bg-surface-drawer py-1 pl-10 pr-4">
                       {drawerEntries.map((entry) => {
                         const entryCopy = entry.copy
                         const entryUpdate = entryCopy ? (updateByCopyId.get(entryCopy.id) ?? null) : null
@@ -1425,7 +1425,7 @@ export default function InstallsPage({
                                         alertDialog(cleanErrorMessage(error))
                                       )
                                     }
-                                    className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                                    className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
                                   >
                                     <ActionLabel>{t('installs.launch')}</ActionLabel>
                                   </button>
@@ -1456,7 +1456,7 @@ export default function InstallsPage({
                                   open={moreMenuFor === entry.key}
                                   onClose={() => setMoreMenuFor(null)}
                                   align="right"
-                                  menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-[#212121] py-1 text-sm shadow-xl"
+                                  menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
                                   trigger={
                                     <button
                                       onClick={() =>

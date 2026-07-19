@@ -105,7 +105,7 @@ export default function StickyHScrollbar({ targetRef, className = '', variant = 
 
   return (
     <div
-      className={`fixed bottom-0 z-20 bg-[#0d0d0d] px-px py-1.5 ${className}`}
+      className={`fixed bottom-0 z-20 bg-background px-px py-1.5 ${className}`}
       style={{ left: rect.left, width: rect.width }}
     >
       <div ref={barRef} className="h-2.5 overflow-x-auto overflow-y-hidden">

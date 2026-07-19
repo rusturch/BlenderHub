@@ -60,14 +60,14 @@ export default function TitleBar({ onUpdateClick }: TitleBarProps) {
 
   return (
     <div
-      className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-white/5 bg-[#181818] pl-3 [-webkit-app-region:drag]"
+      className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-white/5 bg-surface-panel pl-3 [-webkit-app-region:drag]"
       style={{ paddingRight: OVERLAY_RESERVED_WIDTH }}
     >
       <Dropdown
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         align="right"
-        menuClassName="w-64 rounded-lg border border-white/10 bg-[#1c1c1c] p-1 shadow-xl"
+        menuClassName="w-64 rounded-lg border border-white/10 bg-surface-dialog p-1 shadow-xl"
         trigger={
           <button
             onClick={() => setMenuOpen((open) => !open)}

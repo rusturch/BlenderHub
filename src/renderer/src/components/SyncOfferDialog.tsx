@@ -120,7 +120,7 @@ export default function SyncOfferDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-xl border border-white/10 bg-[#1c1c1c] p-5 shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-zinc-100">{t('syncOffer.title', { version })}</h2>
@@ -179,8 +179,7 @@ export default function SyncOfferDialog({
                 value={addonsFrom}
                 onChange={(event) => setAddonsFrom(event.target.value)}
                 disabled={addonsState === 'running' || addonsState === 'done'}
-                style={{ colorScheme: 'dark' }}
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111111] px-2 py-1 text-xs text-zinc-200 focus:border-blender/50 focus:outline-none disabled:opacity-50"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-surface-input px-2 py-1 text-xs text-zinc-200 focus:border-blender/50 focus:outline-none disabled:opacity-50"
               >
                 <option value="default">{t('syncOffer.fromDefault')}</option>
                 {sourceOptions.map((option) => (

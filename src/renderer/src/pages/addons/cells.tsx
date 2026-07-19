@@ -72,10 +72,10 @@ export function StatusCell({
         title={t('addons.cellCore', { module: addon.module })}
       >
         <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-          <circle cx="10" cy="10" r="9" fill="#22c55e" />
+          <circle cx="10" cy="10" r="9" className="fill-emerald-500" />
           <path
             d="M6 10.4l2.6 2.6L14 7.6"
-            stroke="white"
+            className="stroke-on-accent"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"

@@ -11,9 +11,32 @@
   src: url('./fonts/Manrope-Bold.woff2') format('woff2');
 }
 
+/* Themable tokens (dark defaults). Themes override these — and the stock Tailwind
+   palette variables (zinc/red/amber/…) — on the document element at runtime; the
+   key → variable map lives in shared/theme.ts. Surfaces are the launcher's own
+   near-black ramp; utilities like bg-surface-panel come from these definitions. */
 @theme {
   --color-blender: #e87d0d;
+  --color-background: #0d0d0d;
+  --color-foreground: #e5e7eb;
+  --color-on-accent: #ffffff;
+  --color-scrollbar: #ffffff;
+  --color-surface-inset: #0a0a0a;
+  --color-surface-drawer: #0e0e0e;
+  --color-surface-input: #111111;
+  --color-surface-card: #131313;
+  --color-surface-hover: #161616;
+  --color-surface-panel: #181818;
+  --color-surface-dialog: #1c1c1c;
+  --color-surface-menu: #212121;
   --font-logo: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* baseline for the stock dark look; themes override it on the element from
+   their background's luminance (lib/theme.ts) — native select popups,
+   checkbox chrome and color-input swatches follow this, not CSS backgrounds */
+:root {
+  color-scheme: dark;
 }
 
 html,
@@ -24,8 +47,8 @@ body,
 
 body {
   margin: 0;
-  background: #0d0d0d;
-  color: #e5e7eb;
+  background: var(--color-background);
+  color: var(--color-foreground);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   user-select: none;
 }
@@ -77,19 +100,27 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb:horizontal {
-  background-color: rgb(255 255 255 / 0.22);
+  background-color: color-mix(in srgb, var(--color-scrollbar) 22%, transparent);
 }
 
 ::-webkit-scrollbar-thumb:horizontal:hover {
-  background-color: rgb(255 255 255 / 0.32);
+  background-color: color-mix(in srgb, var(--color-scrollbar) 32%, transparent);
 }
 
 .scrollbar-active::-webkit-scrollbar-thumb:vertical {
-  background-color: rgb(255 255 255 / 0.22);
+  background-color: color-mix(in srgb, var(--color-scrollbar) 22%, transparent);
 }
 
 .scrollbar-active::-webkit-scrollbar-thumb:vertical:hover {
-  background-color: rgb(255 255 255 / 0.32);
+  background-color: color-mix(in srgb, var(--color-scrollbar) 32%, transparent);
+}
+
+/* Sticky table headers: borders don't stick with the cell, so the underline is an
+   inset shadow. Plain CSS on purpose — inside a Tailwind arbitrary value the
+   var(--color-white) reference gets inlined at build time and stops following
+   the theme's overlay color. */
+.header-hairline {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--color-white) 5%, transparent);
 }
 
 /* For a panel that bounds its own height (an internally-scrolling table rather than a tall

@@ -222,7 +222,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarP
 
   return (
     <aside
-      className={`flex ${collapsed ? 'w-16' : 'w-56'} shrink-0 flex-col border-r border-white/5 bg-[#181818] transition-[width] duration-150`}
+      className={`flex ${collapsed ? 'w-16' : 'w-56'} shrink-0 flex-col border-r border-white/5 bg-surface-panel transition-[width] duration-150`}
     >
       <div className="flex h-[68px] shrink-0 items-center gap-2.5 px-4">
         <img src={logo} alt="" className="h-8 w-8 shrink-0" />

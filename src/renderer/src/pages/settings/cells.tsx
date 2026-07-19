@@ -25,7 +25,7 @@ export function SectionCard({
   return (
     <section
       id={anchorId}
-      className={`rounded-xl border bg-[#181818] p-4 transition-colors ${
+      className={`rounded-xl border bg-surface-panel p-4 transition-colors ${
         highlighted ? 'border-blender/60' : 'border-white/5'
       }`}
     >
@@ -57,7 +57,7 @@ export function BehaviorToggle({
   return (
     <div
       title={title}
-      className={`inline-flex shrink-0 rounded-lg border border-white/10 bg-[#111111] p-0.5 ${
+      className={`inline-flex shrink-0 rounded-lg border border-white/10 bg-surface-input p-0.5 ${
         disabled ? 'opacity-40' : ''
       }`}
     >

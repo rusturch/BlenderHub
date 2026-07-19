@@ -9,6 +9,8 @@ import { registerSettingsSyncIpc } from './sync/ipc'
 import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
 import { registerUiStateIpc } from './ui-state'
+import { registerThemesIpc } from './themes/ipc'
+import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
 import { attachTrayWindowBehavior, revealMainWindow, setupTray } from './tray'
 import { migrateLegacyDataDir } from './paths'
 
@@ -16,6 +18,7 @@ function createWindow(): void {
   // Application Security Requirement: renderer is isolated (contextIsolation + OS sandbox,
   // no Node integration) and window.open targets are denied — external https links are
   // handed to the system browser instead of opening privileged windows.
+  const chrome = currentWindowChrome()
   const mainWindow = new BrowserWindow({
     width: 1160,
     height: 740,
@@ -23,7 +26,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#0d0d0d',
+    backgroundColor: chrome.background,
     icon,
     title: 'Blender Hub', // used for the taskbar/Alt-Tab only — no caption text is drawn (see titleBarStyle below)
     // hides the native OS caption (title text) while keeping real, OS-drawn
@@ -32,8 +35,8 @@ function createWindow(): void {
     // must leave the top-right corner clear — height here must match its CSS height
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#181818',
-      symbolColor: '#e5e7eb',
+      color: chrome.titlebar,
+      symbolColor: chrome.symbol,
       height: 40
     },
     webPreferences: {
@@ -75,7 +78,7 @@ if (!app.requestSingleInstanceLock()) {
     revealMainWindow()
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     electronApp.setAppUserModelId('com.rusturch.blender-hub')
 
     // must happen before any IPC handler reads config.json from the data root
@@ -88,11 +91,15 @@ if (!app.requestSingleInstanceLock()) {
     registerSettingsSyncIpc()
     registerStorageIpc()
     registerUpdatesIpc()
+    registerThemesIpc()
     setupTray()
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
     })
+
+    // before createWindow: the pre-paint window background must match the theme
+    await initWindowChrome()
 
     createWindow()
 

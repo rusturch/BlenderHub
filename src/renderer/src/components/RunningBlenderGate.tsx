@@ -75,7 +75,7 @@ export default function RunningBlenderGate({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
       <div
-        className="w-full max-w-md rounded-xl border border-white/10 bg-[#1c1c1c] p-5 shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-zinc-100">{t('runningGate.title')}</h2>
@@ -119,7 +119,7 @@ export default function RunningBlenderGate({
               onClick={() => void askToClose()}
               disabled={closing}
               title={t('runningGate.askCloseHint')}
-              className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90 disabled:opacity-50"
+              className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:opacity-50"
             >
               {t('runningGate.askClose')}
             </button>

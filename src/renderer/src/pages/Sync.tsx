@@ -799,7 +799,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
         <button
           onClick={applyChanges}
           disabled={busy || !isDesktop}
-          className="rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blender/90 disabled:opacity-50"
+          className="rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:opacity-50"
         >
           {applying ? t('sync.applying') : t('sync.applyCount', { count: pendingCount })}
         </button>
@@ -932,7 +932,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
           )}
 
           {(applying || restoring) && applyProgress && (
-            <div className="mb-4 rounded-xl border border-white/10 bg-[#131313] px-4 py-3">
+            <div className="mb-4 rounded-xl border border-white/10 bg-surface-card px-4 py-3">
               <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-blender transition-[width] duration-200"
@@ -997,7 +997,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                   open={settingsOpen}
                   onClose={() => setSettingsOpen(false)}
                   align="right"
-                  menuClassName="w-48 rounded-lg border border-white/10 bg-[#212121] p-1 shadow-xl"
+                  menuClassName="w-48 rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
                   trigger={
                     <button
                       title={t('sync.displaySettingsHint')}
@@ -1057,8 +1057,8 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                 <div ref={tableScrollRef} className="overflow-x-auto rounded-xl border border-white/5">
                 <table className="w-full border-collapse text-sm">
                   <thead>
-                    <tr className="bg-[#131313]">
-                      <th ref={stickyColRef} className="sticky left-0 z-10 bg-[#131313] px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <tr className="bg-surface-card">
+                      <th ref={stickyColRef} className="sticky left-0 z-10 bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
                         {t('sync.componentColumn')}
                       </th>
                       {/* p-0 + w-full trigger: the WHOLE header cell is the click target,
@@ -1070,7 +1070,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                             open={versionMenu === column.minor}
                             onClose={() => setVersionMenu(null)}
                             align="left"
-                            menuClassName="w-44 rounded-lg border border-white/10 bg-[#212121] p-1 shadow-xl"
+                            menuClassName="w-44 rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
                             trigger={
                               <button
                                 onClick={() =>
@@ -1202,7 +1202,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                       const rowSome = linkedCount > 0 && !rowAll
                       return (
                         <tr key={row.id} className="border-t border-white/5">
-                          <td className="sticky left-0 z-10 bg-[#131313] px-4 py-2.5">
+                          <td className="sticky left-0 z-10 bg-surface-card px-4 py-2.5">
                             <label
                               className={`flex items-start gap-2.5 ${inSource && minors.length > 0 ? 'cursor-pointer' : 'cursor-not-allowed'}`}
                               title={
@@ -1260,8 +1260,8 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                   </tbody>
                   {showPrefDate && (
                     <tfoot>
-                      <tr className="border-t border-white/5 bg-[#131313]">
-                        <td className="sticky left-0 z-10 bg-[#131313] px-4 py-2 text-xs text-zinc-500">
+                      <tr className="border-t border-white/5 bg-surface-card">
+                        <td className="sticky left-0 z-10 bg-surface-card px-4 py-2 text-xs text-zinc-500">
                           {t('sync.preferencesSaved')}
                         </td>
                         {columns.map((column) => (
@@ -1308,7 +1308,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
               {backups.map((backup) => (
                 <div
                   key={backup.id}
-                  className="flex flex-wrap items-center gap-3 rounded-xl border border-white/5 bg-[#131313] px-4 py-3"
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-white/5 bg-surface-card px-4 py-3"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-zinc-200">

@@ -30,6 +30,7 @@ import type {
   SyncScanResult,
   UpdateCheckResult,
   UpdateDownloadProgress,
+  UserThemeFile,
   VersionAddons
 } from '../shared/types'
 
@@ -190,6 +191,13 @@ const api: LauncherApi = {
     },
     installAndRestart: (): Promise<void> => ipcRenderer.invoke('updates:install-restart'),
     openReleasePage: (): Promise<void> => ipcRenderer.invoke('updates:open-release-page')
+  },
+  themes: {
+    list: (): Promise<UserThemeFile[]> => ipcRenderer.invoke('themes:list'),
+    save: (id: string, name: string, colors: Record<string, string>): Promise<void> =>
+      ipcRenderer.invoke('themes:save', id, name, colors),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke('themes:delete', id),
+    openDir: (): Promise<void> => ipcRenderer.invoke('themes:open-dir')
   },
   tray: {
     onNavigate: (callback: (page: Page) => void): (() => void) => {

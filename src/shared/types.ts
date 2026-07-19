@@ -593,6 +593,21 @@ export interface UpdatesApi {
   openReleasePage: () => Promise<void>
 }
 
+/** a user-created theme stored as <dataRoot>/themes/<id>.json (see shared/theme.ts) */
+export interface UserThemeFile {
+  id: string
+  name: string
+  /** raw key/value map from the file; consumers sanitize via sanitizeThemeColors */
+  colors: Record<string, string>
+}
+
+export interface ThemesApi {
+  list: () => Promise<UserThemeFile[]>
+  save: (id: string, name: string, colors: Record<string, string>) => Promise<void>
+  remove: (id: string) => Promise<void>
+  openDir: () => Promise<void>
+}
+
 /** requests originating from native OS chrome outside the page (currently: the tray menu) */
 export interface TrayApi {
   /** the tray's page shortcuts (Projects/Installs/…) ask the open window to switch tabs */
@@ -607,6 +622,7 @@ export interface LauncherApi {
   storage: StorageApi
   uiState: UiStateApi
   updates: UpdatesApi
+  themes: ThemesApi
   tray: TrayApi
 }
 
