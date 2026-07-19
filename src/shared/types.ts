@@ -46,6 +46,8 @@ export interface BuildsApi {
   listInstalled: () => Promise<InstalledBuild[]>
   /** keepExisting skips the automatic retirement of superseded copies ("keep both") */
   install: (buildId: string, keepExisting?: boolean) => Promise<InstalledBuild>
+  /** abort a download in flight; no-op once the archive is being extracted */
+  cancelInstall: (buildId: string) => Promise<void>
   /** null — dialog cancelled; [] — builds found only inside the installs dir (auto-adopted) */
   locate: () => Promise<InstalledBuild[] | null>
   launch: (installId: string) => Promise<void>
@@ -608,7 +610,14 @@ export interface LauncherApi {
   tray: TrayApi
 }
 
-export type InstallPhase = 'downloading' | 'verifying' | 'extracting' | 'finalizing' | 'done' | 'error'
+export type InstallPhase =
+  | 'downloading'
+  | 'verifying'
+  | 'extracting'
+  | 'finalizing'
+  | 'done'
+  | 'error'
+  | 'cancelled'
 
 export interface InstallProgress {
   buildId: string

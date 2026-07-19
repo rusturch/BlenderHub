@@ -42,6 +42,7 @@ const api: LauncherApi = {
     listInstalled: (): Promise<InstalledBuild[]> => ipcRenderer.invoke('builds:list-installed'),
     install: (buildId: string, keepExisting = false): Promise<InstalledBuild> =>
       ipcRenderer.invoke('builds:install', buildId, keepExisting),
+    cancelInstall: (buildId: string): Promise<void> => ipcRenderer.invoke('builds:cancel-install', buildId),
     locate: (): Promise<InstalledBuild[] | null> => ipcRenderer.invoke('builds:locate'),
     launch: (installId: string): Promise<void> => ipcRenderer.invoke('builds:launch', installId),
     uninstall: (installId: string): Promise<void> => ipcRenderer.invoke('builds:uninstall', installId),

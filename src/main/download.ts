@@ -24,9 +24,11 @@ export async function downloadToFile(
   onBytes: (received: number, total?: number) => void,
   // GitHub release assets 302-redirect to a CDN host — when given, the host the
   // bytes actually come from must be on this list too, not just the start URL
-  allowedFinalHosts?: Set<string>
+  allowedFinalHosts?: Set<string>,
+  // aborting rejects the pipeline; the caller's cleanup removes the partial file
+  signal?: AbortSignal
 ): Promise<string> {
-  const response = await fetch(url)
+  const response = await fetch(url, { signal })
   if (!response.ok || !response.body) throw new Error(`Download failed: HTTP ${response.status}`)
   if (allowedFinalHosts) {
     const final = new URL(response.url)
@@ -45,7 +47,12 @@ export async function downloadToFile(
       callback(null, chunk)
     }
   })
-  await pipeline(Readable.fromWeb(response.body as unknown as WebReadableStream), tap, createWriteStream(destination))
+  await pipeline(
+    Readable.fromWeb(response.body as unknown as WebReadableStream),
+    tap,
+    createWriteStream(destination),
+    { signal }
+  )
   return hash.digest('hex')
 }
 

@@ -83,6 +83,8 @@ function createPreviewFallbackApi(): LauncherApi {
     install: async () => {
       throw new Error(DESKTOP_ONLY)
     },
+    // nothing ever downloads in preview, so there is never anything to abort
+    cancelInstall: async () => {},
     locate: async () => {
       throw new Error(DESKTOP_ONLY)
     },

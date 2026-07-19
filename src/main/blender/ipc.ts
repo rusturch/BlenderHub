@@ -25,7 +25,9 @@ import type { InstallProgress, RemoteBuild } from '../../shared/types'
 
 let remoteCache: { fetchedAt: number; builds: RemoteBuild[] } | null = null
 const REMOTE_CACHE_TTL_MS = 10 * 60 * 1000
-const installsInFlight = new Set<string>()
+// one controller per install in flight — doubles as the "already running" guard
+// and as the handle builds:cancel-install aborts
+const installsInFlight = new Map<string, AbortController>()
 
 const MINOR_RE = /^\d+\.\d+$/
 function requireMinors(raw: unknown): string[] {
@@ -72,20 +74,34 @@ export function registerBlenderIpc(): void {
     const build = remoteCache?.builds.find((candidate) => candidate.id === buildId)
     if (!build) throw new Error('Unknown build — refresh the list and try again')
     if (installsInFlight.has(buildId)) throw new Error('This build is already being installed')
-    installsInFlight.add(buildId)
+    const controller = new AbortController()
+    installsInFlight.set(buildId, controller)
     try {
       return await installBuild(
         build,
         (progress) => broadcast('builds:install-progress', progress),
-        rawKeepExisting === true
+        rawKeepExisting === true,
+        controller.signal
       )
     } catch (error) {
+      // a cancel is the user's own doing, not a failure to report as one
+      const phase = controller.signal.aborted ? 'cancelled' : 'error'
       const message = error instanceof Error ? error.message : String(error)
-      broadcast('builds:install-progress', { buildId, phase: 'error', error: message } satisfies InstallProgress)
+      broadcast('builds:install-progress', {
+        buildId,
+        phase,
+        ...(phase === 'error' ? { error: message } : {})
+      } satisfies InstallProgress)
       throw error
     } finally {
       installsInFlight.delete(buildId)
     }
+  })
+
+  ipcMain.handle('builds:cancel-install', (_event, rawId: unknown) => {
+    const buildId = requireString(rawId, 'build id')
+    // unknown or already-finished id: nothing to abort, and nothing to report
+    installsInFlight.get(buildId)?.abort()
   })
 
   ipcMain.handle('builds:locate', async () => {

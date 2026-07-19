@@ -240,7 +240,8 @@ export async function replaceSupersededBuilds(
 export async function installBuild(
   build: RemoteBuild,
   onProgress: (progress: InstallProgress) => void,
-  keepExisting = false
+  keepExisting = false,
+  signal?: AbortSignal
 ): Promise<InstalledBuild> {
   assertTrustedSource(build.url)
   if (build.checksumUrl) assertTrustedSource(build.checksumUrl)
@@ -266,8 +267,11 @@ export async function installBuild(
     const onBytes = throttle((received: number, total?: number) => {
       report({ phase: 'downloading', receivedBytes: received, totalBytes: total ?? build.fileSize })
     }, 200)
-    const actualSha256 = await downloadToFile(build.url, archivePath, onBytes)
+    const actualSha256 = await downloadToFile(build.url, archivePath, onBytes, undefined, signal)
 
+    // a cancel that lands in the gap between the last chunk and the next phase
+    // still counts — nothing is installed until the rename below
+    signal?.throwIfAborted()
     report({ phase: 'verifying' })
     const expectedSha256 =
       build.sha256 ??
@@ -277,6 +281,7 @@ export async function installBuild(
       throw new Error('Checksum mismatch — the downloaded archive is corrupted or tampered with')
     }
 
+    signal?.throwIfAborted()
     report({ phase: 'extracting' })
     const stagingDir = await mkdtemp(join(installsRoot, '.staging-'))
     try {

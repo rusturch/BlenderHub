@@ -86,6 +86,8 @@ export default function InstallsPage({
     { minor: string; version: string; settingsSource: string | null; sourceOptions: string[] }[]
   >([])
   const installedRef = useRef<InstalledBuild[]>([])
+  // ids the user cancelled — their install call rejects, and that is not an error
+  const cancelledRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     uiSet('installs.showBranch', showBranch ? '1' : '0')
@@ -190,6 +192,14 @@ export default function InstallsPage({
     if (!buildsApi) return
     // refreshProjectFiles is intentionally not in deps — it is stable like the others
     return buildsApi.onInstallProgress((progress) => {
+      // a cancelled install leaves no trace: the row goes straight back to Install
+      if (progress.phase === 'cancelled') {
+        setProgressById((previous) => {
+          const { [progress.buildId]: _cancelled, ...rest } = previous
+          return rest
+        })
+        return
+      }
       setProgressById((previous) => ({ ...previous, [progress.buildId]: progress }))
       if (progress.phase === 'done') {
         const before = installedRef.current
@@ -224,6 +234,9 @@ export default function InstallsPage({
         await buildsApi.install(build.id, keepExisting)
         return true
       } catch (error) {
+        // the rejection of a cancelled install is expected — the progress row is
+        // already gone, and surfacing it as an error would contradict the user
+        if (cancelledRef.current.delete(build.id)) return false
         setProgressById((previous) => ({
           ...previous,
           [build.id]: { buildId: build.id, phase: 'error', error: cleanErrorMessage(error) }
@@ -232,6 +245,20 @@ export default function InstallsPage({
       }
     },
     [buildsApi, installed, alertDialog, t]
+  )
+
+  const cancelInstall = useCallback(
+    (buildId: string) => {
+      if (!buildsApi) return
+      cancelledRef.current.add(buildId)
+      // drop the row's progress right away — main confirms with a 'cancelled' event
+      setProgressById((previous) => {
+        const { [buildId]: _dropped, ...rest } = previous
+        return rest
+      })
+      buildsApi.cancelInstall(buildId).catch(() => undefined)
+    },
+    [buildsApi]
   )
 
   // Replacing copies out from under a running Blender risks locked folders and a
@@ -932,6 +959,14 @@ export default function InstallsPage({
                   remoteProgress !== undefined &&
                   remoteProgress.phase !== 'error' &&
                   remoteProgress.phase !== 'done'
+                // only the download is interruptible — past it the archive is being
+                // unpacked into place and there is nothing left to call off
+                const cancellable =
+                  remoteProgress?.phase === 'downloading'
+                    ? row.remoteBuild
+                    : updateProgress?.phase === 'downloading'
+                      ? row.update
+                      : null
                 const notesUrl = notesUrlForRow(row)
                 const branchMeta = showBranch
                   ? [row.branch, row.commit ? row.commit.slice(0, 10) : ''].filter(Boolean).join(' · ')
@@ -1155,6 +1190,14 @@ export default function InstallsPage({
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      {cancellable && (
+                        <button
+                          onClick={() => cancelInstall(cancellable.id)}
+                          className="rounded-lg border border-white/10 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+                        >
+                          {t('common.cancel')}
+                        </button>
+                      )}
                       {copy ? (
                         <>
                           {row.update && !updateBusy && (
@@ -1303,6 +1346,12 @@ export default function InstallsPage({
                           entryUpdateProgress !== undefined &&
                           entryUpdateProgress.phase !== 'error' &&
                           entryUpdateProgress.phase !== 'done'
+                        const entryCancellable =
+                          entryProgress?.phase === 'downloading'
+                            ? entry.build
+                            : entryUpdateProgress?.phase === 'downloading'
+                              ? entryUpdate
+                              : null
                         const entryNotesUrl = notesUrlForBuild(entry.build, entry.version)
                         const entryTarget = entryUpdate
                           ? entryUpdate.version !== entry.version
@@ -1342,6 +1391,14 @@ export default function InstallsPage({
                               ) : null}
                             </div>
                             <div className="flex shrink-0 items-center gap-1.5">
+                              {entryCancellable && (
+                                <button
+                                  onClick={() => cancelInstall(entryCancellable.id)}
+                                  className="rounded-lg border border-white/10 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+                                >
+                                  {t('common.cancel')}
+                                </button>
+                              )}
                               {entryCopy ? (
                                 <>
                                   {entryUpdate && !entryUpdateBusy && (
