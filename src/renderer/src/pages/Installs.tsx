@@ -1195,7 +1195,7 @@ export default function InstallsPage({
                           onClick={() => cancelInstall(cancellable.id)}
                           className="rounded-lg border border-white/10 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
                         >
-                          {t('common.cancel')}
+                          <ActionLabel>{t('common.cancel')}</ActionLabel>
                         </button>
                       )}
                       {copy ? (
@@ -1396,7 +1396,7 @@ export default function InstallsPage({
                                   onClick={() => cancelInstall(entryCancellable.id)}
                                   className="rounded-lg border border-white/10 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
                                 >
-                                  {t('common.cancel')}
+                                  <ActionLabel>{t('common.cancel')}</ActionLabel>
                                 </button>
                               )}
                               {entryCopy ? (
