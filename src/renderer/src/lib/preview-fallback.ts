@@ -151,7 +151,10 @@ function createPreviewFallbackApi(): LauncherApi {
     reveal: async () => {
       throw new Error(DESKTOP_ONLY)
     },
-    setDisplayName: async () => {
+    renameFile: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    duplicateFile: async () => {
       throw new Error(DESKTOP_ONLY)
     },
     setPreview: async () => {

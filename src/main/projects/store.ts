@@ -1,6 +1,5 @@
 import { isAbsolute, relative, resolve } from 'path'
 import { readConfig, updateConfig } from '../config'
-import type { ProjectOverride } from '../config'
 
 export async function getProjectFolders(): Promise<string[]> {
   return (await readConfig()).projectFolders
@@ -83,34 +82,21 @@ export async function setKnownFiles(files: string[]): Promise<void> {
   await updateConfig((config) => ({ ...config, knownFiles: files }))
 }
 
-export async function getOverrides(): Promise<Record<string, ProjectOverride>> {
-  return (await readConfig()).projectOverrides
-}
-
-export async function setDisplayName(file: string, name: string | null): Promise<void> {
-  const key = resolve(file)
-  await updateConfig((config) => {
-    const overrides = { ...config.projectOverrides }
-    const current = { ...(overrides[key] ?? {}) }
-    if (name) current.displayName = name
-    else delete current.displayName
-    if (Object.keys(current).length === 0) delete overrides[key]
-    else overrides[key] = current
-    return { ...config, projectOverrides: overrides }
-  })
-}
-
-// After moving a file: track it at the new path and carry its list membership + overrides.
-export async function migrateProjectPath(oldPath: string, newPath: string): Promise<void> {
+// After moving a file: carry its list membership and recents over to the new path.
+// alwaysTrack=false (rename in place) only keeps an existing individual-tracking entry
+// instead of converting folder-scanned files into individually-tracked ones.
+export async function migrateProjectPath(
+  oldPath: string,
+  newPath: string,
+  alwaysTrack = true
+): Promise<void> {
   const oldKey = resolve(oldPath)
   const newKey = resolve(newPath)
   await updateConfig((config) => {
+    const wasTracked = config.projectFiles.some((known) => resolve(known) === oldKey)
     const projectFiles = config.projectFiles.filter((known) => resolve(known) !== oldKey)
-    if (!projectFiles.some((known) => resolve(known) === newKey)) projectFiles.push(newKey)
-    const overrides = { ...config.projectOverrides }
-    if (overrides[oldKey]) {
-      overrides[newKey] = overrides[oldKey]
-      delete overrides[oldKey]
+    if ((alwaysTrack || wasTracked) && !projectFiles.some((known) => resolve(known) === newKey)) {
+      projectFiles.push(newKey)
     }
     const recentlyOpened = { ...config.recentlyOpened }
     if (recentlyOpened[oldKey] !== undefined) {
@@ -122,7 +108,6 @@ export async function migrateProjectPath(oldPath: string, newPath: string): Prom
       projectFiles,
       hiddenFiles: config.hiddenFiles.filter((known) => resolve(known) !== oldKey),
       knownFiles: config.knownFiles.filter((known) => resolve(known) !== oldKey),
-      projectOverrides: overrides,
       recentlyOpened
     }
   })
@@ -156,8 +141,6 @@ export async function getRecentlyOpened(limit: number): Promise<{ path: string; 
 export async function forgetProjectPath(path: string): Promise<void> {
   const key = resolve(path)
   await updateConfig((config) => {
-    const overrides = { ...config.projectOverrides }
-    delete overrides[key]
     const recentlyOpened = { ...config.recentlyOpened }
     delete recentlyOpened[key]
     return {
@@ -165,7 +148,6 @@ export async function forgetProjectPath(path: string): Promise<void> {
       projectFiles: config.projectFiles.filter((known) => resolve(known) !== key),
       hiddenFiles: config.hiddenFiles.filter((known) => resolve(known) !== key),
       knownFiles: config.knownFiles.filter((known) => resolve(known) !== key),
-      projectOverrides: overrides,
       recentlyOpened
     }
   })

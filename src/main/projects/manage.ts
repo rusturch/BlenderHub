@@ -1,8 +1,8 @@
-import { copyFile, mkdir, readdir, rename, rm } from 'fs/promises'
+import { constants, copyFile, mkdir, readdir, rename, rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import { shell } from 'electron'
 import { basename, dirname, extname, join, resolve } from 'path'
-import { forgetProjectPath, migrateProjectPath } from './store'
+import { addProjectFile, forgetProjectPath, getProjectFiles, migrateProjectPath } from './store'
 
 export const PREVIEW_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
 
@@ -68,6 +68,55 @@ export async function moveProject(blendPath: string, destDir: string): Promise<s
     await moveFile(sidecar, join(dir, basename(sidecar))).catch(() => undefined)
   }
   await migrateProjectPath(blendPath, targetPath)
+  return targetPath
+}
+
+// Rename in place. The preview sidecar's name is derived from the .blend name, so it
+// is renamed along, and config entries move to the new path without converting a
+// folder-scanned file into an individually-tracked one.
+export async function renameProject(blendPath: string, newFileName: string): Promise<string> {
+  const dir = dirname(blendPath)
+  const targetPath = join(dir, newFileName)
+  if (resolve(targetPath) === resolve(blendPath)) return resolve(blendPath)
+  // NTFS is case-insensitive: a case-only rename is legal even though the target "exists"
+  const caseOnly = resolve(targetPath).toLowerCase() === resolve(blendPath).toLowerCase()
+  if (!caseOnly && existsSync(targetPath)) {
+    throw new Error('A file with this name already exists in this folder')
+  }
+  const sidecar = await findPreviewSidecar(blendPath)
+  await moveFile(blendPath, targetPath)
+  if (sidecar) {
+    await moveFile(sidecar, join(dir, `${previewBaseName(targetPath)}${extname(sidecar)}`)).catch(
+      () => undefined
+    )
+  }
+  await migrateProjectPath(blendPath, targetPath, false)
+  return targetPath
+}
+
+// Copy next to the original as "<name> copy.blend" ("<name> copy 2.blend", …), the
+// custom preview sidecar included. An individually-tracked source gets its copy
+// tracked too — a folder-scanned one is picked up by the next scan on its own.
+export async function duplicateProject(blendPath: string): Promise<string> {
+  const dir = dirname(blendPath)
+  const base = basename(blendPath).replace(/\.blend$/i, '')
+  let targetPath = join(dir, `${base} copy.blend`)
+  for (let n = 2; existsSync(targetPath); n++) {
+    if (n > 99) throw new Error('Too many copies of this file')
+    targetPath = join(dir, `${base} copy ${n}.blend`)
+  }
+  // COPYFILE_EXCL: fail instead of overwriting if the target appears mid-operation
+  await copyFile(blendPath, targetPath, constants.COPYFILE_EXCL)
+  const sidecar = await findPreviewSidecar(blendPath)
+  if (sidecar) {
+    await copyFile(sidecar, join(dir, `${previewBaseName(targetPath)}${extname(sidecar)}`)).catch(
+      () => undefined
+    )
+  }
+  const tracked = await getProjectFiles()
+  if (tracked.some((known) => resolve(known) === resolve(blendPath))) {
+    await addProjectFile(targetPath)
+  }
   return targetPath
 }
 

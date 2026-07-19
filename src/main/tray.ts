@@ -7,7 +7,7 @@ import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 import { onUiStateSet, readUiState } from './ui-state'
 import { readBlendInfo } from './blender/blend-parser'
 import { listInstalled } from './blender/installs'
-import { getHiddenFiles, getOverrides, getProjectFiles, getProjectFolders, recordProjectOpened } from './projects/store'
+import { getHiddenFiles, getProjectFiles, getProjectFolders, recordProjectOpened } from './projects/store'
 import { listRecentProjectFiles } from './projects/service'
 import { TRAY_PAGES_KEY, parseTrayPages } from '../shared/tray-menu'
 import { pickNativeInstall } from '../shared/blender-builds'
@@ -125,20 +125,19 @@ async function openProjectFromTray(filePath: string, lang: TrayLang): Promise<vo
 // the same folders/files the Projects page scans — most recently MODIFIED on disk,
 // not most recently opened through the launcher
 async function recentProjectItems(lang: TrayLang): Promise<MenuItemConstructorOptions[]> {
-  const [folders, individualFiles, hiddenFiles, overrides] = await Promise.all([
+  const [folders, individualFiles, hiddenFiles] = await Promise.all([
     getProjectFolders(),
     getProjectFiles(),
-    getHiddenFiles(),
-    getOverrides()
+    getHiddenFiles()
   ])
   const recents = await listRecentProjectFiles(folders, individualFiles, hiddenFiles, RECENT_PROJECTS_LIMIT)
   if (recents.length === 0) {
     return [{ label: TRAY_LABELS[lang].noRecentProjects, enabled: false }]
   }
   return recents.map(({ path }) => ({
-    // same fallback as Projects.tsx: displayName override, else the filename with
-    // the .blend extension dropped (a label doesn't need to repeat "it's a .blend")
-    label: overrides[path]?.displayName ?? basename(path).replace(/\.blend$/i, ''),
+    // same as Projects.tsx cards: the filename with the .blend extension dropped
+    // (a label doesn't need to repeat "it's a .blend")
+    label: basename(path).replace(/\.blend$/i, ''),
     click: () => void openProjectFromTray(path, lang)
   }))
 }

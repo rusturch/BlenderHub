@@ -76,7 +76,6 @@ export interface ProjectFolder {
 export interface BlendFileInfo {
   path: string
   name: string
-  displayName: string | null
   folder: string
   size: number
   mtimeMs: number
@@ -103,7 +102,8 @@ export interface ProjectsApi {
   createProject: (input: NewProjectInput) => Promise<string>
   openFile: (path: string, installId: string) => Promise<void>
   reveal: (path: string) => Promise<void>
-  setDisplayName: (path: string, name: string | null) => Promise<void>
+  renameFile: (path: string, newName: string) => Promise<string>
+  duplicateFile: (path: string) => Promise<string>
   setPreview: (path: string) => Promise<boolean>
   clearPreview: (path: string) => Promise<void>
   moveProject: (path: string) => Promise<string | null>

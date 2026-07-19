@@ -13,17 +13,12 @@ export interface LocatedInstall {
   addedAt: string
 }
 
-export interface ProjectOverride {
-  displayName?: string
-}
-
 export interface LauncherConfig {
   projectFolders: string[]
   projectFiles: string[]
   hiddenFiles: string[]
   /** folder-scanned .blend files seen in a previous scan — used to detect vanished files */
   knownFiles: string[]
-  projectOverrides: Record<string, ProjectOverride>
   locatedInstalls: LocatedInstall[]
   /** override for where Blender versions get installed; unset — a data-root default is used */
   installsDir?: string
@@ -46,7 +41,6 @@ const emptyConfig = (): LauncherConfig => ({
   projectFiles: [],
   hiddenFiles: [],
   knownFiles: [],
-  projectOverrides: {},
   locatedInstalls: [],
   addonLibrary: [],
   recentlyOpened: {}
@@ -79,10 +73,6 @@ export async function readConfig(): Promise<LauncherConfig> {
     projectFiles: Array.isArray(parsed.projectFiles) ? parsed.projectFiles : [],
     hiddenFiles: Array.isArray(parsed.hiddenFiles) ? parsed.hiddenFiles : [],
     knownFiles: Array.isArray(parsed.knownFiles) ? parsed.knownFiles : [],
-    projectOverrides:
-      parsed.projectOverrides && typeof parsed.projectOverrides === 'object'
-        ? parsed.projectOverrides
-        : {},
     locatedInstalls: Array.isArray(parsed.locatedInstalls) ? parsed.locatedInstalls : [],
     installsDir: typeof parsed.installsDir === 'string' ? parsed.installsDir : undefined,
     downloadsDir: typeof parsed.downloadsDir === 'string' ? parsed.downloadsDir : undefined,

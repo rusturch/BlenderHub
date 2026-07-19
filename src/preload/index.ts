@@ -79,8 +79,10 @@ const api: LauncherApi = {
     openFile: (path: string, installId: string): Promise<void> =>
       ipcRenderer.invoke('projects:open-file', path, installId),
     reveal: (path: string): Promise<void> => ipcRenderer.invoke('projects:reveal', path),
-    setDisplayName: (path: string, name: string | null): Promise<void> =>
-      ipcRenderer.invoke('projects:set-display-name', path, name),
+    renameFile: (path: string, newName: string): Promise<string> =>
+      ipcRenderer.invoke('projects:rename-file', path, newName),
+    duplicateFile: (path: string): Promise<string> =>
+      ipcRenderer.invoke('projects:duplicate-file', path),
     setPreview: (path: string): Promise<boolean> => ipcRenderer.invoke('projects:set-preview', path),
     clearPreview: (path: string): Promise<void> => ipcRenderer.invoke('projects:clear-preview', path),
     moveProject: (path: string): Promise<string | null> => ipcRenderer.invoke('projects:move', path),

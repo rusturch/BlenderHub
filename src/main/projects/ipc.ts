@@ -9,9 +9,11 @@ import { scanProjectFiles } from './service'
 import {
   clearPreviewSidecar,
   deleteProject,
+  duplicateProject,
   findMissingFile,
   moveProject,
   PREVIEW_EXTENSIONS,
+  renameProject,
   setPreviewSidecar
 } from './manage'
 import {
@@ -20,13 +22,11 @@ import {
   addProjectFolder,
   getHiddenFiles,
   getKnownFiles,
-  getOverrides,
   getProjectFiles,
   getProjectFolders,
   recordProjectOpened,
   removeProjectFile,
   removeProjectFolder,
-  setDisplayName,
   setKnownFiles
 } from './store'
 import type { ProjectFolder } from '../../shared/types'
@@ -111,22 +111,36 @@ export function registerProjectsIpc(): void {
   })
 
   ipcMain.handle('projects:list-files', async () => {
-    const [folders, files, hiddenFiles, overrides, known] = await Promise.all([
+    const [folders, files, hiddenFiles, known] = await Promise.all([
       getProjectFolders(),
       getProjectFiles(),
       getHiddenFiles(),
-      getOverrides(),
       getKnownFiles()
     ])
-    const scan = await scanProjectFiles(folders, files, hiddenFiles, overrides, known)
+    const scan = await scanProjectFiles(folders, files, hiddenFiles, known)
     await setKnownFiles(scan.known)
     return scan.files
   })
 
-  ipcMain.handle('projects:set-display-name', async (_event, rawPath: unknown, rawName: unknown) => {
+  ipcMain.handle('projects:rename-file', async (_event, rawPath: unknown, rawName: unknown) => {
     const path = await assertAllowed(requireString(rawPath, 'file path'))
-    const name = typeof rawName === 'string' ? rawName.slice(0, 120).trim() : ''
-    await setDisplayName(path, name.length > 0 ? name : null)
+    if (!path.toLowerCase().endsWith('.blend')) throw new Error('Not a .blend file')
+    // same character policy as projects:create — the renderer sends a bare name, not a path
+    const safeName = requireString(rawName, 'file name')
+      .slice(0, 120)
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+      .trim()
+    if (!safeName || safeName.toLowerCase() === '.blend') throw new Error('Enter a valid file name')
+    const fileName = safeName.toLowerCase().endsWith('.blend') ? safeName : `${safeName}.blend`
+    const renamed = await renameProject(path, fileName)
+    refreshTrayMenu()
+    return renamed
+  })
+
+  ipcMain.handle('projects:duplicate-file', async (_event, rawPath: unknown) => {
+    const path = await assertAllowed(requireString(rawPath, 'file path'))
+    if (!path.toLowerCase().endsWith('.blend')) throw new Error('Not a .blend file')
+    return duplicateProject(path)
   })
 
   ipcMain.handle('projects:set-preview', async (_event, rawPath: unknown) => {

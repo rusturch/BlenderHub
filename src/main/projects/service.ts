@@ -5,7 +5,6 @@ import { readBlendInfo } from '../blender/blend-parser'
 import { findPreviewSidecar } from './manage'
 import type { BlendThumbnail } from '../blender/blend-parser'
 import type { BlendFileInfo } from '../../shared/types'
-import type { ProjectOverride } from '../config'
 
 const MAX_FILES = 400
 const MAX_DEPTH = 5
@@ -122,7 +121,6 @@ export async function scanProjectFiles(
   folders: string[],
   individualFiles: string[] = [],
   hiddenFiles: string[] = [],
-  overrides: Record<string, ProjectOverride> = {},
   knownFiles: string[] = []
 ): Promise<{ files: BlendFileInfo[]; known: string[] }> {
   const hidden = new Set(hiddenFiles.map((path) => resolve(path)))
@@ -155,10 +153,9 @@ export async function scanProjectFiles(
   for (const [file, root] of found) {
     try {
       const fileStat = await stat(file)
-      const displayName = overrides[resolve(file)]?.displayName ?? null
       const sidecar = await findPreviewSidecar(file)
       const sidecarStat = sidecar ? await stat(sidecar).catch(() => null) : null
-      const cacheKey = `${fileStat.mtimeMs}:${fileStat.size}|${sidecar ?? ''}:${sidecarStat?.mtimeMs ?? ''}|${displayName ?? ''}`
+      const cacheKey = `${fileStat.mtimeMs}:${fileStat.size}|${sidecar ?? ''}:${sidecarStat?.mtimeMs ?? ''}`
       const cached = cache.get(file)
       if (cached && cached.key === cacheKey) {
         result.push(cached.info)
@@ -169,7 +166,6 @@ export async function scanProjectFiles(
       const info: BlendFileInfo = {
         path: file,
         name: basename(file),
-        displayName,
         folder: root,
         size: fileStat.size,
         mtimeMs: fileStat.mtimeMs,
@@ -186,7 +182,6 @@ export async function scanProjectFiles(
         result.push({
           path: file,
           name: basename(file),
-          displayName: overrides[resolve(file)]?.displayName ?? null,
           folder: root,
           size: 0,
           mtimeMs: 0,
@@ -207,7 +202,6 @@ export async function scanProjectFiles(
     result.push({
       path: kp,
       name: basename(kp),
-      displayName: overrides[kp]?.displayName ?? null,
       folder: dirname(kp),
       size: 0,
       mtimeMs: 0,

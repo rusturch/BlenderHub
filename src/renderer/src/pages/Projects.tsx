@@ -254,7 +254,7 @@ export default function ProjectsPage({
     async (file: BlendFileInfo) => {
       const ok = await confirmDialog({
         title: t('projects.removeFromListTitle'),
-        message: t('projects.removeFromListMessage', { name: file.displayName ?? file.name }),
+        message: t('projects.removeFromListMessage', { name: file.name }),
         confirmLabel: t('common.remove')
       })
       if (!ok) return
@@ -300,16 +300,29 @@ export default function ProjectsPage({
     [projectsApi, refreshFiles, alertDialog]
   )
 
+  const duplicateFile = useCallback(
+    async (file: BlendFileInfo) => {
+      try {
+        await projectsApi.duplicateFile(file.path)
+        await refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, refreshFiles, alertDialog]
+  )
+
   const openRename = useCallback((file: BlendFileInfo) => {
     setRenameFor(file)
-    setRenameValue(file.displayName ?? file.name.replace(/\.blend$/i, ''))
+    setRenameValue(file.name.replace(/\.blend$/i, ''))
   }, [])
 
-  const saveDisplayName = useCallback(async () => {
+  const saveRename = useCallback(async () => {
     if (!renameFor) return
+    const trimmed = renameValue.trim()
+    if (!trimmed) return
     try {
-      const trimmed = renameValue.trim()
-      await projectsApi.setDisplayName(renameFor.path, trimmed.length ? trimmed : null)
+      await projectsApi.renameFile(renameFor.path, trimmed)
       setRenameFor(null)
       await refreshFiles()
     } catch (cause) {
@@ -330,8 +343,7 @@ export default function ProjectsPage({
     return (files ?? []).filter((file) => {
       // missing files are exempt from the version filter — their version is unknown
       if (!file.missing && versionFilter !== 'all' && file.blenderVersion !== versionFilter) return false
-      if (q && !file.name.toLowerCase().includes(q) && !(file.displayName ?? '').toLowerCase().includes(q))
-        return false
+      if (q && !file.name.toLowerCase().includes(q)) return false
       return true
     })
   }, [files, versionFilter, query])
@@ -632,15 +644,6 @@ export default function ProjectsPage({
                             <SearchIcon className="h-4 w-4" />
                             {t('projects.findMissingFile')}
                           </button>
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              openRename(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
-                          >
-                            {t('projects.setDisplayName')}
-                          </button>
                           <div className="my-1 border-t border-white/5" />
                           <button
                             onClick={() => {
@@ -670,7 +673,16 @@ export default function ProjectsPage({
                             }}
                             className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
                           >
-                            {t('projects.setDisplayName')}
+                            {t('projects.renameFile')}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCardMenuFor(null)
+                              duplicateFile(file)
+                            }}
+                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                          >
+                            {t('projects.duplicateFile')}
                           </button>
                           <button
                             onClick={() => {
@@ -705,15 +717,6 @@ export default function ProjectsPage({
                           <button
                             onClick={() => {
                               setCardMenuFor(null)
-                              removeFromList(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
-                          >
-                            {t('projects.removeFromList')}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
                               deleteProjectFile(file)
                             }}
                             className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10"
@@ -740,9 +743,9 @@ export default function ProjectsPage({
                     <div className="flex flex-1 flex-col gap-2 p-3">
                       <p
                         className="min-w-0 truncate text-sm font-medium text-zinc-100"
-                        title={file.displayName ? `${file.name}\n${file.path}` : file.path}
+                        title={file.path}
                       >
-                        {file.displayName ?? file.name.replace(/\.blend$/i, '')}
+                        {file.name.replace(/\.blend$/i, '')}
                       </p>
                       {file.missing ? (
                         <p className="truncate text-[11px] font-medium text-amber-400" title={file.path}>
@@ -958,7 +961,7 @@ export default function ProjectsPage({
             className="w-full max-w-sm rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <h2 className="text-base font-semibold text-zinc-100">{t('projects.displayName')}</h2>
+            <h2 className="text-base font-semibold text-zinc-100">{t('projects.renameTitle')}</h2>
             <p className="mt-1 truncate text-xs text-zinc-500" title={renameFor.name}>
               {renameFor.name}
             </p>
@@ -966,13 +969,12 @@ export default function ProjectsPage({
               value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') saveDisplayName()
+                if (event.key === 'Enter') saveRename()
               }}
               autoFocus
-              placeholder={t('projects.displayNamePlaceholder')}
               className="mt-3 w-full rounded-lg border border-white/10 bg-surface-input px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none"
             />
-            <p className="mt-2 text-[11px] text-zinc-500">{t('projects.displayNameHint')}</p>
+            <p className="mt-2 text-[11px] text-zinc-500">{t('projects.renameHint')}</p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setRenameFor(null)}
@@ -981,8 +983,9 @@ export default function ProjectsPage({
                 {t('common.cancel')}
               </button>
               <button
-                onClick={saveDisplayName}
-                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90"
+                onClick={saveRename}
+                disabled={!renameValue.trim()}
+                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t('projects.save')}
               </button>
