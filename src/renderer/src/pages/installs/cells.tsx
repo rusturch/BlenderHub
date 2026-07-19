@@ -95,15 +95,17 @@ export function ProgressLine({ progress }: { progress: InstallProgress }) {
         : progress.phase === 'extracting'
           ? t('installs.extracting')
           : t('installs.finalizing')
+  // one line, label beside the bar: stacking them put the bar above the row's
+  // centre line (off from the buttons next to it) and made the row grow mid-install
   return (
-    <div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+    <div className="flex items-center gap-3">
+      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
         <div
           className={`h-full rounded-full bg-blender transition-[width] duration-200 ${percent === null ? 'w-full animate-pulse' : ''}`}
           style={percent !== null ? { width: `${percent}%` } : undefined}
         />
       </div>
-      <p className="mt-1 text-[11px] text-zinc-500">{label}</p>
+      <p className="shrink-0 text-[11px] text-zinc-500">{label}</p>
     </div>
   )
 }
