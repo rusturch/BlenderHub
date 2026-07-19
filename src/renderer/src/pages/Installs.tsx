@@ -537,6 +537,11 @@ export default function InstallsPage({
 
     const matchesTabFor = (build: RemoteBuild): boolean => buildMatchesTab(build, filter)
 
+    // "Installed" means exactly the copies on disk: collapsing would hide them
+    // behind a series row that is itself not installed, so the drawer is off and
+    // every copy stands on its own line
+    const collapseSeries = installedFilter !== 'installed'
+
     const rows: DisplayRow[] = []
     // update targets advertised by a rendered row: their own Install row is then
     // suppressed — the Update button IS their appearance, one line per build
@@ -557,7 +562,7 @@ export default function InstallsPage({
         build.source !== 'experimental' &&
         seriesRep !== undefined &&
         build.id !== seriesRep.id
-      if (drawerBound && !patchQuery) continue
+      if (drawerBound && !patchQuery && collapseSeries) continue
       // claimed copies may differ from the catalog entry in cycle label or commit
       // (an lts copy claimed by an archive "stable" row), and their update rides
       // here — search must see all three
@@ -596,7 +601,7 @@ export default function InstallsPage({
       const seriesRep = STABLE_CYCLES.has(rep.releaseCycle)
         ? seriesRepFor(minorOf(rep.version), filter)
         : undefined
-      if (seriesRep !== undefined && !patchQuery) continue
+      if (seriesRep !== undefined && !patchQuery && collapseSeries) continue
       // the superseding build has no Install row of its own (it rides here as the
       // Update button), so searching for the NEW version must surface this row
       const update = updateByCopyId.get(rep.id) ?? null
@@ -651,21 +656,10 @@ export default function InstallsPage({
       })
     }
 
-    // a collapsed series counts as installed when any of its (drawer-hidden)
-    // copies is — otherwise the Installed filter would show nothing for it
-    const seriesHasInstalledCopies = (minor: string): boolean =>
-      installed.some((copy) => STABLE_CYCLES.has(copy.releaseCycle) && minorOf(copy.version) === minor)
     const byInstalled =
       installedFilter === 'all'
         ? rows
-        : rows.filter((row) =>
-            installedFilter === 'installed'
-              ? row.copy !== null ||
-                (row.remoteBuild !== null &&
-                  STABLE_CYCLES.has(row.releaseCycle) &&
-                  seriesHasInstalledCopies(minorOf(row.version)))
-              : row.copy === null
-          )
+        : rows.filter((row) => (installedFilter === 'installed' ? row.copy !== null : row.copy === null))
     // copies of the same version (equal under the chosen key) keep a stable order by path
     const factor = sortDir === 'asc' ? -1 : 1
     byInstalled.sort((a, b) => {
@@ -695,6 +689,8 @@ export default function InstallsPage({
   // copy of it, or the outdated copy carrying it as the Update target)
   const drawerRowByKey = useMemo(() => {
     const map = new Map<string, string>()
+    // nothing is collapsed under the Installed filter, so there is nothing to open
+    if (installedFilter === 'installed') return map
     const seen = new Set<string>()
     for (const row of mergedVisible) {
       const minor = minorOf(row.version)
@@ -717,7 +713,7 @@ export default function InstallsPage({
       map.set(row.key, minor)
     }
     return map
-  }, [mergedVisible, seriesMembersByMinor, seriesRepFor, filter])
+  }, [mergedVisible, seriesMembersByMinor, seriesRepFor, filter, installedFilter])
 
   const toggleSeries = useCallback((minor: string) => {
     setExpandedSeries((previous) => {
