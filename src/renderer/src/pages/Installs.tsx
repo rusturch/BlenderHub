@@ -88,6 +88,8 @@ export default function InstallsPage({
   const installedRef = useRef<InstalledBuild[]>([])
   // ids the user cancelled — their install call rejects, and that is not an error
   const cancelledRef = useRef<Set<string>>(new Set())
+  // install ids whose uninstall (trash) is in flight right now
+  const [removingIds, setRemovingIds] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     uiSet('installs.showBranch', showBranch ? '1' : '0')
@@ -264,6 +266,19 @@ export default function InstallsPage({
   // Replacing copies out from under a running Blender risks locked folders and a
   // half-retired line — same gate as Add-ons Apply / Sync: run now when the
   // affected minors are closed, otherwise park the continuation in the dialog.
+  // trashItem gives no progress callbacks, but it can churn for seconds on a
+  // full build — these ids render an indeterminate "Removing…" line meanwhile
+  const markRemoving = useCallback((ids: string[], on: boolean) => {
+    setRemovingIds((previous) => {
+      const next = new Set(previous)
+      for (const id of ids) {
+        if (on) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  }, [])
+
   const gateOnRunning = useCallback(
     async (minors: string[], run: () => Promise<void>) => {
       let found: RunningBlender[] = []
@@ -356,22 +371,27 @@ export default function InstallsPage({
       await gateOnRunning([minorOf(build.version)], async () => {
         const ok = await startInstall(build, false)
         if (!ok) return
-        for (const copy of survivors) {
-          try {
-            await buildsApi.uninstall(copy.id)
-          } catch (error) {
-            await alertDialog(cleanErrorMessage(error))
+        markRemoving(survivors.map((copy) => copy.id), true)
+        try {
+          for (const copy of survivors) {
+            try {
+              await buildsApi.uninstall(copy.id)
+            } catch (error) {
+              await alertDialog(cleanErrorMessage(error))
+            }
           }
+        } finally {
+          markRemoving(survivors.map((copy) => copy.id), false)
         }
         refreshInstalled()
       })
     },
-    [buildsApi, installed, startInstall, gateOnRunning, chooseDialog, alertDialog, refreshInstalled, t]
+    [buildsApi, installed, startInstall, gateOnRunning, markRemoving, chooseDialog, alertDialog, refreshInstalled, t]
   )
 
   const removeInstall = useCallback(
     async (build: InstalledBuild) => {
-      if (!buildsApi) return
+      if (!buildsApi || removingIds.has(build.id)) return
       const ok = await confirmDialog({
         title: build.managed ? t('installs.confirmUninstallTitle') : t('installs.confirmRemoveTitle'),
         message: build.managed
@@ -382,14 +402,17 @@ export default function InstallsPage({
         confirmLabel: build.managed ? t('installs.uninstall') : t('common.remove')
       })
       if (!ok) return
+      markRemoving([build.id], true)
       try {
         await buildsApi.uninstall(build.id)
       } catch (error) {
         await alertDialog(cleanErrorMessage(error))
+      } finally {
+        markRemoving([build.id], false)
       }
       refreshInstalled()
     },
-    [buildsApi, refreshInstalled, confirmDialog, alertDialog, t]
+    [buildsApi, removingIds, markRemoving, refreshInstalled, confirmDialog, alertDialog, t]
   )
 
   const locateExisting = useCallback(async () => {
@@ -981,6 +1004,7 @@ export default function InstallsPage({
                   : ''
                 const usedBy = projectsByMinor.get(minorOf(row.version)) ?? []
                 const projectsOpen = projectsPopoverFor === row.key
+                const removing = copy !== null && removingIds.has(copy.id)
                 // visible Update target: the new version, or version + cycle when only
                 // the cycle changes (released build superseding its own candidate);
                 // rolling updates (same version, new commit) keep the plain verb
@@ -1182,9 +1206,13 @@ export default function InstallsPage({
                       {progress ? (
                         <ProgressLine progress={progress} />
                       ) : copy ? (
-                        <p className="truncate text-xs text-zinc-500" title={copy.path}>
-                          {copy.path}
-                        </p>
+                        removing ? (
+                          <ProgressLine progress={{ buildId: copy.id, phase: 'removing' }} />
+                        ) : (
+                          <p className="truncate text-xs text-zinc-500" title={copy.path}>
+                            {copy.path}
+                          </p>
+                        )
                       ) : (
                         <p className="truncate text-xs text-zinc-500">{sizeDate}</p>
                       )}
@@ -1200,7 +1228,7 @@ export default function InstallsPage({
                       )}
                       {copy ? (
                         <>
-                          {row.update && !updateBusy && (
+                          {row.update && !updateBusy && !removing && (
                             <button
                               onClick={() => row.update && startUpdate(row.update)}
                               disabled={!isDesktop}
@@ -1227,7 +1255,7 @@ export default function InstallsPage({
                             </button>
                           )}
                           <button
-                            disabled={updateBusy}
+                            disabled={updateBusy || removing}
                             title={updateBusy ? t('installs.busyUpdating') : undefined}
                             onClick={() =>
                               buildsApi.launch(copy.id).catch((error) => alertDialog(cleanErrorMessage(error)))
@@ -1261,9 +1289,10 @@ export default function InstallsPage({
                           menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
                           trigger={
                             <button
+                              disabled={removing}
                               onClick={() => setMoreMenuFor(moreMenuFor === row.key ? null : row.key)}
                               title={t('installs.moreActions')}
-                              className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                              className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
                             >
                               <DotsIcon />
                             </button>
@@ -1353,6 +1382,7 @@ export default function InstallsPage({
                               ? entryUpdate
                               : null
                         const entryNotesUrl = notesUrlForBuild(entry.build, entry.version)
+                        const entryRemoving = entryCopy !== null && removingIds.has(entryCopy.id)
                         const entryTarget = entryUpdate
                           ? entryUpdate.version !== entry.version
                             ? entryUpdate.version
@@ -1376,9 +1406,13 @@ export default function InstallsPage({
                               {entryProgress ? (
                                 <ProgressLine progress={entryProgress} />
                               ) : entryCopy ? (
-                                <p className="truncate text-[11px] text-zinc-600" title={entryCopy.path}>
-                                  {entryCopy.path}
-                                </p>
+                                entryRemoving ? (
+                                  <ProgressLine progress={{ buildId: entryCopy.id, phase: 'removing' }} />
+                                ) : (
+                                  <p className="truncate text-[11px] text-zinc-600" title={entryCopy.path}>
+                                    {entryCopy.path}
+                                  </p>
+                                )
                               ) : entry.build ? (
                                 <p className="truncate text-[11px] text-zinc-600">
                                   {[
@@ -1401,7 +1435,7 @@ export default function InstallsPage({
                               )}
                               {entryCopy ? (
                                 <>
-                                  {entryUpdate && !entryUpdateBusy && (
+                                  {entryUpdate && !entryUpdateBusy && !entryRemoving && (
                                     <button
                                       onClick={() => startUpdate(entryUpdate)}
                                       title={t('installs.updateHint', {
@@ -1418,7 +1452,7 @@ export default function InstallsPage({
                                     </button>
                                   )}
                                   <button
-                                    disabled={entryUpdateBusy}
+                                    disabled={entryUpdateBusy || entryRemoving}
                                     title={entryUpdateBusy ? t('installs.busyUpdating') : undefined}
                                     onClick={() =>
                                       buildsApi.launch(entryCopy.id).catch((error) =>
@@ -1459,11 +1493,12 @@ export default function InstallsPage({
                                   menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
                                   trigger={
                                     <button
+                                      disabled={entryRemoving}
                                       onClick={() =>
                                         setMoreMenuFor(moreMenuFor === entry.key ? null : entry.key)
                                       }
                                       title={t('installs.moreActions')}
-                                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
                                     >
                                       <DotsIcon className="h-3.5 w-3.5" />
                                     </button>

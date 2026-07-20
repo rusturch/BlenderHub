@@ -251,6 +251,7 @@
   "installs.verifyingChecksum": "Verifying checksum…",
   "installs.extracting": "Extracting…",
   "installs.finalizing": "Finalizing…",
+  "installs.removing": "Removing…",
   "installs.alreadyInstalled": "Blender {version} ({cycle}) is already installed — remove the existing copy first to reinstall it.",
   "installs.confirmUninstallTitle": "Uninstall Blender?",
   "installs.confirmRemoveTitle": "Remove from list?",

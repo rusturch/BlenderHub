@@ -94,7 +94,9 @@ export function ProgressLine({ progress }: { progress: InstallProgress }) {
         ? t('installs.verifyingChecksum')
         : progress.phase === 'extracting'
           ? t('installs.extracting')
-          : t('installs.finalizing')
+          : progress.phase === 'removing'
+            ? t('installs.removing')
+            : t('installs.finalizing')
   // one line, label beside the bar: stacking them put the bar above the row's
   // centre line (off from the buttons next to it) and made the row grow mid-install
   return (

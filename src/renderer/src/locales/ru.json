@@ -245,6 +245,7 @@
   "installs.verifyingChecksum": "Проверка контрольной суммы…",
   "installs.extracting": "Распаковка…",
   "installs.finalizing": "Завершение…",
+  "installs.removing": "Удаление…",
   "installs.alreadyInstalled": "Blender {version} ({cycle}) уже установлен — сначала удали существующую копию, чтобы переустановить её.",
   "installs.confirmUninstallTitle": "Удалить Blender?",
   "installs.confirmRemoveTitle": "Убрать из списка?",

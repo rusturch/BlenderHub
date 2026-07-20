@@ -641,6 +641,8 @@ export type InstallPhase =
   | 'done'
   | 'error'
   | 'cancelled'
+  // renderer-only: shown while an uninstall's trashItem call is in flight
+  | 'removing'
 
 export interface InstallProgress {
   buildId: string
