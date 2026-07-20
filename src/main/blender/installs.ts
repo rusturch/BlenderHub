@@ -1,8 +1,10 @@
-import { spawn } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { shell } from 'electron'
+import { tmpdir } from 'os'
 import { basename, join, resolve } from 'path'
+import { promisify } from 'util'
 import { getDataRoot } from '../paths'
 import { readConfig, updateConfig } from '../config'
 import { downloadToFile, fetchExpectedChecksum, throttle } from '../download'
@@ -13,6 +15,8 @@ import { minorOf } from '../../shared/blender-archive'
 import type { InstalledBuild, InstallProgress, RemoteBuild } from '../../shared/types'
 
 const META_FILE = 'launcher-meta.json'
+
+const execFileAsync = promisify(execFile)
 
 const defaultInstallsDir = (): string => join(getDataRoot(), 'installs')
 const defaultDownloadsDir = (): string => join(getDataRoot(), 'downloads')
@@ -187,6 +191,42 @@ function extractArchive(archivePath: string, destination: string): Promise<void>
   })
 }
 
+// macOS ships builds as a disk image instead of an archive. Mount it read-only,
+// copy the bundle out with ditto (unlike cp it preserves symlinks, permissions
+// and the extended attributes the code signature is checked against), unmount.
+// Returns the bundle's own name — it is not always exactly "Blender.app".
+async function extractDmg(dmgPath: string, destination: string): Promise<string> {
+  const mountPoint = await mkdtemp(join(tmpdir(), 'blenderhub-dmg-'))
+  // -noverify: the image's own checksum pass is redundant, the caller already
+  // matched the published sha256 and nothing is mounted before that succeeds
+  await execFileAsync('hdiutil', [
+    'attach',
+    dmgPath,
+    '-mountpoint',
+    mountPoint,
+    '-nobrowse',
+    '-readonly',
+    '-noverify',
+    '-noautoopen'
+  ])
+  try {
+    const bundles = (await readdir(mountPoint)).filter((name) => name.endsWith('.app')).sort()
+    if (bundles.length === 0) throw new Error('The disk image holds no .app bundle')
+    for (const bundle of bundles) {
+      await execFileAsync('ditto', [join(mountPoint, bundle), join(destination, bundle)])
+    }
+    // a quarantine flag inherited from the image would have Gatekeeper reject a
+    // bundle whose bytes we already matched against the published checksum
+    await execFileAsync('xattr', ['-dr', 'com.apple.quarantine', destination]).catch(() => {})
+    // forks ship a second bundle beside the main one (UPBGE adds Blenderplayer.app)
+    return bundles.find((name) => name === 'Blender.app') ?? bundles[0]
+  } finally {
+    // an image left mounted holds the download busy and litters /Volumes
+    await execFileAsync('hdiutil', ['detach', mountPoint, '-force']).catch(() => {})
+    await rm(mountPoint, { recursive: true, force: true })
+  }
+}
+
 // A fresh install retires the builds it supersedes (the row the UI showed with an
 // Update button): every other managed dir of the same branch — rolling builds move
 // commit by commit and the old one vanishes from the catalog anyway — plus stable-cycle
@@ -245,11 +285,9 @@ export async function installBuild(
 ): Promise<InstalledBuild> {
   assertTrustedSource(build.url)
   if (build.checksumUrl) assertTrustedSource(build.checksumUrl)
-  if (build.fileName.endsWith('.dmg')) {
-    throw new Error('macOS .dmg installs are not supported yet')
-  }
 
-  const dirName = build.fileName.replace(/\.(zip|tar\.xz|tar\.gz)$/i, '')
+  const isDiskImage = /\.dmg$/i.test(build.fileName)
+  const dirName = build.fileName.replace(/\.(zip|tar\.xz|tar\.gz|dmg)$/i, '')
   if (dirName === build.fileName || dirName !== basename(dirName) || dirName.includes('..')) {
     throw new Error(`Unexpected archive name: ${build.fileName}`)
   }
@@ -285,12 +323,22 @@ export async function installBuild(
     report({ phase: 'extracting' })
     const stagingDir = await mkdtemp(join(installsRoot, '.staging-'))
     try {
-      await extractArchive(archivePath, stagingDir)
+      const bundleName = isDiskImage ? await extractDmg(archivePath, stagingDir) : null
+      if (!bundleName) await extractArchive(archivePath, stagingDir)
       const entries = (await readdir(stagingDir, { withFileTypes: true })).filter((e) => !e.name.startsWith('.'))
-      const contentDir = entries.length === 1 && entries[0].isDirectory() ? join(stagingDir, entries[0].name) : stagingDir
+      // an archive nests everything one level down and that level becomes the install
+      // dir; a disk image yields the .app itself, which has to stay wrapped — the
+      // launcher meta lives next to the bundle, not inside it
+      const contentDir = bundleName
+        ? stagingDir
+        : entries.length === 1 && entries[0].isDirectory()
+          ? join(stagingDir, entries[0].name)
+          : stagingDir
 
       report({ phase: 'finalizing' })
-      const executableRelative = executableRelativePath()
+      const executableRelative = bundleName
+        ? join(bundleName, 'Contents', 'MacOS', 'Blender')
+        : executableRelativePath()
       try {
         await stat(join(contentDir, executableRelative))
       } catch {
