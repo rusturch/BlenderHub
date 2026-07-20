@@ -30,6 +30,9 @@ const execFileAsync = promisify(execFile)
 // theme is the closest thing to the panel's own.
 const WINDOWS_THEME_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize'
 const TRAY_ICON_BASE_SIZE = 16
+// macOS measures the menu bar in points, not pixels: 18 leaves the usual margin
+// inside a 24pt bar, and the @2x buffer below keeps it sharp on retina displays
+const MAC_TRAY_ICON_SIZE = 18
 
 let lightBackground = false
 
@@ -191,8 +194,25 @@ async function readLightBackground(): Promise<boolean> {
 }
 
 /** The tray asks for a 16px icon scaled by the display. Handing it that exact size keeps
- * the resize in Skia's hands — Windows stretches a mismatched bitmap far more crudely. */
+ * the resize in Skia's hands — Windows stretches a mismatched bitmap far more crudely.
+ * macOS is the opposite: sizes there are points, so multiplying by the scale factor
+ * hands it an icon twice the height of the menu bar. It also re-tints template images
+ * itself — including the inverted look while the menu is open — so the light/dark
+ * silhouette pick is the system's job there, not ours. */
 function trayIcon(): NativeImage {
+  if (process.platform === 'darwin') {
+    const source = nativeImage.createFromPath(trayBlack)
+    const scaled = source.resize({
+      width: MAC_TRAY_ICON_SIZE * 2,
+      height: MAC_TRAY_ICON_SIZE * 2,
+      quality: 'best'
+    })
+    // tagging the buffer as @2x makes those pixels a retina representation of an
+    // 18pt icon rather than a 36pt one
+    const icon = nativeImage.createFromBuffer(scaled.toPNG(), { scaleFactor: 2 })
+    icon.setTemplateImage(true)
+    return icon
+  }
   const size = Math.round(TRAY_ICON_BASE_SIZE * screen.getPrimaryDisplay().scaleFactor)
   return nativeImage
     .createFromPath(lightBackground ? trayBlack : trayWhite)
