@@ -1,20 +1,7 @@
 import { formatBytes } from '../../lib/format'
 import { useTranslation } from '../../lib/i18n'
 import type { InstallProgress } from '../../../../shared/types'
-import { CYCLE_STYLES, LONGEST_CYCLE } from './constants'
 
-export function CycleBadge({ cycle }: { cycle: string }) {
-  return (
-    <span
-      className={`grid shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-        CYCLE_STYLES[cycle] ?? 'bg-white/10 text-zinc-400'
-      }`}
-    >
-      <span className="invisible col-start-1 row-start-1">{LONGEST_CYCLE}</span>
-      <span className="col-start-1 row-start-1 text-center">{cycle}</span>
-    </span>
-  )
-}
 // Two things move this label between rows: the digit count and the singular /
 // plural form. Both worst cases ride along invisibly (with tabular figures, so
 // any two-digit sample stands in for every count of that length), keeping the

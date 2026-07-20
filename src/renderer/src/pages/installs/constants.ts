@@ -7,15 +7,3 @@ export const FILTER_LABEL_KEYS: Record<string, string> = {
   alpha: 'installs.filterAlpha',
   experimental: 'installs.filterExperimental'
 }
-// widest cycle name of the set below — rides invisibly inside every badge so the
-// badges form an even column and whatever follows them lines up across rows
-export const LONGEST_CYCLE = 'candidate'
-
-export const CYCLE_STYLES: Record<string, string> = {
-  stable: 'bg-emerald-500/15 text-emerald-400',
-  lts: 'bg-emerald-500/15 text-emerald-400',
-  candidate: 'bg-purple-500/15 text-purple-400',
-  rc: 'bg-purple-500/15 text-purple-400',
-  beta: 'bg-sky-500/15 text-sky-400',
-  alpha: 'bg-blender/15 text-blender'
-}

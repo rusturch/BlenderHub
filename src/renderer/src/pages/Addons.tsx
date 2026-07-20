@@ -23,7 +23,8 @@ import type {
   RunningBlender,
   VersionAddons
 } from '../../../shared/types'
-import { CYCLE_STYLES, LONGEST_CYCLE, SOURCE_TABS, TIER_HINT, WIDEST_MINOR } from './addons/constants'
+import { SOURCE_TABS, TIER_HINT, WIDEST_MINOR } from './addons/constants'
+import { Badge, BadgeSlot, CYCLE_STYLES, LONGEST_CYCLE } from '../components/Badge'
 import {
   buildMatrix,
   installSourceFor,
@@ -315,6 +316,16 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
   const okMinors = useMemo(
     () => new Set((data ?? []).filter((version) => !version.error).map((version) => version.minor)),
     [data]
+  )
+  // the widest badge label actually on screen — the badge slot reserves only this, so the
+  // columns stay even without padding every one out to the theoretical longest cycle word
+  const widestVersionBadge = useMemo(
+    () =>
+      (data ?? []).reduce((widest, version) => {
+        const label = (version.error ? t('addons.errorBadge') : version.releaseCycle) ?? ''
+        return label.length > widest.length ? label : widest
+      }, ''),
+    [data, t]
   )
 
   const toggleCell = useCallback((minor: string, addon: AddonInfo) => {
@@ -1064,24 +1075,21 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                   setVersionMenu((open) => (open === version.minor ? null : version.minor))
                                 }
                                 title={version.error ? version.error : `${version.version}${version.scanMethod === 'blender' ? t('addons.deepScannedSuffix') : t('addons.configReadSuffix')}`}
-                                className="flex w-full flex-col items-center gap-1 px-3 py-2.5 transition-colors hover:bg-white/5"
+                                className="flex w-full flex-col items-center gap-1 px-2 py-2.5 transition-colors hover:bg-white/5"
                               >
                                 <span className="grid text-sm font-semibold tabular-nums text-zinc-200">
                                   <span className="invisible col-start-1 row-start-1">{WIDEST_MINOR}</span>
                                   <span className="col-start-1 row-start-1 text-center">{version.minor}</span>
                                 </span>
                                 {showVersionBadge && (
-                                  <span
-                                    className={`grid rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
-                                      version.error ? 'bg-amber-500/15 text-amber-400' : CYCLE_STYLES[version.releaseCycle] ?? 'bg-white/10 text-zinc-400'
-                                    }`}
-                                  >
-                                    <span className="invisible col-start-1 row-start-1">{LONGEST_CYCLE}</span>
-                                    <span className="invisible col-start-1 row-start-1">{t('addons.errorBadge')}</span>
-                                    <span className="col-start-1 row-start-1 text-center">
+                                  <BadgeSlot align="center" size="sm" measure={widestVersionBadge || LONGEST_CYCLE}>
+                                    <Badge
+                                      size="sm"
+                                      tone={version.error ? 'bg-amber-500/15 text-amber-400' : CYCLE_STYLES[version.releaseCycle] ?? undefined}
+                                    >
                                       {version.error ? t('addons.errorBadge') : version.releaseCycle}
-                                    </span>
-                                  </span>
+                                    </Badge>
+                                  </BadgeSlot>
                                 )}
                               </button>
                             }
@@ -1221,8 +1229,11 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                         return (
                           <Fragment key={row.groupId}>
                           {/* row separators are painted by the divider overlays after the
-                              table, not border-t — see the rowDividerTops effect */}
-                          <tr className="bg-surface-card">
+                              table, not border-t — see the rowDividerTops effect. The row
+                              itself stays transparent so the dots sit on the darker page
+                              background, like the Sync matrix; only the sticky name cell
+                              keeps its own opaque fill for the horizontal-scroll overlap. */}
+                          <tr>
                             <td className="sticky left-0 z-10 bg-surface-card px-4 py-2.5">
                               <div className="flex items-center gap-2">
                                 {expandable ? (

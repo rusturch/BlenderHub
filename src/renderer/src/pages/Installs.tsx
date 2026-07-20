@@ -26,7 +26,8 @@ import type {
   RemoteBuild,
   RunningBlender
 } from '../../../shared/types'
-import { ActionLabel, CycleBadge, ProgressLine, ProjectCountLabel } from './installs/cells'
+import { ActionLabel, ProgressLine, ProjectCountLabel } from './installs/cells'
+import { BadgeSlot, CycleBadge, LONGEST_CYCLE } from '../components/Badge'
 import { FILTER_LABEL_KEYS } from './installs/constants'
 import { ChevronDownIcon, DotsIcon, GearIcon, RefreshIcon } from './installs/icons'
 import {
@@ -55,7 +56,9 @@ export default function InstallsPage({
   const [remoteError, setRemoteError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [installed, setInstalled] = useState<InstalledBuild[]>([])
-  const [filter, setFilter] = useState<string>('all')
+  // opening Installs normally lands on Stable; arriving via a version search (from
+  // Projects, Sync or the tray) stays on All so the searched build is not filtered out
+  const [filter, setFilter] = useState<string>(initialSearch ? 'all' : 'stable')
   const [query, setQuery] = useState(initialSearch ?? '')
   const [sortKey, setSortKey] = useState<'version' | 'date'>('version')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -74,9 +77,14 @@ export default function InstallsPage({
   const [progressById, setProgressById] = useState<Record<string, InstallProgress>>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showBranch, setShowBranch] = useState(() => uiGet('installs.showBranch') === '1')
-  const [showProjectCount, setShowProjectCount] = useState(() => uiGet('installs.showProjectCount') === '1')
-  const [showProjectCountAll, setShowProjectCountAll] = useState(
-    () => uiGet('installs.showProjectCountAll') === '1'
+  // the count chip ships on by default, on every version row; an explicit '0' turns it
+  // off. Its sub-option restricts the chips to installed versions and is off by default.
+  const [showProjectCount, setShowProjectCount] = useState(() => uiGet('installs.showProjectCount') !== '0')
+  const [projectCountInstalledOnly, setProjectCountInstalledOnly] = useState(
+    () => uiGet('installs.projectCountInstalledOnly') === '1'
+  )
+  const [hideEmptyProjectCount, setHideEmptyProjectCount] = useState(
+    () => uiGet('installs.hideEmptyProjectCount') === '1'
   )
   const [showSize, setShowSize] = useState(() => uiGet('installs.showSize') === '1')
   const [installedFilter, setInstalledFilter] = useState<'all' | 'installed' | 'not-installed'>(
@@ -100,8 +108,12 @@ export default function InstallsPage({
   }, [showProjectCount])
 
   useEffect(() => {
-    uiSet('installs.showProjectCountAll', showProjectCountAll ? '1' : '0')
-  }, [showProjectCountAll])
+    uiSet('installs.projectCountInstalledOnly', projectCountInstalledOnly ? '1' : '0')
+  }, [projectCountInstalledOnly])
+
+  useEffect(() => {
+    uiSet('installs.hideEmptyProjectCount', hideEmptyProjectCount ? '1' : '0')
+  }, [hideEmptyProjectCount])
 
   useEffect(() => {
     uiSet('installs.showSize', showSize ? '1' : '0')
@@ -910,12 +922,28 @@ export default function InstallsPage({
                 >
                   <input
                     type="checkbox"
-                    checked={showProjectCountAll}
+                    checked={projectCountInstalledOnly}
                     disabled={!showProjectCount}
-                    onChange={(event) => setShowProjectCountAll(event.target.checked)}
+                    onChange={(event) => setProjectCountInstalledOnly(event.target.checked)}
                     className="accent-blender"
                   />
-                  {t('installs.projectCountNotInstalled')}
+                  {t('installs.projectCountInstalledOnly')}
+                </label>
+                <label
+                  className={`flex items-center gap-2 rounded py-1.5 pl-7 pr-2 text-sm transition-colors ${
+                    showProjectCount
+                      ? 'cursor-pointer text-zinc-300 hover:bg-white/5'
+                      : 'cursor-not-allowed text-zinc-600'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={hideEmptyProjectCount}
+                    disabled={!showProjectCount}
+                    onChange={(event) => setHideEmptyProjectCount(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('installs.projectCountHideEmpty')}
                 </label>
                 <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
                   <input
@@ -1138,9 +1166,14 @@ export default function InstallsPage({
                           <span className="invisible">{longestVersion}</span>
                           <span className="absolute inset-y-0 left-0">{row.version}</span>
                         </span>
-                        <CycleBadge cycle={row.releaseCycle} />
+                        {/* the pill hugs its text; the slot reserves the widest cycle's
+                            width so the project chip after it lines up down the list */}
+                        <BadgeSlot measure={LONGEST_CYCLE}>
+                          <CycleBadge cycle={row.releaseCycle} />
+                        </BadgeSlot>
                         {showProjectCount &&
-                          (isInstalled || seriesHasInstalled || showProjectCountAll) && (
+                          (!projectCountInstalledOnly || isInstalled || seriesHasInstalled) &&
+                          !(hideEmptyProjectCount && usedBy.length === 0) && (
                           // display:contents keeps layout; the span only fences popover
                           // clicks (its list items are not buttons) off the row toggle
                           <span className="contents" onClick={(event) => event.stopPropagation()}>
@@ -1153,7 +1186,9 @@ export default function InstallsPage({
                             trigger={
                               <button
                                 onClick={() => setProjectsPopoverFor(projectsOpen ? null : row.key)}
-                                className="flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300 transition-colors hover:bg-white/20"
+                                // an empty count is dimmed — nothing uses this version, so the
+                                // chip stays legible but recedes next to the ones that matter
+                                className={`flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300 transition hover:bg-white/20 ${usedBy.length === 0 ? 'opacity-50 hover:opacity-100' : ''}`}
                               >
                                 <FolderIcon className="h-3 w-3 shrink-0" />
                                 <ProjectCountLabel count={usedBy.length} />

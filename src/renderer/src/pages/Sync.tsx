@@ -14,7 +14,8 @@ import { HIDDEN_SYNC_COMPONENT_IDS } from '../../../shared/types'
 import type { RunningBlender, SettingsBackupInfo, SyncApplyProgress, SyncCellStatus, SyncComponentId, SyncScanResult, SyncVersionColumn } from '../../../shared/types'
 import { locateWithDedup } from './installs/installs-utils'
 import { PENDING_SEP, cellKey, labelOf, hasAnySettings } from './sync/sync-utils'
-import { CYCLE_STYLES, COMPONENT_ROWS, LONGEST_CYCLE, PHASE_LABEL_KEYS, WIDEST_DATE, WIDEST_MINOR } from './sync/constants'
+import { COMPONENT_ROWS, PHASE_LABEL_KEYS, WIDEST_DATE, WIDEST_MINOR } from './sync/constants'
+import { Badge, BadgeSlot, CYCLE_STYLES, LONGEST_CYCLE } from '../components/Badge'
 import { FolderOpenIcon, TrashIcon, GearIcon, RefreshIcon } from './sync/icons'
 import { SyncCell } from './sync/cells'
 import type { CellFace } from './sync/types'
@@ -93,6 +94,16 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
 
   const busy = scanning || applying || restoring
   const columns = useMemo(() => data?.columns ?? [], [data])
+  // the widest cycle label actually on screen — the badge slot reserves only this, so the
+  // columns stay even without padding every one out to the theoretical longest cycle word
+  const widestCycleSample = useMemo(
+    () =>
+      columns.reduce((widest, column) => {
+        const label = (column.installed ? column.releaseCycle : t('sync.configOnly')) ?? ''
+        return label.length > widest.length ? label : widest
+      }, ''),
+    [columns, t]
+  )
   const sourceCol = useMemo(() => columns.find((column) => column.minor === source) ?? null, [columns, source])
 
   /** fold a scan result into all local state (links + statuses come from main) */
@@ -965,7 +976,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
             <p className="text-sm text-zinc-500">{t('sync.noSettingsFound')}</p>
           ) : (
             <>
-              <div className="mb-3 flex items-start gap-4 text-[11px] text-zinc-500">
+              <div className="mb-3 flex items-center gap-4 text-[11px] text-zinc-500">
                 <div className="flex flex-1 flex-wrap items-center gap-4">
                   <span className="flex items-center gap-1.5">
                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-blender" /> {t('sync.legendSource')}
@@ -1087,34 +1098,34 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                     ? `${column.version}${column.portable ? t('sync.portableInstallSuffix') : ''}`
                                     : t('sync.noInstalledBuildHint')
                                 }
-                                className="flex w-full flex-col items-center gap-1 px-3 py-2.5 transition-colors hover:bg-white/5"
+                                className="flex w-full flex-col items-center gap-1 px-2 py-2.5 transition-colors hover:bg-white/5"
                               >
-                                <span className="flex items-center gap-1.5 text-sm font-semibold tabular-nums text-zinc-200">
-                                  <span className="grid">
-                                    <span className="invisible col-start-1 row-start-1">{WIDEST_MINOR}</span>
-                                    <span className="col-start-1 row-start-1 text-center">{column.minor}</span>
-                                  </span>
-                                  {/* the dot holds its slot in every column, hidden where it does
-                                      not apply: otherwise the source column alone is wider by it */}
-                                  <span
-                                    className={`h-1.5 w-1.5 shrink-0 rounded-full bg-blender ${source === column.minor ? '' : 'invisible'}`}
-                                    title={t('sync.sourceDotTitle')}
-                                  />
+                                {/* the number stays centered in the column; the source dot
+                                    floats to its right out of flow so it neither shifts the
+                                    number nor widens the column */}
+                                <span className="relative grid text-sm font-semibold tabular-nums text-zinc-200">
+                                  <span className="invisible col-start-1 row-start-1">{WIDEST_MINOR}</span>
+                                  <span className="col-start-1 row-start-1 text-center">{column.minor}</span>
+                                  {source === column.minor && (
+                                    <span
+                                      className="absolute left-full top-1/2 ml-1 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-blender"
+                                      title={t('sync.sourceDotTitle')}
+                                    />
+                                  )}
                                 </span>
                                 {showCycleBadge && (
-                                  <span
-                                    className={`grid rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
-                                      column.installed
-                                        ? (CYCLE_STYLES[column.releaseCycle ?? ''] ?? 'bg-white/10 text-zinc-400')
-                                        : 'bg-white/10 text-zinc-400'
-                                    }`}
-                                  >
-                                    <span className="invisible col-start-1 row-start-1">{LONGEST_CYCLE}</span>
-                                    <span className="invisible col-start-1 row-start-1">{t('sync.configOnly')}</span>
-                                    <span className="col-start-1 row-start-1 text-center">
+                                  <BadgeSlot align="center" size="sm" measure={widestCycleSample || LONGEST_CYCLE}>
+                                    <Badge
+                                      size="sm"
+                                      tone={
+                                        column.installed
+                                          ? (CYCLE_STYLES[column.releaseCycle ?? ''] ?? undefined)
+                                          : undefined
+                                      }
+                                    >
                                       {column.installed ? column.releaseCycle : t('sync.configOnly')}
-                                    </span>
-                                  </span>
+                                    </Badge>
+                                  </BadgeSlot>
                                 )}
                               </button>
                             }
