@@ -4,7 +4,7 @@ import type { AddonInfo, LibraryAddon } from '../../../../shared/types'
 // where an available-but-not-installed row can be installed from, for the cell checkboxes
 export interface InstallSource {
   kind: 'superhive' | 'library' | 'blender_org' | 'backup'
-  /** grouping key: superhive pkgId | library id | blender.org groupId | `<module>@<sourceMinor>` */
+  /** grouping key: superhive pkgId | library id | blender.org pkgId | `<module>@<sourceMinor>` */
   id: string
   minBlender: string | null
   maxBlender: string | null

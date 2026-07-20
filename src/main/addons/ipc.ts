@@ -114,7 +114,10 @@ function parsePlan(raw: unknown): ApplyPlanRequest {
     }
     const idStr = requireString(id, 'install id')
     if (idStr.length > 300) throw new Error('Invalid install id')
-    if (kindStr === 'superhive' && !/^[A-Za-z0-9_]{1,120}$/.test(idStr)) throw new Error('Invalid extension id')
+    // both extension repos address a package by its extension id (a Python identifier)
+    if ((kindStr === 'superhive' || kindStr === 'blender_org') && !/^[A-Za-z0-9_]{1,120}$/.test(idStr)) {
+      throw new Error('Invalid extension id')
+    }
     if (kindStr === 'library' && !/^[a-f0-9]{12}$/.test(idStr)) throw new Error('Invalid library id')
     const request: PlanInstallRequest = {
       minor: requireMinor(minor),

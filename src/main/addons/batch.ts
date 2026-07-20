@@ -173,14 +173,6 @@ sys.stdout.flush()
 const atLeast = (version: string, base: string): boolean => compareVersionsDesc(version, base) <= 0
 const EXTENSIONS_SINCE = '4.2'
 
-/** row identity → the extensions.blender.org package id, when it has one */
-function pkgIdOf(canonicalId: string): string | null {
-  if (!canonicalId.startsWith('ext:')) return null
-  const id = canonicalId.slice('ext:'.length)
-  // quarantined custom-repo ids (ext:<pkg>@<repo>) never map to the official catalog
-  return id.includes('@') ? null : id
-}
-
 interface ResolvedInstall {
   request: PlanInstallRequest
   /** position in the plan — keys the batch op so results map back exactly */
@@ -285,20 +277,19 @@ export async function applyPlan(
       }
 
       if (request.kind === 'blender_org') {
-        if (!cache) return fail('error', 'Scan the versions first')
-        const row = rowsFor().find((candidate) => candidate.groupId === request.id)
-        if (!row) return fail('error', 'Add-on not found in the scanned data — rescan first')
-        // the grouping id becomes a DOWNLOAD identity only with trustworthy evidence:
-        // an official-repo install somewhere, or the curated legacy→extension bridge.
-        // A local-zip-only id could collide with an unrelated catalog package.
-        const catalogTrusted =
-          row.matchTier === 'alias' || row.members.some((member) => member.repoKind === 'official')
-        const pkgId = catalogTrusted ? pkgIdOf(row.canonicalId) : null
-        if (!pkgId) return fail('skipped', 'No online source for this add-on — add its file to the Library instead')
+        // the id IS the catalog package id, same contract as Superhive. It cannot be derived
+        // from a scanned row: most rows offering this source are catalog-only (the add-on is
+        // installed nowhere yet). The listing below is the authority on whether the package
+        // exists, and the download stays host-allowlisted + sha256-verified either way.
+        const pkgId = request.id
         if (!atLeast(request.minor, EXTENSIONS_SINCE)) {
           return fail('skipped', 'Extensions require Blender 4.2+ — for older versions add a legacy .zip to the Library')
         }
-        const cell = row.perMinor.get(request.minor)
+        // a scanned row exists only once the add-on is installed somewhere; it decides
+        // "already installed here" and which dangling module to retire. Custom-repo copies keep
+        // their quarantined `ext:<pkg>@<repo>` id, so they never match an official package.
+        const row = cache ? rowsFor().find((candidate) => candidate.canonicalId === `ext:${pkgId}`) : undefined
+        const cell = row?.perMinor.get(request.minor)
         if (cell && !cell.missing) return fail('skipped', 'Already installed here — use its toggle instead')
         const fullVersion = /^\d+\.\d+\.\d+/.exec(build.version)?.[0] ?? `${request.minor}.0`
         const release = await findCompatibleRelease(pkgId, fullVersion)

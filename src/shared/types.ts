@@ -192,7 +192,7 @@ export interface PlanInstallRequest {
   minor: string
   /** where the file comes from — resolved and re-validated entirely in main */
   kind: 'superhive' | 'blender_org' | 'library' | 'backup'
-  /** superhive → catalog pkgId; blender_org → row groupId; library → stored file id; backup → display id */
+  /** superhive/blender_org → catalog pkgId; library → stored file id; backup → display id */
   id: string
   /** backup only: the installed module to pack, and the version to pack it from */
   module?: string

@@ -83,6 +83,12 @@ export function numericVersion(version: string | null | undefined): string | nul
 /** why this add-on cannot be installed into that minor, or null when it can */
 export function installBlocker(src: InstallSource, minor: string): string | null {
   if (src.isExtension && compareVersionsDesc(minor, '4.2') > 0) return 'Extensions require Blender 4.2+'
+  // A catalog listing is queried for ONE Blender version (the newest installed one), and it
+  // answers with the newest release compatible with it — so those bounds describe that release,
+  // not the package. Older Blenders are served an older release of the same package, which is
+  // exactly what main re-queries per target version on Apply; gating other columns by the bounds
+  // we happen to hold would hide installs that the repo does offer.
+  if (src.kind === 'blender_org' || src.kind === 'superhive') return null
   if (src.minBlender) {
     const minMinor = src.minBlender.split('.').slice(0, 2).join('.')
     if (compareVersionsDesc(minor, minMinor) > 0) return `Requires Blender ${src.minBlender}+`
@@ -341,12 +347,17 @@ export function buildMatrix(
         }
       }
     } else if (row.sources.has('blender_org')) {
-      row.installVia = {
-        kind: 'blender_org',
-        id: row.groupId,
-        minBlender: null,
-        maxBlender: null,
-        isExtension: true
+      // keyed by the extension package id, like every other blender.org source above — a
+      // quarantined custom-repo id (ext:<pkg>@<repo>) is not an official package, so it gets none
+      const pkgId = row.canonicalId.startsWith('ext:') ? row.canonicalId.slice('ext:'.length) : null
+      if (pkgId && !pkgId.includes('@')) {
+        row.installVia = {
+          kind: 'blender_org',
+          id: pkgId,
+          minBlender: null,
+          maxBlender: null,
+          isExtension: true
+        }
       }
     } else {
       // default source = the cell carrying the newest add-on version; when versions are
