@@ -14,7 +14,7 @@ import { HIDDEN_SYNC_COMPONENT_IDS } from '../../../shared/types'
 import type { RunningBlender, SettingsBackupInfo, SyncApplyProgress, SyncCellStatus, SyncComponentId, SyncScanResult, SyncVersionColumn } from '../../../shared/types'
 import { locateWithDedup } from './installs/installs-utils'
 import { PENDING_SEP, cellKey, labelOf, hasAnySettings } from './sync/sync-utils'
-import { CYCLE_STYLES, COMPONENT_ROWS, PHASE_LABEL_KEYS } from './sync/constants'
+import { CYCLE_STYLES, COMPONENT_ROWS, LONGEST_CYCLE, PHASE_LABEL_KEYS, WIDEST_DATE, WIDEST_MINOR } from './sync/constants'
 import { FolderOpenIcon, TrashIcon, GearIcon, RefreshIcon } from './sync/icons'
 import { SyncCell } from './sync/cells'
 import type { CellFace } from './sync/types'
@@ -1058,7 +1058,13 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-surface-card">
-                      <th ref={stickyColRef} className="sticky left-0 z-10 bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      {/* w-full soaks the table's free width into the name column: without it
+                          auto layout splits the slack between the version columns, so a couple of
+                          installed versions each get a few hundred px of empty cell. With the slack
+                          parked here every version column shrinks to its own content instead, which
+                          is why the label, badge and date below each carry their widest sample
+                          invisibly — without those the columns only come out even by luck. */}
+                      <th ref={stickyColRef} className="sticky left-0 z-10 w-full bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
                         {t('sync.componentColumn')}
                       </th>
                       {/* p-0 + w-full trigger: the WHOLE header cell is the click target,
@@ -1083,24 +1089,31 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                 }
                                 className="flex w-full flex-col items-center gap-1 px-3 py-2.5 transition-colors hover:bg-white/5"
                               >
-                                <span className="flex items-center gap-1.5 text-sm font-semibold text-zinc-200">
-                                  {column.minor}
-                                  {source === column.minor && (
-                                    <span
-                                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-blender"
-                                      title={t('sync.sourceDotTitle')}
-                                    />
-                                  )}
+                                <span className="flex items-center gap-1.5 text-sm font-semibold tabular-nums text-zinc-200">
+                                  <span className="grid">
+                                    <span className="invisible col-start-1 row-start-1">{WIDEST_MINOR}</span>
+                                    <span className="col-start-1 row-start-1 text-center">{column.minor}</span>
+                                  </span>
+                                  {/* the dot holds its slot in every column, hidden where it does
+                                      not apply: otherwise the source column alone is wider by it */}
+                                  <span
+                                    className={`h-1.5 w-1.5 shrink-0 rounded-full bg-blender ${source === column.minor ? '' : 'invisible'}`}
+                                    title={t('sync.sourceDotTitle')}
+                                  />
                                 </span>
                                 {showCycleBadge && (
                                   <span
-                                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                                    className={`grid rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
                                       column.installed
                                         ? (CYCLE_STYLES[column.releaseCycle ?? ''] ?? 'bg-white/10 text-zinc-400')
                                         : 'bg-white/10 text-zinc-400'
                                     }`}
                                   >
-                                    {column.installed ? column.releaseCycle : t('sync.configOnly')}
+                                    <span className="invisible col-start-1 row-start-1">{LONGEST_CYCLE}</span>
+                                    <span className="invisible col-start-1 row-start-1">{t('sync.configOnly')}</span>
+                                    <span className="col-start-1 row-start-1 text-center">
+                                      {column.installed ? column.releaseCycle : t('sync.configOnly')}
+                                    </span>
                                   </span>
                                 )}
                               </button>
@@ -1265,10 +1278,15 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                           {t('sync.preferencesSaved')}
                         </td>
                         {columns.map((column) => (
-                          <td key={column.minor} className="px-3 py-2 text-center text-[10px] text-zinc-600">
-                            {column.userprefMtimeMs !== null
-                              ? formatDateNumeric(column.userprefMtimeMs / 1000)
-                              : '—'}
+                          <td key={column.minor} className="px-3 py-2 text-center text-[10px] tabular-nums text-zinc-600">
+                            <span className="grid">
+                              <span className="invisible col-start-1 row-start-1">{WIDEST_DATE}</span>
+                              <span className="col-start-1 row-start-1 text-center">
+                                {column.userprefMtimeMs !== null
+                                  ? formatDateNumeric(column.userprefMtimeMs / 1000)
+                                  : '—'}
+                              </span>
+                            </span>
                           </td>
                         ))}
                       </tr>

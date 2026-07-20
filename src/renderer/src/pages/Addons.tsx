@@ -23,7 +23,7 @@ import type {
   RunningBlender,
   VersionAddons
 } from '../../../shared/types'
-import { CYCLE_STYLES, SOURCE_TABS, TIER_HINT } from './addons/constants'
+import { CYCLE_STYLES, LONGEST_CYCLE, SOURCE_TABS, TIER_HINT, WIDEST_MINOR } from './addons/constants'
 import {
   buildMatrix,
   installSourceFor,
@@ -1038,7 +1038,14 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                           The corner is z-30 — strictly above the version cells: at an equal z
                           the later-DOM version headers would paint over it while sliding past
                           on horizontal scroll (the shadow band never overlaps the corner). */}
-                      <th ref={stickyColRef} className="sticky left-0 top-0 z-30 bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 header-hairline">
+                      {/* w-full soaks the table's free width into the name column: without it
+                          auto layout splits the slack between the version columns, so a couple of
+                          installed versions each get a few hundred px of empty cell. With the slack
+                          parked here every version column shrinks to its own content instead, which
+                          is why the label and badge below each carry their widest sample invisibly.
+                          Once enough versions are installed that those columns stop fitting, the
+                          table overflows into its horizontal scroll, as it already did. */}
+                      <th ref={stickyColRef} className="sticky left-0 top-0 z-30 w-full bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 header-hairline">
                         {t('addons.colAddon')}
                       </th>
                       {/* p-0 + w-full trigger: the WHOLE header cell is the click target,
@@ -1059,14 +1066,21 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                 title={version.error ? version.error : `${version.version}${version.scanMethod === 'blender' ? t('addons.deepScannedSuffix') : t('addons.configReadSuffix')}`}
                                 className="flex w-full flex-col items-center gap-1 px-3 py-2.5 transition-colors hover:bg-white/5"
                               >
-                                <span className="text-sm font-semibold text-zinc-200">{version.minor}</span>
+                                <span className="grid text-sm font-semibold tabular-nums text-zinc-200">
+                                  <span className="invisible col-start-1 row-start-1">{WIDEST_MINOR}</span>
+                                  <span className="col-start-1 row-start-1 text-center">{version.minor}</span>
+                                </span>
                                 {showVersionBadge && (
                                   <span
-                                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                                    className={`grid rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
                                       version.error ? 'bg-amber-500/15 text-amber-400' : CYCLE_STYLES[version.releaseCycle] ?? 'bg-white/10 text-zinc-400'
                                     }`}
                                   >
-                                    {version.error ? t('addons.errorBadge') : version.releaseCycle}
+                                    <span className="invisible col-start-1 row-start-1">{LONGEST_CYCLE}</span>
+                                    <span className="invisible col-start-1 row-start-1">{t('addons.errorBadge')}</span>
+                                    <span className="col-start-1 row-start-1 text-center">
+                                      {version.error ? t('addons.errorBadge') : version.releaseCycle}
+                                    </span>
                                   </span>
                                 )}
                               </button>
