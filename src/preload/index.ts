@@ -11,6 +11,7 @@ import type {
   InstalledBuild,
   InstallProgress,
   LauncherApi,
+  LauncherPlatform,
   LibraryAddon,
   LibraryAddResult,
   LibraryInstallProgress,
@@ -38,7 +39,15 @@ import type {
 // Application Security Requirement: the page gets only this narrow, typed API —
 // no raw ipcRenderer passthrough — so it can talk to exactly these channels and
 // nothing else. The preload has zero runtime deps and runs under the OS sandbox.
+// process.platform is one of the few Node globals a sandboxed preload keeps
+function hostPlatform(): LauncherPlatform {
+  if (process.platform === 'win32') return 'win32'
+  if (process.platform === 'darwin') return 'darwin'
+  return 'linux'
+}
+
 const api: LauncherApi = {
+  platform: hostPlatform(),
   builds: {
     listRemote: (refresh = false): Promise<RemoteBuild[]> => ipcRenderer.invoke('builds:list-remote', refresh),
     listInstalled: (): Promise<InstalledBuild[]> => ipcRenderer.invoke('builds:list-installed'),

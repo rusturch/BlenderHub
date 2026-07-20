@@ -2,14 +2,25 @@ import { parseArchiveFolderBuilds, parseReleaseFolders } from '../../../shared/b
 import { compareVersionsDesc, isReleasedCycle, mapBuilderEntries } from '../../../shared/blender-builds'
 import type { BuilderApiEntry } from '../../../shared/blender-builds'
 import { releasesLatestUrl } from '../../../shared/launcher-updates'
-import type { LauncherApi, RemoteBuild, StorageCategory } from '../../../shared/types'
+import type {
+  LauncherApi,
+  LauncherPlatform,
+  RemoteBuild,
+  StorageCategory
+} from '../../../shared/types'
 
 const DESKTOP_ONLY = 'This action works only in the desktop app window'
 const ALL_ARCHITECTURES = ['amd64', 'x86_64', 'arm64']
 
-function detectPlatform(): string {
+function previewPlatform(): LauncherPlatform {
   const ua = navigator.platform.toLowerCase()
-  return ua.includes('win') ? 'windows' : ua.includes('mac') ? 'darwin' : 'linux'
+  return ua.includes('win') ? 'win32' : ua.includes('mac') ? 'darwin' : 'linux'
+}
+
+/** same host, named the way builder.blender.org names its download platforms */
+function detectPlatform(): string {
+  const platform = previewPlatform()
+  return platform === 'win32' ? 'windows' : platform
 }
 
 async function fetchBuilderCategoryViaProxy(
@@ -309,7 +320,18 @@ function createPreviewFallbackApi(): LauncherApi {
     // the browser preview has no native tray — nothing ever fires
     onNavigate: () => () => {}
   }
-  return { builds, projects, addons, settingsSync, storage, uiState, updates, themes, tray }
+  return {
+    platform: previewPlatform(),
+    builds,
+    projects,
+    addons,
+    settingsSync,
+    storage,
+    uiState,
+    updates,
+    themes,
+    tray
+  }
 }
 
 let fallbackApi: LauncherApi | null = null

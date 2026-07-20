@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from '../lib/i18n'
+import { isMac } from '../lib/platform'
 import { getLauncherApi } from '../lib/preview-fallback'
 import Dropdown from './Dropdown'
 
-// Width Windows reserves for the native minimize/maximize/close overlay
-// (BrowserWindow's titleBarOverlay, drawn by the OS on top of our content) —
-// must match main/index.ts's titleBarOverlay.height-driven button cluster so
-// our own controls never render underneath it.
-const OVERLAY_RESERVED_WIDTH = 140
+// Both platforms let the OS draw its window buttons on top of this bar, just in
+// opposite corners, so the side they land on has to stay empty. Windows puts the
+// minimize/maximize/close overlay on the right (BrowserWindow's titleBarOverlay);
+// macOS keeps its traffic lights on the left, at the offset main/index.ts pins
+// them to. Widths cover the button cluster plus a little breathing room.
+const WINDOWS_OVERLAY_WIDTH = 140
+const MAC_TRAFFIC_LIGHTS_WIDTH = 82
+const EDGE_PADDING = 12
 
 function BellIcon({ className = 'h-5 w-5' }: { className?: string }) {
   return (
@@ -32,6 +36,7 @@ interface TitleBarProps {
 
 export default function TitleBar({ onUpdateClick }: TitleBarProps) {
   const { t } = useTranslation()
+  const mac = isMac()
   const [menuOpen, setMenuOpen] = useState(false)
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [latestVersion, setLatestVersion] = useState<string | null>(null)
@@ -60,8 +65,11 @@ export default function TitleBar({ onUpdateClick }: TitleBarProps) {
 
   return (
     <div
-      className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-white/5 bg-surface-panel pl-3 [-webkit-app-region:drag]"
-      style={{ paddingRight: OVERLAY_RESERVED_WIDTH }}
+      className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-white/5 bg-surface-panel [-webkit-app-region:drag]"
+      style={{
+        paddingLeft: mac ? MAC_TRAFFIC_LIGHTS_WIDTH : EDGE_PADDING,
+        paddingRight: mac ? EDGE_PADDING : WINDOWS_OVERLAY_WIDTH
+      }}
     >
       <Dropdown
         open={menuOpen}

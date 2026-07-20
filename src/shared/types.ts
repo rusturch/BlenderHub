@@ -621,7 +621,12 @@ export interface TrayApi {
   onNavigate: (callback: (page: Page) => void) => () => void
 }
 
+/** host OS, narrowed to the three targets the launcher ships for */
+export type LauncherPlatform = 'win32' | 'darwin' | 'linux'
+
 export interface LauncherApi {
+  /** static, not a call: the page needs it during its first render (window chrome layout) */
+  platform: LauncherPlatform
   builds: BuildsApi
   projects: ProjectsApi
   addons: AddonsApi

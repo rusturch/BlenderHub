@@ -14,6 +14,15 @@ import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
 import { attachTrayWindowBehavior, revealMainWindow, setupTray } from './tray'
 import { migrateLegacyDataDir } from './paths'
 
+// TitleBar's CSS height (renderer/src/components/TitleBar.tsx) — the OS-drawn
+// window buttons sit inside that bar, so both platforms measure against it.
+const TOP_BAR_HEIGHT = 40
+// trafficLightPosition pins the top-left of the traffic lights' frame. The frame
+// is 4px taller than the 12px circles inside it but hugs them horizontally, so
+// the two axes need different numbers to end up with an even gap around them.
+const TRAFFIC_LIGHT_FRAME_HEIGHT = 16
+const TRAFFIC_LIGHT_LEFT_INSET = 14
+
 function createWindow(): void {
   // Application Security Requirement: renderer is isolated (contextIsolation + OS sandbox,
   // no Node integration) and window.open targets are denied — external https links are
@@ -30,15 +39,27 @@ function createWindow(): void {
     icon,
     title: 'Blender Hub', // used for the taskbar/Alt-Tab only — no caption text is drawn (see titleBarStyle below)
     // hides the native OS caption (title text) while keeping real, OS-drawn
-    // minimize/maximize/close buttons as an overlay; renderer draws its own
-    // wide top bar underneath/around them (App.tsx: TitleBar component) and
-    // must leave the top-right corner clear — height here must match its CSS height
+    // window buttons; the renderer draws its own wide top bar underneath/around
+    // them (App.tsx: TitleBar component) and must leave their corner clear.
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: chrome.titlebar,
-      symbolColor: chrome.symbol,
-      height: 40
-    },
+    // Windows/Linux draw the button cluster as an overlay we get to colour and
+    // size. macOS ignores those options and keeps its own traffic lights, which
+    // default to the position of a system title bar — shorter than ours, so they
+    // need moving down to end up centered.
+    ...(process.platform === 'darwin'
+      ? {
+          trafficLightPosition: {
+            x: TRAFFIC_LIGHT_LEFT_INSET,
+            y: (TOP_BAR_HEIGHT - TRAFFIC_LIGHT_FRAME_HEIGHT) / 2
+          }
+        }
+      : {
+          titleBarOverlay: {
+            color: chrome.titlebar,
+            symbolColor: chrome.symbol,
+            height: TOP_BAR_HEIGHT
+          }
+        }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
