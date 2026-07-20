@@ -3,6 +3,7 @@ import type { BuilderApiEntry } from '../../shared/blender-builds'
 import type { RemoteBuild } from '../../shared/types'
 import { fetchArchiveBuilds } from './archive-api'
 import { getCurrentTarget } from './target'
+import { httpGet } from '../http'
 
 const BUILDER_API_BASE = 'https://builder.blender.org/download/'
 
@@ -21,7 +22,7 @@ export function assertTrustedSource(url: string): void {
 type BuilderCategory = 'daily' | 'experimental' | 'patch'
 
 async function fetchBuilderCategory(category: BuilderCategory): Promise<RemoteBuild[]> {
-  const response = await fetch(`${BUILDER_API_BASE}${category}/?format=json&v=2`, {
+  const response = await httpGet(`${BUILDER_API_BASE}${category}/?format=json&v=2`, 'builder.blender.org', {
     headers: { accept: 'application/json' }
   })
   if (!response.ok) throw new Error(`builder.blender.org responded with HTTP ${response.status}`)
