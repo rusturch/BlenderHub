@@ -92,6 +92,13 @@ export interface NewProjectInput {
   folder: string
 }
 
+/** result of duplicating a .blend — enough for the renderer to place the new card */
+export interface DuplicatedFile {
+  path: string
+  mtimeMs: number
+  size: number
+}
+
 export interface ProjectsApi {
   listFolders: () => Promise<ProjectFolder[]>
   addFolder: () => Promise<ProjectFolder[]>
@@ -103,7 +110,7 @@ export interface ProjectsApi {
   openFile: (path: string, installId: string) => Promise<void>
   reveal: (path: string) => Promise<void>
   renameFile: (path: string, newName: string) => Promise<string>
-  duplicateFile: (path: string) => Promise<string>
+  duplicateFile: (path: string) => Promise<DuplicatedFile>
   setPreview: (path: string) => Promise<boolean>
   clearPreview: (path: string) => Promise<void>
   moveProject: (path: string) => Promise<string | null>

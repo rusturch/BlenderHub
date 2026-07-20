@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageLayout, { EmptyState } from '../components/PageLayout'
 import Dropdown from '../components/Dropdown'
 import { useDialog } from '../components/Dialog'
@@ -10,7 +10,7 @@ import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
 import type { BlendFileInfo, InstalledBuild, ProjectFolder } from '../../../shared/types'
 import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon } from './projects/icons'
-import { readFlag } from './projects/projects-utils'
+import { fileNameOf, readFlag } from './projects/projects-utils'
 import { FilterSelect } from '../components/FilterSelect'
 import type { ProjectsPageProps } from './projects/types'
 
@@ -75,17 +75,30 @@ export default function ProjectsPage({
     uiSet('projects.cardSize', String(cardSize))
   }, [showDate, showSize, showPath, showVersion, cardSize])
 
+  // Guarded by a sequence number: optimistic patches (rename/duplicate/delete) kick a
+  // background reconcile scan, and a stale response from an earlier scan must not
+  // overwrite state that a newer patch or scan already produced.
+  const refreshSeqRef = useRef(0)
   const refreshFiles = useCallback(async () => {
+    const seq = ++refreshSeqRef.current
     setScanning(true)
     setError(null)
     try {
-      setFiles(await projectsApi.listFiles())
+      const fresh = await projectsApi.listFiles()
+      if (seq === refreshSeqRef.current) setFiles(fresh)
     } catch (cause) {
-      setError(cleanErrorMessage(cause))
+      if (seq === refreshSeqRef.current) setError(cleanErrorMessage(cause))
     } finally {
-      setScanning(false)
+      if (seq === refreshSeqRef.current) setScanning(false)
     }
   }, [projectsApi])
+
+  // Apply a local edit to the loaded list right away — the full rescan that follows
+  // only reconciles, so file operations feel instant.
+  const patchFiles = useCallback((updater: (prev: BlendFileInfo[]) => BlendFileInfo[]) => {
+    refreshSeqRef.current++
+    setFiles((prev) => (prev ? updater(prev) : prev))
+  }, [])
 
   useEffect(() => {
     ;(async () => {
@@ -260,12 +273,13 @@ export default function ProjectsPage({
       if (!ok) return
       try {
         await projectsApi.removeFromList(file.path)
-        await refreshFiles()
+        patchFiles((prev) => prev.filter((known) => known.path !== file.path))
+        void refreshFiles()
       } catch (cause) {
         await alertDialog(cleanErrorMessage(cause))
       }
     },
-    [projectsApi, refreshFiles, confirmDialog, alertDialog, t]
+    [projectsApi, refreshFiles, patchFiles, confirmDialog, alertDialog, t]
   )
 
   const deleteProjectFile = useCallback(
@@ -280,12 +294,13 @@ export default function ProjectsPage({
       if (!ok) return
       try {
         await projectsApi.deleteFile(file.path)
-        await refreshFiles()
+        patchFiles((prev) => prev.filter((known) => known.path !== file.path))
+        void refreshFiles()
       } catch (cause) {
         await alertDialog(cleanErrorMessage(cause))
       }
     },
-    [projectsApi, refreshFiles, confirmDialog, alertDialog, t]
+    [projectsApi, refreshFiles, patchFiles, confirmDialog, alertDialog, t]
   )
 
   const findMissing = useCallback(
@@ -303,13 +318,26 @@ export default function ProjectsPage({
   const duplicateFile = useCallback(
     async (file: BlendFileInfo) => {
       try {
-        await projectsApi.duplicateFile(file.path)
-        await refreshFiles()
+        const copy = await projectsApi.duplicateFile(file.path)
+        patchFiles((prev) => {
+          const entry: BlendFileInfo = {
+            ...file,
+            path: copy.path,
+            name: fileNameOf(copy.path),
+            mtimeMs: copy.mtimeMs,
+            size: copy.size
+          }
+          const index = prev.findIndex((known) => known.path === file.path)
+          return index < 0
+            ? [...prev, entry]
+            : [...prev.slice(0, index + 1), entry, ...prev.slice(index + 1)]
+        })
+        void refreshFiles()
       } catch (cause) {
         await alertDialog(cleanErrorMessage(cause))
       }
     },
-    [projectsApi, refreshFiles, alertDialog]
+    [projectsApi, refreshFiles, patchFiles, alertDialog]
   )
 
   const openRename = useCallback((file: BlendFileInfo) => {
@@ -322,13 +350,19 @@ export default function ProjectsPage({
     const trimmed = renameValue.trim()
     if (!trimmed) return
     try {
-      await projectsApi.renameFile(renameFor.path, trimmed)
+      const oldPath = renameFor.path
+      const renamed = await projectsApi.renameFile(oldPath, trimmed)
       setRenameFor(null)
-      await refreshFiles()
+      patchFiles((prev) =>
+        prev.map((known) =>
+          known.path === oldPath ? { ...known, path: renamed, name: fileNameOf(renamed) } : known
+        )
+      )
+      void refreshFiles()
     } catch (cause) {
       await alertDialog(cleanErrorMessage(cause))
     }
-  }, [renameFor, renameValue, projectsApi, refreshFiles, alertDialog])
+  }, [renameFor, renameValue, projectsApi, refreshFiles, patchFiles, alertDialog])
 
   const versions = useMemo(() => {
     const present = new Set<string>()
@@ -353,14 +387,21 @@ export default function ProjectsPage({
     return [...visibleFiles].sort((a, b) => {
       // missing files have no date/size/version — pin them to the top so sorting doesn't bury them
       if (a.missing !== b.missing) return a.missing ? -1 : 1
-      if (sortKey === 'name') return b.name.localeCompare(a.name) * factor
-      if (sortKey === 'date') return (b.mtimeMs - a.mtimeMs) * factor
-      if (sortKey === 'size') return (b.size - a.size) * factor
-      // version: files without a detected version always sort last
-      if (!a.blenderVersion && !b.blenderVersion) return 0
-      if (!a.blenderVersion) return 1
-      if (!b.blenderVersion) return -1
-      return compareVersionsDesc(a.blenderVersion, b.blenderVersion) * factor
+      let cmp = 0
+      if (sortKey === 'name') cmp = b.name.localeCompare(a.name) * factor
+      else if (sortKey === 'date') cmp = (b.mtimeMs - a.mtimeMs) * factor
+      else if (sortKey === 'size') cmp = (b.size - a.size) * factor
+      else {
+        // version: files without a detected version always sort last
+        if (!a.blenderVersion && !b.blenderVersion) cmp = 0
+        else if (!a.blenderVersion) return 1
+        else if (!b.blenderVersion) return -1
+        else cmp = compareVersionsDesc(a.blenderVersion, b.blenderVersion) * factor
+      }
+      if (cmp !== 0) return cmp
+      // deterministic tiebreaker: with ties left to array order, an optimistic insert
+      // and the reconcile scan could place the same card differently (visible jump)
+      return a.name.localeCompare(b.name) || a.path.localeCompare(b.path)
     })
   }, [visibleFiles, sortKey, sortDir])
 

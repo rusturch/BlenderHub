@@ -14,6 +14,7 @@ import type {
   LibraryAddon,
   LibraryAddResult,
   LibraryInstallProgress,
+  DuplicatedFile,
   NewProjectInput,
   Page,
   ProjectFolder,
@@ -81,7 +82,7 @@ const api: LauncherApi = {
     reveal: (path: string): Promise<void> => ipcRenderer.invoke('projects:reveal', path),
     renameFile: (path: string, newName: string): Promise<string> =>
       ipcRenderer.invoke('projects:rename-file', path, newName),
-    duplicateFile: (path: string): Promise<string> =>
+    duplicateFile: (path: string): Promise<DuplicatedFile> =>
       ipcRenderer.invoke('projects:duplicate-file', path),
     setPreview: (path: string): Promise<boolean> => ipcRenderer.invoke('projects:set-preview', path),
     clearPreview: (path: string): Promise<void> => ipcRenderer.invoke('projects:clear-preview', path),

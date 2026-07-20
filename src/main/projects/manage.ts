@@ -1,4 +1,4 @@
-import { constants, copyFile, mkdir, readdir, rename, rm } from 'fs/promises'
+import { constants, copyFile, mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { shell } from 'electron'
 import { basename, dirname, extname, join, resolve } from 'path'
@@ -97,7 +97,11 @@ export async function renameProject(blendPath: string, newFileName: string): Pro
 // Copy next to the original as "<name> copy.blend" ("<name> copy 2.blend", …), the
 // custom preview sidecar included. An individually-tracked source gets its copy
 // tracked too — a folder-scanned one is picked up by the next scan on its own.
-export async function duplicateProject(blendPath: string): Promise<string> {
+// Returns the copy's real stat so the renderer can place the card exactly where
+// the reconcile scan will put it.
+export async function duplicateProject(
+  blendPath: string
+): Promise<{ path: string; mtimeMs: number; size: number }> {
   const dir = dirname(blendPath)
   const base = basename(blendPath).replace(/\.blend$/i, '')
   let targetPath = join(dir, `${base} copy.blend`)
@@ -117,7 +121,8 @@ export async function duplicateProject(blendPath: string): Promise<string> {
   if (tracked.some((known) => resolve(known) === resolve(blendPath))) {
     await addProjectFile(targetPath)
   }
-  return targetPath
+  const copyStat = await stat(targetPath)
+  return { path: targetPath, mtimeMs: copyStat.mtimeMs, size: copyStat.size }
 }
 
 export async function deleteProject(blendPath: string): Promise<void> {
