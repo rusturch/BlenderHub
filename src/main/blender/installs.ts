@@ -383,7 +383,14 @@ export async function installBuild(
 
 export async function launchInstalled(installId: string): Promise<void> {
   const build = await findInstalled(installId)
-  const child = spawn(build.executable, [], { cwd: build.path, detached: true, stdio: 'ignore' })
+  // windowsHide: blender.exe is a console-subsystem app; detached without it makes
+  // Windows spawn a fresh (visible) console for it. CREATE_NO_WINDOW keeps it hidden.
+  const child = spawn(build.executable, [], {
+    cwd: build.path,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  })
   child.unref()
 }
 

@@ -118,7 +118,14 @@ async function openProjectFromTray(filePath: string, lang: TrayLang): Promise<vo
     notify(lang === 'ru' ? 'Нет установленной версии Blender' : 'No installed Blender version found')
     return
   }
-  const child = spawn(build.executable, [filePath], { cwd: build.path, detached: true, stdio: 'ignore' })
+  // windowsHide: blender.exe is a console-subsystem app; detached without it makes
+  // Windows spawn a fresh (visible) console for it. CREATE_NO_WINDOW keeps it hidden.
+  const child = spawn(build.executable, [filePath], {
+    cwd: build.path,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  })
   child.unref()
   recordProjectOpened(filePath)
     .then(() => refreshTrayMenu())

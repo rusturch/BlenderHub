@@ -221,7 +221,14 @@ export function registerProjectsIpc(): void {
     const filePath = await assertAllowed(requireString(rawPath, 'file path'))
     if (!filePath.toLowerCase().endsWith('.blend')) throw new Error('Not a .blend file')
     const build = await findInstalled(requireString(rawInstallId, 'install id'))
-    const child = spawn(build.executable, [filePath], { cwd: build.path, detached: true, stdio: 'ignore' })
+    // windowsHide: blender.exe is a console-subsystem app; detached without it makes
+    // Windows spawn a fresh (visible) console for it. CREATE_NO_WINDOW keeps it hidden.
+    const child = spawn(build.executable, [filePath], {
+      cwd: build.path,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    })
     child.unref()
     // best-effort bookkeeping for the tray's Recent Projects — must never fail the open itself
     recordProjectOpened(filePath)
