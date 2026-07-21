@@ -7,6 +7,12 @@ import { cleanErrorMessage, formatBytes } from '../lib/format'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
 import { TRAY_PAGES_KEY, TRAY_PAGE_IDS, parseTrayPages, serializeTrayPages } from '../../../shared/tray-menu'
+import {
+  AUTOSTART_HIDDEN_KEY,
+  AUTOSTART_KEY,
+  autostartEnabled,
+  autostartHiddenEnabled
+} from '../../../shared/autostart'
 import type {
   BlendFileInfo,
   Page,
@@ -54,6 +60,23 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
     uiGet('window.minimizeBehavior') === 'tray' ? 'tray' : 'taskbar'
   )
   const [trayPages, setTrayPages] = useState<Page[]>(() => parseTrayPages(uiGet(TRAY_PAGES_KEY)))
+  // keys are read by the main process (main/autostart.ts) — shared/autostart.ts holds the literals
+  const [startupEnabled, setStartupEnabled] = useState(() => autostartEnabled(uiGet(AUTOSTART_KEY)))
+  const [startupMinimized, setStartupMinimized] = useState(() =>
+    autostartHiddenEnabled(uiGet(AUTOSTART_HIDDEN_KEY))
+  )
+
+  const toggleStartupEnabled = useCallback(() => {
+    const next = !startupEnabled
+    setStartupEnabled(next)
+    uiSet(AUTOSTART_KEY, next ? 'on' : 'off')
+  }, [startupEnabled])
+
+  const toggleStartupMinimized = useCallback(() => {
+    const next = !startupMinimized
+    setStartupMinimized(next)
+    uiSet(AUTOSTART_HIDDEN_KEY, next ? 'on' : 'off')
+  }, [startupMinimized])
 
   const changeCloseBehavior = useCallback((value: string) => {
     setCloseBehavior(value)
@@ -464,6 +487,39 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
         />
 
         <ThemeCard />
+
+        <SectionCard title={t('settings.startup')} hint={t('settings.startupHint')}>
+          <div className="flex flex-col gap-2">
+            <label
+              title={desktopOnlyTitle}
+              className="flex cursor-pointer items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors hover:text-zinc-100"
+            >
+              <input
+                type="checkbox"
+                checked={startupEnabled}
+                onChange={toggleStartupEnabled}
+                disabled={!isDesktop}
+                className="accent-blender disabled:cursor-not-allowed"
+              />
+              {t('settings.startupWithSystem')}
+            </label>
+            <label
+              title={desktopOnlyTitle}
+              className={`flex cursor-pointer items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors hover:text-zinc-100 ${
+                startupEnabled ? '' : 'opacity-40'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={startupMinimized}
+                onChange={toggleStartupMinimized}
+                disabled={!isDesktop || !startupEnabled}
+                className="accent-blender disabled:cursor-not-allowed"
+              />
+              {t('settings.startupMinimized')}
+            </label>
+          </div>
+        </SectionCard>
 
         <SectionCard title={t('settings.tray')} hint={t('settings.trayHint')}>
           <div className="flex flex-col gap-3">

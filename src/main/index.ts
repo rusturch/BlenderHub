@@ -8,10 +8,11 @@ import { registerAddonsIpc } from './addons/ipc'
 import { registerSettingsSyncIpc } from './sync/ipc'
 import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
-import { registerUiStateIpc } from './ui-state'
+import { registerUiStateIpc, readUiState } from './ui-state'
 import { registerThemesIpc } from './themes/ipc'
 import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
-import { attachTrayWindowBehavior, revealMainWindow, setupTray } from './tray'
+import { setupAutostart, shouldStartHidden } from './autostart'
+import { attachTrayWindowBehavior, ensureTrayForHiddenStartup, revealMainWindow, setupTray } from './tray'
 import { migrateLegacyDataDir } from './paths'
 
 // TitleBar's CSS height (renderer/src/components/TitleBar.tsx) — the OS-drawn
@@ -23,7 +24,7 @@ const TOP_BAR_HEIGHT = 40
 const TRAFFIC_LIGHT_FRAME_HEIGHT = 16
 const TRAFFIC_LIGHT_LEFT_INSET = 14
 
-function createWindow(): void {
+function createWindow(startHidden = false): void {
   // Application Security Requirement: renderer is isolated (contextIsolation + OS sandbox,
   // no Node integration) and window.open targets are denied — external https links are
   // handed to the system browser instead of opening privileged windows.
@@ -69,7 +70,8 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // an autostarted launch waits in the tray; the app is fully loaded meanwhile
+    if (!startHidden) mainWindow.show()
   })
 
   attachTrayWindowBehavior(mainWindow)
@@ -114,6 +116,7 @@ if (!app.requestSingleInstanceLock()) {
     registerUpdatesIpc()
     registerThemesIpc()
     setupTray()
+    setupAutostart()
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
@@ -122,7 +125,9 @@ if (!app.requestSingleInstanceLock()) {
     // before createWindow: the pre-paint window background must match the theme
     await initWindowChrome()
 
-    createWindow()
+    const startHidden = shouldStartHidden(await readUiState())
+    if (startHidden) ensureTrayForHiddenStartup()
+    createWindow(startHidden)
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

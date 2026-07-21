@@ -76,6 +76,7 @@ const RECENT_PROJECTS_LIMIT = 5
 
 let closeToTray = false
 let minimizeToTray = false
+let hiddenStartup = false
 let tray: Tray | null = null
 let quitting = false
 
@@ -235,12 +236,20 @@ function ensureTray(): void {
 // the tray icon exists exactly while at least one behavior can hide the window,
 // so a hidden window is never unreachable and an unused icon never lingers
 function syncTray(): void {
-  if (closeToTray || minimizeToTray) {
+  if (closeToTray || minimizeToTray || hiddenStartup) {
     ensureTray()
   } else {
     tray?.destroy()
     tray = null
   }
+}
+
+/** An autostarted launch that skips showing the window must be reachable from the
+ * tray even when neither hide behavior is enabled; the icon is kept until the
+ * window first shows, after which the regular behaviors decide its fate. */
+export function ensureTrayForHiddenStartup(): void {
+  hiddenStartup = true
+  ensureTray()
 }
 
 export function setupTray(): void {
@@ -250,6 +259,9 @@ export function setupTray(): void {
     closeToTray = state[CLOSE_BEHAVIOR_KEY] !== 'quit'
     minimizeToTray = state[MINIMIZE_BEHAVIOR_KEY] === 'tray'
     syncTray()
+    // a hidden-startup tray may have been created before this read finished,
+    // with the default (dark-taskbar) silhouette — recolor it now
+    tray?.setImage(trayIcon())
   })
   nativeTheme.on('updated', () => void refreshTrayIcon())
   onUiStateSet((key, value) => {
@@ -283,6 +295,12 @@ export function attachTrayWindowBehavior(win: BrowserWindow): void {
     win.hide()
   }
   win.on('minimize', onMinimize as unknown as () => void)
+  // the first reveal ends the hidden-startup grace period for the tray icon
+  win.on('show', () => {
+    if (!hiddenStartup) return
+    hiddenStartup = false
+    syncTray()
+  })
 }
 
 /** Bring back a window that may be hidden in the tray (second launch, dock click). */
