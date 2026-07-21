@@ -11,7 +11,7 @@ import { registerUpdatesIpc } from './updates/ipc'
 import { registerUiStateIpc, readUiState } from './ui-state'
 import { registerThemesIpc } from './themes/ipc'
 import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
-import { setupAutostart, shouldStartHidden } from './autostart'
+import { APP_USER_MODEL_ID, setupAutostart, shouldStartHidden } from './autostart'
 import { attachTrayWindowBehavior, ensureTrayForHiddenStartup, revealMainWindow, setupTray } from './tray'
 import { migrateLegacyDataDir } from './paths'
 
@@ -70,8 +70,9 @@ function createWindow(startHidden = false): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    // an autostarted launch waits in the tray; the app is fully loaded meanwhile
-    if (!startHidden) mainWindow.show()
+    // an autostarted launch waits in the tray; the app is fully loaded meanwhile —
+    // unless a second instance already asked for the window while it was booting
+    if (!startHidden || revealRequested) mainWindow.show()
   })
 
   attachTrayWindowBehavior(mainWindow)
@@ -93,16 +94,23 @@ function createWindow(startHidden = false): void {
 // a portable exe is double-launched easily (no pinned shortcut), and two processes
 // would interleave read-modify-write on the same config.json — the write queue only
 // serializes within one process. Hand a second launch over to the running instance.
+// A manual launch can hand over to a hidden autostarted instance that has no
+// window yet — revealMainWindow() would find nothing to show and the user's
+// double-click would produce no window at all. Latch the request instead and
+// satisfy it at ready-to-show.
+let revealRequested = false
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.on('second-instance', () => {
+    revealRequested = true
     // also un-hides a window parked in the tray
     revealMainWindow()
   })
 
   app.whenReady().then(async () => {
-    electronApp.setAppUserModelId('com.rusturch.blender-hub')
+    electronApp.setAppUserModelId(APP_USER_MODEL_ID)
 
     // must happen before any IPC handler reads config.json from the data root
     migrateLegacyDataDir()

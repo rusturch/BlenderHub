@@ -489,10 +489,14 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
         <ThemeCard />
 
         <SectionCard title={t('settings.startup')} hint={t('settings.startupHint')}>
-          <div className="flex flex-col gap-2">
+          <div
+            title={desktopOnlyTitle}
+            className={`flex flex-col gap-2 ${isDesktop ? '' : 'opacity-40'}`}
+          >
             <label
-              title={desktopOnlyTitle}
-              className="flex cursor-pointer items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors hover:text-zinc-100"
+              className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
+                isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
+              }`}
             >
               <input
                 type="checkbox"
@@ -504,9 +508,10 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
               {t('settings.startupWithSystem')}
             </label>
             <label
-              title={desktopOnlyTitle}
-              className={`flex cursor-pointer items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors hover:text-zinc-100 ${
-                startupEnabled ? '' : 'opacity-40'
+              className={`flex items-center gap-1.5 self-start text-xs transition-colors ${
+                isDesktop && startupEnabled
+                  ? 'cursor-pointer text-zinc-300 hover:text-zinc-100'
+                  : 'cursor-not-allowed text-zinc-600'
               }`}
             >
               <input
