@@ -626,7 +626,7 @@ export default function ProjectsPage({
                 return (
                   <div
                     key={file.path}
-                    className="relative flex flex-col rounded-xl border border-white/5 bg-surface-panel"
+                    className="group relative flex flex-col rounded-xl border border-white/5 bg-surface-panel transition-all duration-150 hover:border-blender/40 hover:bg-surface-menu hover:shadow-lg hover:shadow-black/40"
                     onDoubleClick={() => {
                       if (!file.missing && selected) requestOpen(file, selected)
                     }}
@@ -774,7 +774,7 @@ export default function ProjectsPage({
                         <img
                           src={file.thumbnail}
                           alt=""
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                           draggable={false}
                         />
                       ) : (
