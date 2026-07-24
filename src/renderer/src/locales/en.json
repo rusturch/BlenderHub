@@ -558,8 +558,6 @@
   "addons.emptySuperhiveConnect": "Connect Superhive in Settings to see your purchased extensions here.",
   "addons.emptyBlenderOrg": "No extensions from extensions.blender.org.",
   "addons.emptyBuiltin": "No built-in add-ons reported.",
-  "addons.hideDetails": "Hide details",
-  "addons.showDetails": "Show this add-on’s description and version details",
   "addons.rowOnEverywhere": "On in every version — click to turn off everywhere",
   "addons.rowTurnOnEverywhere": "Turn on in every version — enables it where installed and installs it where missing",
   "addons.versionCountHint": "{count} versions — click ▸ to see them",

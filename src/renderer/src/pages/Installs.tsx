@@ -1377,13 +1377,11 @@ export default function InstallsPage({
                           left margin is set to match the row's own right padding (px-4),
                           on top of the shared flex gap — otherwise the bare glyph sits
                           close to its neighbor but far from the row edge on the other side */}
+                      {/* collapsed it points left (rotate-90), expanded it turns down;
+                          the color stays put in both states */}
                       <ChevronDownIcon
-                        className={`ml-2.5 h-4 w-4 shrink-0 transition-transform ${
-                          drawerMinor === null
-                            ? 'invisible'
-                            : drawerExpanded
-                              ? 'rotate-180 text-blender'
-                              : 'text-zinc-500'
+                        className={`ml-2.5 h-4 w-4 shrink-0 text-zinc-500 transition-transform ${
+                          drawerMinor === null ? 'invisible' : drawerExpanded ? '' : 'rotate-90'
                         }`}
                       />
                     </div>

@@ -550,8 +550,6 @@
   "addons.emptySuperhiveConnect": "Подключи Superhive в настройках, чтобы видеть здесь купленные расширения.",
   "addons.emptyBlenderOrg": "Нет расширений с extensions.blender.org.",
   "addons.emptyBuiltin": "Встроенных аддонов не обнаружено.",
-  "addons.hideDetails": "Скрыть подробности",
-  "addons.showDetails": "Показать описание аддона и подробности по версиям",
   "addons.rowOnEverywhere": "Включён во всех версиях — кликни, чтобы выключить везде",
   "addons.rowTurnOnEverywhere": "Включить во всех версиях — включает там, где установлен, и устанавливает там, где отсутствует",
   "addons.versionCountHint": "{count} версий — кликни ▸, чтобы посмотреть",

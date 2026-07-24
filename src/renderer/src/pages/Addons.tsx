@@ -1234,19 +1234,32 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                               background, like the Sync matrix; only the sticky name cell
                               keeps its own opaque fill for the horizontal-scroll overlap. */}
                           <tr>
-                            <td className="sticky left-0 z-10 bg-surface-card px-4 py-2.5">
+                            <td
+                              onClick={
+                                expandable
+                                  ? (event) => {
+                                      // the whole name cell toggles the row (same pattern as an
+                                      // Installs series row); clicks that land on its own controls
+                                      // (the arrow button, the row checkbox) are theirs alone
+                                      if ((event.target as HTMLElement).closest('button, input')) return
+                                      toggleExpanded(row.groupId)
+                                    }
+                                  : undefined
+                              }
+                              className={`sticky left-0 z-10 bg-surface-card px-4 py-2.5 ${
+                                expandable ? 'cursor-pointer hover:bg-surface-hover' : ''
+                              }`}
+                            >
                               <div className="flex items-center gap-2">
-                                {expandable ? (
-                                  <button
-                                    onClick={() => toggleExpanded(row.groupId)}
-                                    title={isExpanded ? t('addons.hideDetails') : t('addons.showDetails')}
-                                    className="flex h-4 w-3.5 shrink-0 items-center justify-center text-zinc-500 transition-colors hover:text-zinc-200"
-                                  >
-                                    {isExpanded ? '▾' : '▸'}
-                                  </button>
-                                ) : (
-                                  <span className="inline-block h-4 w-3.5 shrink-0" />
-                                )}
+                                {/* plain indicator, Installs-style — the whole name cell is the
+                                    toggle; rows with nothing to unfold keep an invisible one so
+                                    the names line up. Collapsed it points right (-rotate-90),
+                                    expanded it turns down; the color stays put in both states. */}
+                                <ChevronDownIcon
+                                  className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${
+                                    !expandable ? 'invisible' : isExpanded ? '' : '-rotate-90'
+                                  }`}
+                                />
                                 {isDesktop && activatable.length > 0 && (
                                   <input
                                     type="checkbox"
@@ -1347,9 +1360,28 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                   {isExpanded && showSubRows && !isCore ? (
                                     // sub-rows are unfolded: the real control lives on them. A row
                                     // expanded only for its description keeps its cells live.
-                                    <span className="text-zinc-700" title={t('addons.managedBelow')}>
-                                      {(addon && !isCore) || installable ? '·' : '–'}
-                                    </span>
+                                    // Where the collapsed cell was a dot/tick BUTTON, the stand-in
+                                    // is a disabled button with the same box — a bare text glyph
+                                    // has different line metrics and the row visibly changes height
+                                    // on expand (verified empirically; span lookalikes with the same
+                                    // padding do not match either — buttons export their baseline
+                                    // differently). Dash cells are text in both states, so the plain
+                                    // span keeps their parity.
+                                    (addon && !isCore) || installable ? (
+                                      <button
+                                        disabled
+                                        title={t('addons.managedBelow')}
+                                        className="rounded p-1 disabled:cursor-default"
+                                      >
+                                        <span className="inline-block h-2.5 w-2.5 overflow-hidden text-center leading-[10px] text-zinc-700">
+                                          ·
+                                        </span>
+                                      </button>
+                                    ) : (
+                                      <span className="text-zinc-700" title={t('addons.managedBelow')}>
+                                        –
+                                      </span>
+                                    )
                                   ) : installable ? (
                                     <InstallCell
                                       staged={pendingInstall.has(installKey(version.minor, row.groupId))}
