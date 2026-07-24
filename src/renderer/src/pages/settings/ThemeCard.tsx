@@ -7,10 +7,12 @@ import { getLauncherApi } from '../../lib/preview-fallback'
 import { onUiChanged, uiGet, uiSet } from '../../lib/ui-store'
 import {
   applyThemeColors,
+  applyThemeSelection,
   BUILTIN_THEMES,
   cssColorToHex,
   DEFAULT_PRESET_ID,
-  DEFAULT_THEME_COLORS
+  DEFAULT_THEME_COLORS,
+  onThemeSelectionChanged
 } from '../../lib/theme'
 import {
   sanitizeThemeColors,
@@ -344,17 +346,44 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
 
   const selectTheme = useCallback(
     (option: ThemeOption) => {
-      const next = { ...DEFAULT_THEME_COLORS, ...option.colors }
+      // drop any pending debounced color write — it predates the switch and
+      // would clobber the freshly persisted selection when the timer fires
+      if (persistTimer.current !== null) {
+        window.clearTimeout(persistTimer.current)
+        persistTimer.current = null
+      }
+      pendingColors.current = null
       setSelection(option.selectionId)
-      setColors(next)
+      setColors({ ...DEFAULT_THEME_COLORS, ...option.colors })
       setDirty(false)
       setMenuOpen(false)
-      applyThemeColors(next)
-      uiSet(THEME_SELECTED_UI_KEY, option.selectionId)
-      uiSet(THEME_DIRTY_UI_KEY, '0')
-      persistColors(next, true)
+      applyThemeSelection(option.selectionId, option.colors)
     },
-    [persistColors]
+    []
+  )
+
+  // theme switched via the title-bar picker (same window — ui-store echoes are
+  // filtered, so onUiChanged stays silent): mirror the new selection here
+  useEffect(
+    () =>
+      onThemeSelectionChanged(() => {
+        if (persistTimer.current !== null) {
+          window.clearTimeout(persistTimer.current)
+          persistTimer.current = null
+        }
+        pendingColors.current = null
+        setSelection(uiGet(THEME_SELECTED_UI_KEY) ?? `${BUILTIN_PREFIX}${DEFAULT_PRESET_ID}`)
+        setDirty(uiGet(THEME_DIRTY_UI_KEY) === '1')
+        const stored = uiGet(THEME_COLORS_UI_KEY)
+        if (stored) {
+          try {
+            setColors({ ...DEFAULT_THEME_COLORS, ...sanitizeThemeColors(JSON.parse(stored)) })
+          } catch {
+            // half-written value — skip
+          }
+        }
+      }),
+    []
   )
 
   const editColor = useCallback(

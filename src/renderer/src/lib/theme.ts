@@ -67,6 +67,29 @@ export function applyThemeColors(colors: ThemeColors): void {
   }
 }
 
+// Selection changes made through pickers in THIS window — ui-store's onUiChanged
+// only reports foreign windows (own writes are filtered as echoes), so the
+// Settings card and the title-bar picker subscribe here to stay in sync.
+type ThemeSelectionListener = () => void
+const selectionListeners = new Set<ThemeSelectionListener>()
+
+export function onThemeSelectionChanged(listener: ThemeSelectionListener): () => void {
+  selectionListeners.add(listener)
+  return () => {
+    selectionListeners.delete(listener)
+  }
+}
+
+/** apply a theme and persist it as the active selection (drops any dirty edits) */
+export function applyThemeSelection(selectionId: string, colors: ThemeColors): void {
+  const next = { ...DEFAULT_THEME_COLORS, ...colors }
+  applyThemeColors(next)
+  uiSet(THEME_SELECTED_UI_KEY, selectionId)
+  uiSet(THEME_DIRTY_UI_KEY, '0')
+  uiSet(THEME_COLORS_UI_KEY, JSON.stringify(plainThemeColors(next)))
+  for (const listener of selectionListeners) listener()
+}
+
 /** restore the persisted look; runs after initUiStore, before the first render */
 export function initTheme(): void {
   applyPersistedTheme()

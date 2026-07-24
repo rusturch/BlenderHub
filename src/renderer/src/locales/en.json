@@ -13,6 +13,7 @@
   "sidebar.collapse": "Collapse sidebar",
   "sidebar.expand": "Expand sidebar",
 
+  "titlebar.theme": "Theme",
   "titlebar.notifications": "Notifications",
   "titlebar.noNotifications": "No notifications yet.",
 
