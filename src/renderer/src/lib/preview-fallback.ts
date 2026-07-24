@@ -325,6 +325,14 @@ function createPreviewFallbackApi(): LauncherApi {
     // the browser preview has no native tray — nothing ever fires
     onNavigate: () => () => {}
   }
+  const drop: LauncherApi['drop'] = {
+    classify: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    handle: async () => {
+      throw new Error(DESKTOP_ONLY)
+    }
+  }
   return {
     platform: previewPlatform(),
     builds,
@@ -335,7 +343,11 @@ function createPreviewFallbackApi(): LauncherApi {
     uiState,
     updates,
     themes,
-    tray
+    tray,
+    drop,
+    // browsers expose no OS paths for dragged files — the overlay shows its
+    // desktop-only notice before ever calling this
+    getPathForFile: () => ''
   }
 }
 

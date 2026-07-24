@@ -5,6 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { registerBlenderIpc } from './blender/ipc'
 import { registerProjectsIpc } from './projects/ipc'
 import { registerAddonsIpc } from './addons/ipc'
+import { registerDropIpc } from './drop/ipc'
 import { registerSettingsSyncIpc } from './sync/ipc'
 import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
@@ -91,6 +92,13 @@ function createWindow(startHidden = false): void {
     return { action: 'deny' }
   })
 
+  // a file dropped past the renderer's own preventDefault would navigate the window
+  // to file:// — refuse every real navigation away from the loaded page (reloads
+  // keep the same URL and stay allowed)
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow.webContents.getURL()) event.preventDefault()
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -126,6 +134,7 @@ if (!app.requestSingleInstanceLock()) {
     registerBlenderIpc()
     registerProjectsIpc()
     registerAddonsIpc()
+    registerDropIpc()
     registerSettingsSyncIpc()
     registerStorageIpc()
     registerUpdatesIpc()

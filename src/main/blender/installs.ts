@@ -9,7 +9,7 @@ import { getDataRoot } from '../paths'
 import { readConfig, updateConfig } from '../config'
 import { downloadToFile, fetchExpectedChecksum, throttle } from '../download'
 import { assertTrustedSource } from './builds-api'
-import { detectBlenderAt, listLocated, mapLimit, removeLocated } from './locate'
+import { detectBlenderAt, detectBuild, listLocated, mapLimit, removeLocated } from './locate'
 import { compareVersionsDesc, isReleasedCycle, STABLE_CYCLES } from '../../shared/blender-builds'
 import { minorOf } from '../../shared/blender-archive'
 import type { InstalledBuild, InstallProgress, RemoteBuild } from '../../shared/types'
@@ -378,6 +378,85 @@ export async function installBuild(
     }
   } finally {
     await rm(archivePath, { force: true })
+  }
+}
+
+// Install a build from an archive the user already has on disk (drag-and-drop).
+// Same extract → verify-executable → meta → rename path as installBuild, but the
+// identity comes from asking the extracted binary itself (`--version`) — a local
+// file carries no catalog metadata and no published checksum to compare against.
+// The source archive belongs to the user and is left untouched; superseded copies
+// are never retired here — a hand-fed archive is not a catalog update.
+export async function installLocalArchive(
+  archivePath: string,
+  onProgress: (progress: InstallProgress) => void
+): Promise<InstalledBuild> {
+  const fileName = basename(archivePath)
+  const isDiskImage = /\.dmg$/i.test(fileName)
+  if (isDiskImage && process.platform !== 'darwin') {
+    throw new Error('A .dmg disk image can only be installed on macOS')
+  }
+  const dirName = fileName.replace(/\.(zip|tar\.xz|tar\.gz|dmg)$/i, '')
+  if (dirName === fileName || dirName !== basename(dirName) || dirName.includes('..')) {
+    throw new Error(`Unexpected archive name: ${fileName}`)
+  }
+  const installsRoot = await installsDir()
+  const finalDir = join(installsRoot, dirName)
+  if (existsSync(finalDir)) throw new Error('This build is already installed')
+  await mkdir(installsRoot, { recursive: true })
+
+  const buildId = `drop:${archivePath}`
+  const report = (patch: Omit<InstallProgress, 'buildId'>): void => onProgress({ buildId, ...patch })
+
+  report({ phase: 'extracting' })
+  const stagingDir = await mkdtemp(join(installsRoot, '.staging-'))
+  try {
+    const bundleName = isDiskImage ? await extractDmg(archivePath, stagingDir) : null
+    if (!bundleName) await extractArchive(archivePath, stagingDir)
+    const entries = (await readdir(stagingDir, { withFileTypes: true })).filter((e) => !e.name.startsWith('.'))
+    const contentDir = bundleName
+      ? stagingDir
+      : entries.length === 1 && entries[0].isDirectory()
+        ? join(stagingDir, entries[0].name)
+        : stagingDir
+
+    report({ phase: 'finalizing' })
+    const executableRelative = bundleName
+      ? join(bundleName, 'Contents', 'MacOS', 'Blender')
+      : executableRelativePath()
+    try {
+      await stat(join(contentDir, executableRelative))
+    } catch {
+      throw new Error('The archive does not look like a Blender build (executable not found)')
+    }
+    const detected = await detectBuild(join(contentDir, executableRelative))
+    const meta: InstallMeta = {
+      version: detected.version,
+      releaseCycle: detected.releaseCycle,
+      branch: detected.branch,
+      commit: detected.commit,
+      installedAt: new Date().toISOString(),
+      executableRelative
+    }
+    await writeFile(join(contentDir, META_FILE), JSON.stringify(meta, null, 2))
+    await rename(contentDir, finalDir)
+    report({ phase: 'done' })
+    return {
+      id: dirName,
+      managed: true,
+      version: meta.version,
+      releaseCycle: meta.releaseCycle,
+      branch: meta.branch,
+      commit: meta.commit,
+      installedAt: meta.installedAt,
+      path: finalDir,
+      executable: join(finalDir, executableRelative)
+    }
+  } catch (error) {
+    report({ phase: 'error', error: error instanceof Error ? error.message : String(error) })
+    throw error
+  } finally {
+    await rm(stagingDir, { recursive: true, force: true })
   }
 }
 

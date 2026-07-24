@@ -625,6 +625,44 @@ export interface TrayApi {
   onNavigate: (callback: (page: Page) => void) => () => void
 }
 
+/**
+ * What one path dragged into the window was recognized as:
+ * - 'project'        — a .blend file, added to the Projects list
+ * - 'project-folder' — a plain folder, registered as a project folder
+ * - 'addon'          — a .py/.zip add-on, stored in the add-on library
+ * - 'build-archive'  — a Blender build archive, extracted into the installs folder
+ * - 'build-folder'   — a folder holding Blender installation(s), registered in place
+ */
+export type DroppedItemKind =
+  | 'project'
+  | 'project-folder'
+  | 'addon'
+  | 'build-archive'
+  | 'build-folder'
+  | 'unknown'
+
+export interface DroppedItem {
+  path: string
+  name: string
+  kind: DroppedItemKind
+  /** for 'unknown': why this item cannot be handled, when known */
+  detail: string | null
+}
+
+export interface DropHandleResult {
+  /** 'skipped' — already present (library duplicate, already-tracked build); not an error */
+  status: 'ok' | 'skipped' | 'error'
+  /** ok — what was added (name / versions); error — the reason */
+  detail: string | null
+}
+
+export interface DropApi {
+  /** classify dragged-in absolute paths (cheap fs sniffing — no Blender launches) */
+  classify: (paths: string[]) => Promise<DroppedItem[]>
+  /** act on one classified item; build archives report builds:install-progress with buildId "drop:<path>" */
+  handle: (path: string, kind: DroppedItemKind) => Promise<DropHandleResult>
+}
+
 /** host OS, narrowed to the three targets the launcher ships for */
 export type LauncherPlatform = 'win32' | 'darwin' | 'linux'
 
@@ -640,6 +678,9 @@ export interface LauncherApi {
   updates: UpdatesApi
   themes: ThemesApi
   tray: TrayApi
+  drop: DropApi
+  /** synchronous webUtils bridge: the OS path of a File dragged into the window ('' when it has none) */
+  getPathForFile: (file: File) => string
 }
 
 export type InstallPhase =

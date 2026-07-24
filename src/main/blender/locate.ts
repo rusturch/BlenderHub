@@ -74,7 +74,7 @@ export async function findBlenderRoots(dir: string): Promise<BlenderRoot[]> {
 
 // `blender --version` prints e.g. "Blender 5.3.0 Alpha" followed by
 // "build hash: …" / "build branch: …" lines (branch is absent in older builds)
-async function detectBuild(executable: string): Promise<{
+export async function detectBuild(executable: string): Promise<{
   version: string
   releaseCycle: string
   branch?: string

@@ -50,7 +50,23 @@ import {
 import { StatusCell, InstallCell } from './addons/cells'
 import type { InstallSource, MatrixRow, MatrixUnit } from './addons/types'
 
-export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highlight?: string) => void }) {
+function rowMatchesQuery(row: MatrixRow, q: string): boolean {
+  return (
+    row.name.toLowerCase().includes(q) ||
+    row.category.toLowerCase().includes(q) ||
+    row.canonicalId.toLowerCase().includes(q) ||
+    [...row.perMinor.values()].some((addon) => addon.module.toLowerCase().includes(q))
+  )
+}
+
+export default function AddonsPage({
+  onOpenSettings,
+  initialSearch
+}: {
+  onOpenSettings?: (highlight?: string) => void
+  /** pre-filled search (drag-and-drop lands here with the added add-on's name) */
+  initialSearch?: string
+}) {
   const { api, isDesktop } = getLauncherApi()
   const addonsApi = api.addons
   const { t } = useTranslation()
@@ -92,7 +108,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
   const [applyProgress, setApplyProgress] = useState<AddonApplyProgress | null>(null)
   const [installProgress, setInstallProgress] = useState<LibraryInstallProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialSearch ?? '')
   const [tab, setTab] = useState<AddonSource>('user')
   // Blender-style "Show Tags" filter: a category is visible unless it's in this set
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => new Set())
@@ -303,15 +319,26 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
     return rows.filter((row) => {
       if (!row.sources.has(tab)) return false
       if (row.category && hiddenCategories.has(row.category)) return false
-      if (!q) return true
-      return (
-        row.name.toLowerCase().includes(q) ||
-        row.category.toLowerCase().includes(q) ||
-        row.canonicalId.toLowerCase().includes(q) ||
-        [...row.perMinor.values()].some((addon) => addon.module.toLowerCase().includes(q))
-      )
+      return !q || rowMatchesQuery(row, q)
     })
   }, [rows, tab, query, hiddenCategories])
+
+  // a pre-filled search names a just-added add-on, but its row can live on another
+  // tab than the default one (a dropped file that matches a blender.org catalog
+  // entry or a Superhive purchase folds into that tab's row) — once rows exist,
+  // hop to the first tab that actually shows a match instead of an empty list
+  const initialTabPickedRef = useRef(!initialSearch)
+  useEffect(() => {
+    if (initialTabPickedRef.current || rows.length === 0) return
+    initialTabPickedRef.current = true
+    const q = (initialSearch ?? '').trim().toLowerCase()
+    if (!q) return
+    const hasMatch = (source: AddonSource): boolean =>
+      rows.some((row) => row.sources.has(source) && rowMatchesQuery(row, q))
+    if (hasMatch(tab)) return
+    const fallback = SOURCE_TABS.find(({ key }) => hasMatch(key))
+    if (fallback) setTab(fallback.key)
+  }, [rows, initialSearch, tab])
 
   const okMinors = useMemo(
     () => new Set((data ?? []).filter((version) => !version.error).map((version) => version.minor)),

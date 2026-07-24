@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AddonApplyProgress,
   AddonScanProgress,
@@ -7,6 +7,9 @@ import type {
   ApplyPlanOutcome,
   ApplyPlanRequest,
   BlendFileInfo,
+  DroppedItem,
+  DroppedItemKind,
+  DropHandleResult,
   ExtensionCatalogItem,
   InstalledBuild,
   InstallProgress,
@@ -227,7 +230,15 @@ const api: LauncherApi = {
         ipcRenderer.removeListener('tray:navigate', listener)
       }
     }
-  }
+  },
+  drop: {
+    classify: (paths: string[]): Promise<DroppedItem[]> => ipcRenderer.invoke('drop:classify', paths),
+    handle: (path: string, kind: DroppedItemKind): Promise<DropHandleResult> =>
+      ipcRenderer.invoke('drop:handle', path, kind)
+  },
+  // webUtils only exists in the preload world — File objects cross the context
+  // bridge by reference, so the page can resolve dragged-in files to OS paths
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file)
 }
 
 if (process.contextIsolated) {

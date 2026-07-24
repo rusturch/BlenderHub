@@ -55,6 +55,12 @@ export function openThemeEditorWindow(): void {
     return { action: 'deny' }
   })
 
+  // same backstop as the main window: a file dropped on this window (which has no
+  // drop UI of its own) must not navigate it to file://
+  window.webContents.on('will-navigate', (event, url) => {
+    if (url !== window.webContents.getURL()) event.preventDefault()
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#theme-editor`)
   } else {
