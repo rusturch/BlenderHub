@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { uiGet, uiSet } from './ui-store'
+import { onUiChanged, uiGet, uiSet } from './ui-store'
 
 // Dictionaries are every JSON file in ../locales, discovered at build time by
 // Vite — drop a new locales/<code>.json in and it shows up in the language
@@ -68,6 +68,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     uiSet('launcher.language', language)
   }, [language])
+
+  // a language switch in another window (the floating theme editor and the main
+  // window share this setting) re-renders this one live
+  useEffect(
+    () =>
+      onUiChanged((key, value) => {
+        if (key === 'launcher.language' && DICTIONARIES[value]) setLanguage(value)
+      }),
+    []
+  )
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>) =>

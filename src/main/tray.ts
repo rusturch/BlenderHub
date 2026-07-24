@@ -80,8 +80,12 @@ let hiddenStartup = false
 let tray: Tray | null = null
 let quitting = false
 
+// the window every reveal path targets — getAllWindows()[0] is the NEWEST
+// window, which would be the floating theme editor whenever it is open
+let mainWindow: BrowserWindow | null = null
+
 function showWindow(): void {
-  const win = BrowserWindow.getAllWindows()[0]
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
   if (!win) return
   win.show()
   if (win.isMinimized()) win.restore()
@@ -289,6 +293,10 @@ export function setupTray(): void {
 }
 
 export function attachTrayWindowBehavior(win: BrowserWindow): void {
+  mainWindow = win
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
+  })
   win.on('close', (event) => {
     if (quitting || !closeToTray) return
     event.preventDefault()

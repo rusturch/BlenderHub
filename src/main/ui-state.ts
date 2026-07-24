@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import { mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { getDataRoot } from './paths'
@@ -75,6 +75,11 @@ export function registerUiStateIpc(): void {
     }
     return setUiValue(rawKey, rawValue).then(() => {
       for (const listener of listeners) listener(rawKey, rawValue)
+      // windows mirror each other's settings live (e.g. the floating theme
+      // editor recoloring the main window); renderers drop their own echoes
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send('ui:state-changed', rawKey, rawValue)
+      }
     })
   })
 }

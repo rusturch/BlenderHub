@@ -2,6 +2,11 @@
   "name": "Blender Light",
   "colors": {
     "accent": "#e87d0d",
+    "accent-button": "#e87d0d",
+    "accent-button-hover": "#c9660a",
+    "selection": "#e87d0d",
+    "card-outline": "#e87d0d",
+    "card-hover": "#ffffff",
     "background": "#ececec",
     "foreground": "#24292f",
     "on-accent": "#ffffff",

@@ -688,14 +688,14 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
               setPendingInstall(new Map())
             }}
             disabled={busy}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
           >
             {t('common.discard')}
           </button>
           <button
             onClick={applyChanges}
             disabled={busy || refreshing}
-            className="rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:opacity-50"
+            className="rounded-lg bg-accent-button px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:opacity-50"
           >
             {applying ? t('addons.applying') : t('addons.applyCount', { count: pendingCount })}
           </button>
@@ -705,7 +705,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
         onClick={() => runScan()}
         disabled={busy || refreshing || !isDesktop}
         title={isDesktop ? t('addons.rescanTitle') : t('addons.desktopOnly')}
-        className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50"
+        className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
       >
         <RefreshIcon className={`h-4 w-4 ${scanning || refreshing ? 'animate-spin' : ''}`} />
       </button>
@@ -713,7 +713,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
         onClick={addToLibrary}
         disabled={busy || !isDesktop}
         title={isDesktop ? t('addons.addFileTitle') : t('addons.desktopOnly')}
-        className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+        className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
       >
         {libraryAdding ? t('addons.adding') : t('addons.addFile')}
       </button>
@@ -789,7 +789,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                         key={key}
                         onClick={() => setTab(key)}
                         className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                          tab === key ? 'bg-blender/15 text-blender' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
+                          tab === key ? 'bg-selection/15 text-selection' : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
                         }`}
                       >
                         {dotOn !== null && (
@@ -825,7 +825,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                         <button
                           onClick={() => setCategoryMenuOpen((open) => !open)}
                           title={t('addons.filterByCategory')}
-                          className={`flex items-center gap-1 rounded-lg border border-white/10 p-1.5 transition-colors hover:bg-white/5 ${
+                          className={`flex items-center gap-1 rounded-lg border border-white/10 p-1.5 transition-colors hover:bg-white/10 ${
                             hiddenCategories.size > 0 ? 'text-blender' : 'text-zinc-400 hover:text-zinc-200'
                           }`}
                         >
@@ -856,7 +856,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                         {categories.map((category) => (
                           <label
                             key={category}
-                            className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                            className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-zinc-300 transition-colors hover:bg-white/10"
                           >
                             <input
                               type="checkbox"
@@ -893,7 +893,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                       <button
                         title={t('addons.displaySettings')}
                         onClick={() => setSettingsOpen((open) => !open)}
-                        className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                        className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
                       >
                         <GearIcon className="h-4 w-4" />
                       </button>
@@ -902,7 +902,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                     <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                       {t('addons.show')}
                     </p>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
                         checked={showLibraryStatus}
@@ -911,7 +911,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                       />
                       {t('addons.showLibraryStatus')}
                     </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
                         checked={showCanonicalId}
@@ -920,7 +920,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                       />
                       {t('addons.showTechnicalId')}
                     </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
                         checked={showCategory}
@@ -929,7 +929,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                       />
                       {t('addons.showCategories')}
                     </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
                         checked={showVersionCount}
@@ -938,7 +938,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                       />
                       {t('addons.showVersionCount')}
                     </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
                         checked={showDescription}
@@ -947,7 +947,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                       />
                       {t('addons.showDescriptions')}
                     </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
                         checked={showVersionBadge}
@@ -1005,7 +1005,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
             <>
               <div className="mb-3 flex flex-wrap items-center gap-4 text-[11px] text-zinc-500">
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-blender" /> {t('addons.legendEnabled')}
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--blender-brand)]" /> {t('addons.legendEnabled')}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block h-2.5 w-2.5 rounded-full border border-zinc-600" /> {t('addons.legendDisabled')}
@@ -1075,7 +1075,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                   setVersionMenu((open) => (open === version.minor ? null : version.minor))
                                 }
                                 title={version.error ? version.error : `${version.version}${version.scanMethod === 'blender' ? t('addons.deepScannedSuffix') : t('addons.configReadSuffix')}`}
-                                className="flex w-full flex-col items-center gap-1 px-2 py-2.5 transition-colors hover:bg-white/5"
+                                className="flex w-full flex-col items-center gap-1 px-2 py-2.5 transition-colors hover:bg-white/10"
                               >
                                 <span className="grid text-sm font-semibold tabular-nums text-zinc-200">
                                   <span className="invisible col-start-1 row-start-1">{WIDEST_MINOR}</span>
@@ -1099,7 +1099,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                 copyEnabledSet(version.minor)
                                 setVersionMenu(null)
                               }}
-                              className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                              className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
                             >
                               {t('addons.copySet')}
                             </button>
@@ -1109,7 +1109,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                   pasteSet(version.minor)
                                   setVersionMenu(null)
                                 }}
-                                className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                                className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
                               >
                                 {t('addons.pasteSet')}
                               </button>
@@ -1121,7 +1121,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                 setVersionMenu(null)
                               }}
                               disabled={busy}
-                              className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                              className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                             >
                               {t('addons.launchVersion')}
                             </button>
@@ -1415,7 +1415,7 @@ export default function AddonsPage({ onOpenSettings }: { onOpenSettings?: (highl
                                         <button
                                           onClick={() => addonsApi.libraryReveal(unit.libEntry!.id).catch(() => undefined)}
                                           title={t('addons.revealStored')}
-                                          className="shrink-0 rounded border border-white/10 p-1 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                                          className="shrink-0 rounded border border-white/10 p-1 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-200"
                                         >
                                           <FolderOpenIcon className="h-3 w-3" />
                                         </button>

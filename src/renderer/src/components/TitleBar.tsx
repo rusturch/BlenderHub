@@ -80,7 +80,7 @@ export default function TitleBar({ onUpdateClick }: TitleBarProps) {
           <button
             onClick={() => setMenuOpen((open) => !open)}
             title={t('titlebar.notifications')}
-            className="relative flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 [-webkit-app-region:no-drag]"
+            className="relative flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 [-webkit-app-region:no-drag]"
           >
             <BellIcon className="h-[18px] w-[18px]" />
             {updateAvailable && (
@@ -95,7 +95,7 @@ export default function TitleBar({ onUpdateClick }: TitleBarProps) {
               setMenuOpen(false)
               onUpdateClick()
             }}
-            className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-white/5"
+            className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-white/10"
           >
             <span className="text-sm font-medium text-zinc-100">{t('nav.updateAvailable')}</span>
             <span className="text-xs text-zinc-500">

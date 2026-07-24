@@ -58,8 +58,12 @@ export function currentWindowChrome(): WindowChromeColors {
 function applyTo(window: BrowserWindow): void {
   window.setBackgroundColor(current.background)
   if (process.platform === 'win32') {
-    // only exists for windows created with titleBarOverlay; height stays as constructed
-    window.setTitleBarOverlay({ color: current.titlebar, symbolColor: current.symbol })
+    try {
+      // only exists for windows created with titleBarOverlay; height stays as constructed
+      window.setTitleBarOverlay({ color: current.titlebar, symbolColor: current.symbol })
+    } catch {
+      // windows with a standard OS titlebar (the theme editor) have no overlay
+    }
   }
 }
 

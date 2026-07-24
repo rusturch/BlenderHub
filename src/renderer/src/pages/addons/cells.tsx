@@ -107,7 +107,7 @@ export function StatusCell({
       <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-amber-400" />
     )
   ) : addon.enabled ? (
-    <span className="inline-block h-2.5 w-2.5 rounded-full bg-blender" />
+    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--blender-brand)]" />
   ) : (
     <span className="inline-block h-2.5 w-2.5 rounded-full border border-zinc-600" />
   )

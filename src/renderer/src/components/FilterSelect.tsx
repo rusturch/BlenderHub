@@ -60,7 +60,7 @@ export function FilterSelect<T extends string>({
           <button
             type="button"
             onClick={() => setOpen((prev) => !prev)}
-            className={`flex ${width} items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-surface-panel px-2.5 py-1 text-sm text-zinc-200 transition-colors hover:bg-white/5`}
+            className={`flex ${width} items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-surface-panel px-2.5 py-1 text-sm text-zinc-200 transition-colors hover:bg-white/10`}
           >
             <span className="truncate">{current?.label ?? value}</span>
             <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
@@ -75,7 +75,7 @@ export function FilterSelect<T extends string>({
               onChange(option.value)
               setOpen(false)
             }}
-            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5"
+            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
           >
             <span className="truncate">{option.label}</span>
             {option.value === value && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-blender" />}

@@ -212,7 +212,7 @@ export default function SyncOfferDialog({
         <div className="mt-4 flex justify-end">
           <button
             onClick={onClose}
-            className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+            className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10"
           >
             {settingsState === 'done' || addonsState === 'done' ? t('common.done') : t('syncOffer.notNow')}
           </button>

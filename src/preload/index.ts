@@ -181,7 +181,14 @@ const api: LauncherApi = {
   },
   uiState: {
     getAll: (): Promise<Record<string, string>> => ipcRenderer.invoke('ui:get-state'),
-    set: (key: string, value: string): Promise<void> => ipcRenderer.invoke('ui:set-state', key, value)
+    set: (key: string, value: string): Promise<void> => ipcRenderer.invoke('ui:set-state', key, value),
+    onChanged: (callback: (key: string, value: string) => void): (() => void) => {
+      const listener = (_event: unknown, key: string, value: string): void => callback(key, value)
+      ipcRenderer.on('ui:state-changed', listener)
+      return () => {
+        ipcRenderer.removeListener('ui:state-changed', listener)
+      }
+    }
   },
   updates: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('updates:get-version'),
@@ -209,7 +216,8 @@ const api: LauncherApi = {
     save: (id: string, name: string, colors: Record<string, string>): Promise<void> =>
       ipcRenderer.invoke('themes:save', id, name, colors),
     remove: (id: string): Promise<void> => ipcRenderer.invoke('themes:delete', id),
-    openDir: (): Promise<void> => ipcRenderer.invoke('themes:open-dir')
+    openDir: (): Promise<void> => ipcRenderer.invoke('themes:open-dir'),
+    openEditorWindow: (): Promise<void> => ipcRenderer.invoke('themes:open-editor')
   },
   tray: {
     onNavigate: (callback: (page: Page) => void): (() => void) => {

@@ -10,6 +10,7 @@ import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
 import { registerUiStateIpc, readUiState } from './ui-state'
 import { registerThemesIpc } from './themes/ipc'
+import { closeThemeEditorWindow } from './themes/editor-window'
 import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
 import { APP_USER_MODEL_ID, setupAutostart, shouldStartHidden } from './autostart'
 import { attachTrayWindowBehavior, ensureTrayForHiddenStartup, revealMainWindow, setupTray } from './tray'
@@ -73,6 +74,12 @@ function createWindow(startHidden = false): void {
     // an autostarted launch waits in the tray; the app is fully loaded meanwhile —
     // unless a second instance already asked for the window while it was booting
     if (!startHidden || revealRequested) mainWindow.show()
+  })
+
+  // a real close (not hide-to-tray) takes the floating theme editor down too —
+  // an orphaned editor would keep the app alive with no way back to this window
+  mainWindow.on('closed', () => {
+    closeThemeEditorWindow()
   })
 
   attachTrayWindowBehavior(mainWindow)

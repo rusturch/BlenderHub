@@ -801,7 +801,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
           onClick={discardChanges}
           disabled={busy}
           title={t('sync.discardHint')}
-          className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+          className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
         >
           {t('common.discard')}
         </button>
@@ -810,7 +810,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
         <button
           onClick={applyChanges}
           disabled={busy || !isDesktop}
-          className="rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:opacity-50"
+          className="rounded-lg bg-accent-button px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:opacity-50"
         >
           {applying ? t('sync.applying') : t('sync.applyCount', { count: pendingCount })}
         </button>
@@ -819,7 +819,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
         onClick={() => void runScan()}
         disabled={busy || !isDesktop}
         title={isDesktop ? t('sync.rescanHint') : t('sync.desktopOnlyHint')}
-        className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50"
+        className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
       >
         <RefreshIcon className={`h-4 w-4 ${scanning ? 'animate-spin' : ''}`} />
       </button>
@@ -903,7 +903,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                         <button
                           onClick={() => setForcePush((prev) => new Set([...prev].filter((k) => k !== key)))}
                           disabled={busy}
-                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                         >
                           {t('common.cancel')}
                         </button>
@@ -914,7 +914,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                           onClick={() => setForcePush((prev) => new Set(prev).add(key))}
                           disabled={busy || !isDesktop}
                           title={t('sync.overwriteFromSourceHint')}
-                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                         >
                           {t('sync.overwriteFromSource')}
                         </button>
@@ -922,7 +922,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                           onClick={() => void pullIntoSource(item)}
                           disabled={busy || !isDesktop}
                           title={t('sync.copyIntoSourceHint')}
-                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                         >
                           {t('sync.copyIntoSourceAction')}
                         </button>
@@ -930,7 +930,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                           onClick={() => toggleCell(item.component, item.minor)}
                           disabled={busy || !isDesktop}
                           title={t('sync.unlinkHint')}
-                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                          className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                         >
                           {t('sync.unlink')}
                         </button>
@@ -979,7 +979,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
               <div className="mb-3 flex items-center gap-4 text-[11px] text-zinc-500">
                 <div className="flex flex-1 flex-wrap items-center gap-4">
                   <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-blender" /> {t('sync.legendSource')}
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--blender-brand)]" /> {t('sync.legendSource')}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" /> {t('sync.legendInSync')}
@@ -1013,14 +1013,14 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                     <button
                       title={t('sync.displaySettingsHint')}
                       onClick={() => setSettingsOpen((open) => !open)}
-                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
                     >
                       <GearIcon className="h-4 w-4" />
                     </button>
                   }
                 >
                   <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">{t('sync.showHeading')}</p>
-                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                     <input
                       type="checkbox"
                       checked={showPrefDate}
@@ -1029,7 +1029,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                     />
                     {t('sync.preferencesDate')}
                   </label>
-                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                     <input
                       type="checkbox"
                       checked={showCycleBadge}
@@ -1041,7 +1041,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                   <div className="my-1 border-t border-white/5" />
                   <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">{t('sync.behaviorHeading')}</p>
                   <label
-                    className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                    className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10"
                     title={t('sync.autoApplyHint')}
                   >
                     <input
@@ -1098,7 +1098,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                     ? `${column.version}${column.portable ? t('sync.portableInstallSuffix') : ''}`
                                     : t('sync.noInstalledBuildHint')
                                 }
-                                className="flex w-full flex-col items-center gap-1 px-2 py-2.5 transition-colors hover:bg-white/5"
+                                className="flex w-full flex-col items-center gap-1 px-2 py-2.5 transition-colors hover:bg-white/10"
                               >
                                 {/* the number stays centered in the column; the source dot
                                     floats to its right out of flow so it neither shifts the
@@ -1108,7 +1108,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                   <span className="col-start-1 row-start-1 text-center">{column.minor}</span>
                                   {source === column.minor && (
                                     <span
-                                      className="absolute left-full top-1/2 ml-1 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-blender"
+                                      className="absolute left-full top-1/2 ml-1 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[var(--blender-brand)]"
                                       title={t('sync.sourceDotTitle')}
                                     />
                                   )}
@@ -1138,7 +1138,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                 }}
                                 disabled={busy || !isDesktop || !hasAnySettings(column)}
                                 title={t('sync.copyFromThisVersionHint')}
-                                className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                                className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                               >
                                 {t('sync.makeSource')}
                               </button>
@@ -1148,7 +1148,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                 copyLinkedSet(column.minor)
                                 setVersionMenu(null)
                               }}
-                              className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                              className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
                             >
                               {t('sync.copySet')}
                             </button>
@@ -1162,7 +1162,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                     setVersionMenu(null)
                                   }}
                                   disabled={busy || !isDesktop}
-                                  className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                                  className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                                 >
                                   {t('sync.pasteSet')}
                                 </button>
@@ -1176,7 +1176,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                     setVersionMenu(null)
                                   }}
                                   disabled={busy}
-                                  className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                                  className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                                 >
                                   {t('sync.launchVersion')}
                                 </button>
@@ -1194,7 +1194,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                       onShowInstalls(column.minor)
                                     }}
                                     title={t('sync.installHint', { minor: column.minor })}
-                                    className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                                    className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                                   >
                                     {t('sync.installVersion')}
                                   </button>
@@ -1206,7 +1206,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                   }}
                                   disabled={busy || !isDesktop}
                                   title={t('sync.locateHint')}
-                                  className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                                  className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                                 >
                                   {t('sync.locateVersion')}
                                 </button>
@@ -1369,7 +1369,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                       onClick={() => void syncApi.revealBackup(backup.id).catch(() => {})}
                       disabled={!isDesktop}
                       title={t('sync.revealBackupHint')}
-                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50"
+                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
                     >
                       <FolderOpenIcon />
                     </button>

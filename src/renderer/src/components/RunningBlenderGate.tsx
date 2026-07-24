@@ -111,7 +111,7 @@ export default function RunningBlenderGate({
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+              className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10"
             >
               {t('common.cancel')}
             </button>
@@ -119,7 +119,7 @@ export default function RunningBlenderGate({
               onClick={() => void askToClose()}
               disabled={closing}
               title={t('runningGate.askCloseHint')}
-              className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:opacity-50"
+              className="rounded-lg bg-accent-button px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:opacity-50"
             >
               {t('runningGate.askClose')}
             </button>

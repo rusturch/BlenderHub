@@ -4,7 +4,7 @@ import { useDialog } from '../../components/Dialog'
 import { useTranslation } from '../../lib/i18n'
 import { cleanErrorMessage } from '../../lib/format'
 import { getLauncherApi } from '../../lib/preview-fallback'
-import { uiGet, uiSet } from '../../lib/ui-store'
+import { onUiChanged, uiGet, uiSet } from '../../lib/ui-store'
 import {
   applyThemeColors,
   BUILTIN_THEMES,
@@ -22,8 +22,17 @@ import {
   themeIdFromName
 } from '../../../../shared/theme'
 import type { ThemeColorKey, ThemeColors } from '../../../../shared/theme'
+import { ColorPicker } from './ColorPicker'
 import { SectionCard } from './cells'
-import { ChevronDownIcon, FolderIcon, PlusIcon, SaveIcon, TrashIcon, UndoIcon } from './icons'
+import {
+  ChevronDownIcon,
+  ExternalIcon,
+  FolderIcon,
+  PlusIcon,
+  SaveIcon,
+  TrashIcon,
+  UndoIcon
+} from './icons'
 
 // The Blender-style theme editor: pick a preset, tweak colors live, save copies
 // as files under data/themes. Built-in presets are read-only — saving one forks
@@ -47,7 +56,20 @@ const COLOR_GROUPS: { id: string; labelKey: string; keys: ThemeColorKey[] }[] = 
   {
     id: 'general',
     labelKey: 'settings.themesGroupGeneral',
-    keys: ['accent', 'background', 'foreground', 'on-accent', 'overlay', 'shade', 'scrollbar']
+    keys: [
+      'accent',
+      'accent-button',
+      'accent-button-hover',
+      'selection',
+      'card-outline',
+      'card-hover',
+      'background',
+      'foreground',
+      'on-accent',
+      'overlay',
+      'shade',
+      'scrollbar'
+    ]
   },
   {
     id: 'surfaces',
@@ -100,7 +122,7 @@ const COLOR_GROUPS: { id: string; labelKey: string; keys: ThemeColorKey[] }[] = 
 ]
 
 const iconButtonClass =
-  'rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400'
+  'rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400'
 
 function plainColors(source: ThemeColors): Record<string, string> {
   const record: Record<string, string> = {}
@@ -111,7 +133,69 @@ function plainColors(source: ThemeColors): Record<string, string> {
   return record
 }
 
-export function ThemeCard() {
+/** "#rrggbb" / "rrggbb" / "#rgb" / "rgb" → "#rrggbb"; anything else → null */
+function parseHexInput(raw: string): string | null {
+  const digits = raw.trim().replace(/^#/, '').toLowerCase()
+  if (/^[0-9a-f]{6}$/.test(digits)) return `#${digits}`
+  if (/^[0-9a-f]{3}$/.test(digits)) return `#${[...digits].map((digit) => digit + digit).join('')}`
+  return null
+}
+
+/** one editor row: label + typeable hex field + native color swatch */
+function ColorRow({
+  label,
+  hex,
+  onChange
+}: {
+  label: string
+  hex: string
+  onChange: (hex: string) => void
+}) {
+  // draft is non-null only while the hex field is being edited — outside of
+  // that the field mirrors the live value (including edits from the swatch)
+  const [draft, setDraft] = useState<string | null>(null)
+  const cancelled = useRef(false)
+
+  const commit = (): void => {
+    if (!cancelled.current && draft !== null) {
+      const parsed = parseHexInput(draft)
+      if (parsed && parsed !== hex) onChange(parsed)
+    }
+    cancelled.current = false
+    setDraft(null)
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="min-w-0 truncate text-xs text-zinc-400">{label}</span>
+      <span className="flex shrink-0 items-center gap-2">
+        <input
+          value={draft ?? hex}
+          onChange={(event) => setDraft(event.target.value)}
+          onFocus={(event) => {
+            setDraft(hex)
+            event.currentTarget.select()
+          }}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur()
+            } else if (event.key === 'Escape') {
+              cancelled.current = true
+              event.currentTarget.blur()
+            }
+          }}
+          maxLength={7}
+          spellCheck={false}
+          className="w-[4.5rem] rounded border border-white/10 bg-surface-input px-1.5 py-0.5 text-center font-mono text-[10px] text-zinc-300 outline-none focus:border-blender/50"
+        />
+        <ColorPicker hex={hex} onChange={onChange} />
+      </span>
+    </div>
+  )
+}
+
+export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
   const { api, isDesktop } = getLauncherApi()
   const themesApi = api.themes
   const { t } = useTranslation()
@@ -137,7 +221,10 @@ export function ThemeCard() {
     return { ...DEFAULT_THEME_COLORS }
   })
   const [menuOpen, setMenuOpen] = useState(false)
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set())
+  // the floating editor exists to tweak colors — greet it with a group open
+  const [openGroups, setOpenGroups] = useState<Set<string>>(
+    () => new Set(standalone ? ['general'] : [])
+  )
   const [editName, setEditName] = useState('')
 
   const refreshThemes = useCallback(async () => {
@@ -209,6 +296,51 @@ export function ThemeCard() {
     [flushColors]
   )
   useEffect(() => flushColors, [flushColors])
+
+  // mirror edits arriving from the other window (floating editor <-> Settings);
+  // the document-level colors are applied by the theme engine, this syncs the UI
+  useEffect(
+    () =>
+      onUiChanged((key, value) => {
+        if (key === THEME_COLORS_UI_KEY) {
+          // drop our own pending debounced write — it predates the foreign
+          // change and would clobber it when the timer fires
+          if (persistTimer.current !== null) {
+            window.clearTimeout(persistTimer.current)
+            persistTimer.current = null
+          }
+          pendingColors.current = null
+          try {
+            setColors({ ...DEFAULT_THEME_COLORS, ...sanitizeThemeColors(JSON.parse(value)) })
+          } catch {
+            // half-written value — skip
+          }
+        } else if (key === THEME_SELECTED_UI_KEY) {
+          setSelection(value)
+          void refreshThemes()
+        } else if (key === THEME_DIRTY_UI_KEY) {
+          setDirty(value === '1')
+          // dirty flips on save/reset in the other window — its file changed
+          void refreshThemes()
+        }
+      }),
+    [refreshThemes]
+  )
+
+  // saves/renames/deletes in the other window: re-list whenever this one comes
+  // back into focus, and push out the trailing debounced write when it leaves
+  // (window close skips React unmount cleanup — pagehide is the reliable hook)
+  useEffect(() => {
+    const onFocus = (): void => {
+      void refreshThemes()
+    }
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('pagehide', flushColors)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('pagehide', flushColors)
+    }
+  }, [refreshThemes, flushColors])
 
   const selectTheme = useCallback(
     (option: ThemeOption) => {
@@ -350,6 +482,10 @@ export function ThemeCard() {
     void themesApi.openDir().catch(() => {})
   }, [themesApi])
 
+  const openEditorWindow = useCallback(() => {
+    void themesApi.openEditorWindow().catch(() => {})
+  }, [themesApi])
+
   const toggleGroup = useCallback((id: string) => {
     setOpenGroups((current) => {
       const next = new Set(current)
@@ -366,7 +502,7 @@ export function ThemeCard() {
       title={t('settings.themes')}
       hint={t('settings.themesHint')}
       control={
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <Dropdown
             open={menuOpen}
             onClose={() => setMenuOpen(false)}
@@ -375,7 +511,7 @@ export function ThemeCard() {
             trigger={
               <button
                 onClick={() => setMenuOpen((open) => !open)}
-                className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/5"
+                className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10"
               >
                 <span className="truncate">{triggerLabel}</span>
                 <ChevronDownIcon className="h-4 w-4 shrink-0 text-zinc-500" />
@@ -388,8 +524,8 @@ export function ThemeCard() {
                 onClick={() => selectTheme(option)}
                 className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
                   selection === option.selectionId
-                    ? 'bg-blender/15 text-blender'
-                    : 'text-zinc-300 hover:bg-white/5'
+                    ? 'bg-selection/15 text-selection'
+                    : 'text-zinc-300 hover:bg-white/10'
                 }`}
               >
                 <span className="truncate">{option.name}</span>
@@ -447,6 +583,16 @@ export function ThemeCard() {
           >
             <FolderIcon />
           </button>
+          {!standalone && (
+            <button
+              onClick={openEditorWindow}
+              disabled={!isDesktop}
+              title={desktopOnlyTitle ?? t('settings.themesOpenWindow')}
+              className={iconButtonClass}
+            >
+              <ExternalIcon />
+            </button>
+          )}
         </div>
       }
     >
@@ -474,7 +620,7 @@ export function ThemeCard() {
             <div key={group.id} className="rounded-lg border border-white/5">
               <button
                 onClick={() => toggleGroup(group.id)}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-zinc-300 transition-colors hover:bg-white/5"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10"
               >
                 <ChevronDownIcon
                   className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform ${
@@ -485,26 +631,14 @@ export function ThemeCard() {
               </button>
               {open && (
                 <div className="grid grid-cols-1 gap-x-8 gap-y-1 px-3 pb-3 pt-1 sm:grid-cols-2">
-                  {group.keys.map((key) => {
-                    const hex =
-                      cssColorToHex(colors[key] ?? DEFAULT_THEME_COLORS[key] ?? '') ?? '#000000'
-                    return (
-                      <div key={key} className="flex items-center justify-between gap-3">
-                        <span className="min-w-0 truncate text-xs text-zinc-400">
-                          {t(`settings.themeColor.${key}`)}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="font-mono text-[10px] text-zinc-600">{hex}</span>
-                          <input
-                            type="color"
-                            value={hex}
-                            onChange={(event) => editColor(key, event.target.value)}
-                            className="h-6 w-9 shrink-0 cursor-pointer rounded border border-white/10 bg-transparent p-0"
-                          />
-                        </span>
-                      </div>
-                    )
-                  })}
+                  {group.keys.map((key) => (
+                    <ColorRow
+                      key={key}
+                      label={t(`settings.themeColor.${key}`)}
+                      hex={cssColorToHex(colors[key] ?? DEFAULT_THEME_COLORS[key] ?? '') ?? '#000000'}
+                      onChange={(value) => editColor(key, value)}
+                    />
+                  ))}
                 </div>
               )}
             </div>

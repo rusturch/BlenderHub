@@ -817,7 +817,7 @@ export default function InstallsPage({
             }}
             disabled={refreshing}
             title={t('installs.refreshHint')}
-            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50"
+            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
           >
             <RefreshIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
@@ -825,7 +825,7 @@ export default function InstallsPage({
             onClick={locateExisting}
             disabled={locating || !isDesktop}
             title={isDesktop ? t('installs.locateHint') : t('installs.desktopOnly')}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
           >
             {locating ? t('installs.locating') : t('installs.locate')}
           </button>
@@ -886,7 +886,7 @@ export default function InstallsPage({
                   <button
                     title={t('installs.displaySettings')}
                     onClick={() => setSettingsOpen((open) => !open)}
-                    className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                    className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
                   >
                     <GearIcon className="h-4 w-4" />
                   </button>
@@ -895,7 +895,7 @@ export default function InstallsPage({
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                   {t('installs.show')}
                 </p>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
                     type="checkbox"
                     checked={showBranch}
@@ -904,7 +904,7 @@ export default function InstallsPage({
                   />
                   {t('installs.branch')}
                 </label>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
                     type="checkbox"
                     checked={showProjectCount}
@@ -916,7 +916,7 @@ export default function InstallsPage({
                 <label
                   className={`flex items-center gap-2 rounded py-1.5 pl-7 pr-2 text-sm transition-colors ${
                     showProjectCount
-                      ? 'cursor-pointer text-zinc-300 hover:bg-white/5'
+                      ? 'cursor-pointer text-zinc-300 hover:bg-white/10'
                       : 'cursor-not-allowed text-zinc-600'
                   }`}
                 >
@@ -932,7 +932,7 @@ export default function InstallsPage({
                 <label
                   className={`flex items-center gap-2 rounded py-1.5 pl-7 pr-2 text-sm transition-colors ${
                     showProjectCount
-                      ? 'cursor-pointer text-zinc-300 hover:bg-white/5'
+                      ? 'cursor-pointer text-zinc-300 hover:bg-white/10'
                       : 'cursor-not-allowed text-zinc-600'
                   }`}
                 >
@@ -945,7 +945,7 @@ export default function InstallsPage({
                   />
                   {t('installs.projectCountHideEmpty')}
                 </label>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
                     type="checkbox"
                     checked={showSize}
@@ -964,8 +964,8 @@ export default function InstallsPage({
                 onClick={() => setFilter(tab)}
                 className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
                   filter === tab
-                    ? 'bg-blender/15 text-blender'
-                    : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
+                    ? 'bg-selection/15 text-selection'
+                    : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
                 }`}
               >
                 {t(FILTER_LABEL_KEYS[tab] ?? tab)}
@@ -1222,7 +1222,7 @@ export default function InstallsPage({
                                   setProjectsPopoverFor(null)
                                   onShowProjects(minorOf(row.version))
                                 }}
-                                className="mt-1 w-full rounded-md border border-white/10 px-2 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/5"
+                                className="mt-1 w-full rounded-md border border-white/10 px-2 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/10"
                               >
                                 {t('installs.viewProjects')}
                               </button>
@@ -1295,7 +1295,7 @@ export default function InstallsPage({
                             onClick={() =>
                               buildsApi.launch(copy.id).catch((error) => alertDialog(cleanErrorMessage(error)))
                             }
-                            className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded-lg border border-transparent bg-accent-button px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <ActionLabel>{t('installs.launch')}</ActionLabel>
                           </button>
@@ -1327,7 +1327,7 @@ export default function InstallsPage({
                               disabled={removing}
                               onClick={() => setMoreMenuFor(moreMenuFor === row.key ? null : row.key)}
                               title={t('installs.moreActions')}
-                              className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                              className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
                             >
                               <DotsIcon />
                             </button>
@@ -1339,7 +1339,7 @@ export default function InstallsPage({
                                 setMoreMenuFor(null)
                                 window.open(notesUrl, '_blank', 'noopener')
                               }}
-                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                             >
                               {row.remoteBuild?.source === 'patch'
                                 ? t('installs.showPrDetails')
@@ -1353,7 +1353,7 @@ export default function InstallsPage({
                                 setMoreMenuFor(null)
                                 buildsApi.openFolder(copy.id).catch(() => undefined)
                               }}
-                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                             >
                               {t('installs.openFolder')}
                             </button>
@@ -1494,7 +1494,7 @@ export default function InstallsPage({
                                         alertDialog(cleanErrorMessage(error))
                                       )
                                     }
-                                    className="rounded-lg border border-transparent bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                                    className="rounded-lg border border-transparent bg-accent-button px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
                                   >
                                     <ActionLabel>{t('installs.launch')}</ActionLabel>
                                   </button>
@@ -1533,7 +1533,7 @@ export default function InstallsPage({
                                         setMoreMenuFor(moreMenuFor === entry.key ? null : entry.key)
                                       }
                                       title={t('installs.moreActions')}
-                                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
                                     >
                                       <DotsIcon className="h-3.5 w-3.5" />
                                     </button>
@@ -1545,7 +1545,7 @@ export default function InstallsPage({
                                         setMoreMenuFor(null)
                                         window.open(entryNotesUrl, '_blank', 'noopener')
                                       }}
-                                      className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                                      className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                                     >
                                       {entry.build?.source === 'patch'
                                         ? t('installs.showPrDetails')
@@ -1559,7 +1559,7 @@ export default function InstallsPage({
                                         setMoreMenuFor(null)
                                         buildsApi.openFolder(entryCopy.id).catch(() => undefined)
                                       }}
-                                      className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                                      className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                                     >
                                       {t('installs.openFolder')}
                                     </button>

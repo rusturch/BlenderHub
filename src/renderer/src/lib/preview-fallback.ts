@@ -301,7 +301,9 @@ function createPreviewFallbackApi(): LauncherApi {
     },
     set: async (key, value) => {
       localStorage.setItem(key, value)
-    }
+    },
+    // single browser tab — there is no second window to hear from
+    onChanged: () => () => {}
   }
   const themes: LauncherApi['themes'] = {
     // no data folder in the browser — built-in presets still work, user themes don't
@@ -313,6 +315,9 @@ function createPreviewFallbackApi(): LauncherApi {
       throw new Error(DESKTOP_ONLY)
     },
     openDir: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    openEditorWindow: async () => {
       throw new Error(DESKTOP_ONLY)
     }
   }

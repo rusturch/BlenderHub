@@ -8,7 +8,7 @@ export const CYCLE_STYLES: Record<string, string> = {
   candidate: 'bg-purple-500/15 text-purple-400',
   rc: 'bg-purple-500/15 text-purple-400',
   beta: 'bg-sky-500/15 text-sky-400',
-  alpha: 'bg-blender/15 text-blender'
+  alpha: 'bg-[var(--blender-brand)]/15 text-[var(--blender-brand)]'
 }
 
 // widest cycle word above — the sample a BadgeSlot reserves so a text-sized chip still

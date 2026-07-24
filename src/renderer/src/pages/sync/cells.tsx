@@ -30,10 +30,10 @@ export function SyncCell({
 
   if (isSource) {
     return (
-      <td className="bg-blender/5 px-3 py-2.5 text-center">
+      <td className="bg-[var(--blender-brand)]/5 px-3 py-2.5 text-center">
         <span className="inline-flex items-center justify-center p-1" title={present ? t('sync.cellCopiedFromHere', { info }) : info}>
           {present ? (
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-blender" />
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--blender-brand)]" />
           ) : (
             <span className="text-zinc-700">–</span>
           )}

@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { getDataRoot } from '../paths'
 import { requireString } from '../ipc-util'
+import { openThemeEditorWindow } from './editor-window'
 import { isThemeId, sanitizeThemeColors, THEME_NAME_MAX } from '../../shared/theme'
 import type { UserThemeFile } from '../../shared/types'
 
@@ -100,5 +101,9 @@ export function registerThemesIpc(): void {
   ipcMain.handle('themes:open-dir', async () => {
     await mkdir(themesDir(), { recursive: true })
     await shell.openPath(themesDir())
+  })
+
+  ipcMain.handle('themes:open-editor', () => {
+    openThemeEditorWindow()
   })
 }

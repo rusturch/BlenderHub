@@ -461,7 +461,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
               trigger={
                 <button
                   onClick={() => setLanguageMenuOpen((open) => !open)}
-                  className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/5"
+                  className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10"
                 >
                   {languageLabel(language)}
                   <ChevronDownIcon className="h-4 w-4 shrink-0 text-zinc-500" />
@@ -476,7 +476,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
                     setLanguageMenuOpen(false)
                   }}
                   className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
-                    language === code ? 'bg-blender/15 text-blender' : 'text-zinc-300 hover:bg-white/5'
+                    language === code ? 'bg-selection/15 text-selection' : 'text-zinc-300 hover:bg-white/10'
                   }`}
                 >
                   {languageLabel(code)}
@@ -628,7 +628,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
               <button
                 onClick={connectSuperhive}
                 disabled={!isDesktop || !superhiveToken.trim() || superhiveBusy}
-                className="shrink-0 rounded-lg bg-blender px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="shrink-0 rounded-lg bg-accent-button px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {superhiveBusy ? '…' : t('settings.superhiveConnect')}
               </button>

@@ -111,7 +111,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const primaryButtonClass =
     tone === 'danger'
       ? 'rounded-lg bg-red-500/90 px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-red-500'
-      : 'rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90'
+      : 'rounded-lg bg-accent-button px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover'
 
   return (
     <DialogContext.Provider value={value}>
@@ -146,8 +146,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                       button.kind === 'danger'
                         ? 'rounded-lg bg-red-500/90 px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-red-500'
                         : button.kind === 'primary'
-                          ? 'rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90'
-                          : 'rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5'
+                          ? 'rounded-lg bg-accent-button px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover'
+                          : 'rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10'
                     }
                   >
                     {button.label}
@@ -158,7 +158,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                   {pending.kind === 'confirm' && (
                     <button
                       onClick={() => close(false)}
-                      className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                      className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10"
                     >
                       {pending.options.cancelLabel ?? t('common.cancel')}
                     </button>

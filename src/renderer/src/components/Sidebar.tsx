@@ -217,7 +217,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarP
 
   const navButtonClass = (active: boolean): string =>
     `flex items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-      active ? 'bg-blender/15 text-blender' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100'
+      active ? 'bg-selection/15 text-selection' : 'text-zinc-400 hover:bg-white/10 hover:text-zinc-100'
     }`
 
   return (
@@ -229,7 +229,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarP
         {!collapsed && (
           <div className="min-w-0 leading-tight">
             <p className="truncate font-logo text-sm font-bold text-zinc-100">
-              Blender <span className="text-blender">Hub</span>
+              Blender <span className="text-[var(--blender-brand)]">Hub</span>
             </p>
             {version && <p className="text-[11px] text-zinc-500">v{version}</p>}
           </div>
@@ -324,7 +324,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarP
         <button
           onClick={() => setCollapsed((prev) => !prev)}
           title={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
-          className="flex w-full items-center justify-center rounded-lg p-2 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200"
+          className="flex w-full items-center justify-center rounded-lg p-2 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-200"
         >
           <PanelToggleIcon className={`h-4 w-4 transition-transform ${collapsed ? 'rotate-180' : ''}`} />
         </button>

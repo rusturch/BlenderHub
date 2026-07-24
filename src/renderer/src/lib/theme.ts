@@ -2,10 +2,14 @@ import {
   sanitizeThemeColors,
   THEME_COLOR_KEYS,
   THEME_COLOR_VARS,
-  THEME_COLORS_UI_KEY
+  THEME_COLORS_UI_KEY,
+  THEME_DIRTY_UI_KEY,
+  THEME_SELECTED_UI_KEY
 } from '../../../shared/theme'
 import type { ThemeColors } from '../../../shared/theme'
-import { uiGet } from './ui-store'
+import { onUiChanged, uiGet, uiSet } from './ui-store'
+
+const BUILTIN_PREFIX = 'builtin:'
 
 // Runtime side of theming: presets bundled like locales (drop a JSON into
 // renderer/src/themes and it appears in Settings), applied by overriding the
@@ -65,6 +69,37 @@ export function applyThemeColors(colors: ThemeColors): void {
 
 /** restore the persisted look; runs after initUiStore, before the first render */
 export function initTheme(): void {
+  applyPersistedTheme()
+  // edits made in another window (the floating theme editor) land here live
+  onUiChanged((key, value) => {
+    if (key !== THEME_COLORS_UI_KEY) return
+    try {
+      applyThemeColors(sanitizeThemeColors(JSON.parse(value)))
+    } catch {
+      // half-written value — keep the current look
+    }
+  })
+}
+
+function applyPersistedTheme(): void {
+  // A built-in preset with no unsaved edits always applies from its current
+  // definition, so preset updates propagate without a manual re-select and the
+  // stored snapshot never lags behind a newly added color key. User themes and
+  // edited presets restore from the stored snapshot.
+  const selected = uiGet(THEME_SELECTED_UI_KEY)
+  const dirty = uiGet(THEME_DIRTY_UI_KEY) === '1'
+  if (selected && selected.startsWith(BUILTIN_PREFIX) && !dirty) {
+    const preset = BUILTIN_THEMES.find((p) => p.id === selected.slice(BUILTIN_PREFIX.length))
+    if (preset) {
+      const colors = { ...DEFAULT_THEME_COLORS, ...preset.colors }
+      applyThemeColors(colors)
+      // keep the stored snapshot (read by main for window chrome, and by the
+      // editor) in sync with the freshly applied preset
+      const flat = JSON.stringify(plainThemeColors(colors))
+      if (flat !== uiGet(THEME_COLORS_UI_KEY)) uiSet(THEME_COLORS_UI_KEY, flat)
+      return
+    }
+  }
   const stored = uiGet(THEME_COLORS_UI_KEY)
   if (!stored) return
   try {
@@ -72,6 +107,16 @@ export function initTheme(): void {
   } catch {
     // stale/corrupt value — keep the default look
   }
+}
+
+/** flatten to a plain key/value map (only keys carrying a value), for persistence */
+function plainThemeColors(colors: ThemeColors): Record<string, string> {
+  const record: Record<string, string> = {}
+  for (const key of THEME_COLOR_KEYS) {
+    const value = colors[key]
+    if (value) record[key] = value
+  }
+  return record
 }
 
 let colorProbe: CanvasRenderingContext2D | null | undefined

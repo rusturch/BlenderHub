@@ -417,7 +417,7 @@ export default function ProjectsPage({
             title={t('projects.rescanFolders')}
             onClick={refreshFiles}
             disabled={!isDesktop || scanning}
-            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50"
+            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
           >
             <RefreshIcon className={`h-4 w-4 ${scanning ? 'animate-spin' : ''}`} />
           </button>
@@ -430,7 +430,7 @@ export default function ProjectsPage({
               <button
                 onClick={() => setAddMenuOpen((open) => !open)}
                 disabled={!isDesktop}
-                className="flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/5 disabled:opacity-50"
+                className="flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
               >
                 {t('projects.add')}
                 <ChevronDownIcon />
@@ -442,7 +442,7 @@ export default function ProjectsPage({
                 setAddMenuOpen(false)
                 addFolder()
               }}
-              className="block w-full px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5"
+              className="block w-full px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
             >
               {t('projects.addFolder')}
             </button>
@@ -451,7 +451,7 @@ export default function ProjectsPage({
                 setAddMenuOpen(false)
                 addFile()
               }}
-              className="block w-full px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5"
+              className="block w-full px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
             >
               {t('projects.addFile')}
             </button>
@@ -460,7 +460,7 @@ export default function ProjectsPage({
             onClick={openNewProject}
             disabled={!isDesktop || noInstalls}
             title={noInstalls ? t('projects.installFirst') : undefined}
-            className="flex items-center gap-1 rounded-lg bg-blender px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1 rounded-lg bg-accent-button px-3 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             <PlusIcon />
             {t('projects.newProject')}
@@ -531,7 +531,7 @@ export default function ProjectsPage({
                   <button
                     title={t('projects.displaySettings')}
                     onClick={() => setSettingsOpen((open) => !open)}
-                    className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                    className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
                   >
                     <GearIcon className="h-4 w-4" />
                   </button>
@@ -540,7 +540,7 @@ export default function ProjectsPage({
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                   {t('projects.showOnCards')}
                 </p>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
                     type="checkbox"
                     checked={showDate}
@@ -549,7 +549,7 @@ export default function ProjectsPage({
                   />
                   {t('projects.date')}
                 </label>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
                     type="checkbox"
                     checked={showSize}
@@ -558,7 +558,7 @@ export default function ProjectsPage({
                   />
                   {t('projects.fileSize')}
                 </label>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
                     type="checkbox"
                     checked={showPath}
@@ -567,7 +567,7 @@ export default function ProjectsPage({
                   />
                   {t('projects.path')}
                 </label>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
                     type="checkbox"
                     checked={showVersion}
@@ -626,7 +626,7 @@ export default function ProjectsPage({
                 return (
                   <div
                     key={file.path}
-                    className="group relative flex flex-col rounded-xl border border-white/5 bg-surface-panel transition-all duration-150 hover:border-blender/40 hover:bg-surface-menu hover:shadow-lg hover:shadow-black/40"
+                    className="group relative flex flex-col rounded-xl border border-white/5 bg-surface-panel transition-all duration-150 hover:border-card-outline/40 hover:bg-card-hover hover:shadow-lg hover:shadow-black/40"
                     onDoubleClick={() => {
                       if (!file.missing && selected) requestOpen(file, selected)
                     }}
@@ -691,7 +691,7 @@ export default function ProjectsPage({
                               setCardMenuFor(null)
                               removeFromList(file)
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                           >
                             {t('projects.removeFromList')}
                           </button>
@@ -703,7 +703,7 @@ export default function ProjectsPage({
                               setCardMenuFor(null)
                               projectsApi.reveal(file.path).catch(() => undefined)
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                           >
                             {t('projects.showInFolder')}
                           </button>
@@ -712,7 +712,7 @@ export default function ProjectsPage({
                               setCardMenuFor(null)
                               openRename(file)
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                           >
                             {t('projects.renameFile')}
                           </button>
@@ -721,7 +721,7 @@ export default function ProjectsPage({
                               setCardMenuFor(null)
                               duplicateFile(file)
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                           >
                             {t('projects.duplicateFile')}
                           </button>
@@ -730,7 +730,7 @@ export default function ProjectsPage({
                               setCardMenuFor(null)
                               changePreview(file)
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                           >
                             {t('projects.changePreviewImage')}
                           </button>
@@ -740,7 +740,7 @@ export default function ProjectsPage({
                                 setCardMenuFor(null)
                                 resetPreview(file)
                               }}
-                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                             >
                               {t('projects.resetPreview')}
                             </button>
@@ -750,7 +750,7 @@ export default function ProjectsPage({
                               setCardMenuFor(null)
                               relocateProject(file)
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/5"
+                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
                           >
                             {t('projects.moveProject')}
                           </button>
@@ -815,7 +815,7 @@ export default function ProjectsPage({
                         {file.missing ? (
                           <button
                             onClick={() => findMissing(file)}
-                            className="flex items-center gap-1.5 rounded-lg bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90"
+                            className="flex items-center gap-1.5 rounded-lg bg-accent-button px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover"
                           >
                             <SearchIcon className="h-3.5 w-3.5" />
                             {t('projects.findFile')}
@@ -830,7 +830,7 @@ export default function ProjectsPage({
                               ? t('projects.openWithVersion', { version: selected.version })
                               : t('projects.installFirst')
                           }
-                          className="rounded-lg bg-blender px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-lg bg-accent-button px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           {t('common.open')}
                         </button>
@@ -856,7 +856,7 @@ export default function ProjectsPage({
                               onClick={() => setMenuFor(menuFor === file.path ? null : file.path)}
                               disabled={installedSorted.length === 0}
                               title={t('projects.chooseVersion')}
-                              className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               {selected ? selected.version : '—'}
                               <ChevronDownIcon className="h-3 w-3" />
@@ -875,7 +875,7 @@ export default function ProjectsPage({
                                     setMenuFor(null)
                                   }}
                                   title={`${t('projects.blenderBuildLabel', { version: build.version, cycle: build.releaseCycle })}${isNativeRow ? t('projects.projectVersionSuffix') : ''}`}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/5"
+                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/10"
                                 >
                                   <span
                                     className={`h-1.5 w-1.5 shrink-0 rounded-full ${isNativeRow ? 'bg-emerald-400' : 'bg-transparent'}`}
@@ -965,7 +965,7 @@ export default function ProjectsPage({
                   </span>
                   <button
                     onClick={pickLocation}
-                    className="shrink-0 rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/5"
+                    className="shrink-0 rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10"
                   >
                     {t('common.browse')}
                   </button>
@@ -977,14 +977,14 @@ export default function ProjectsPage({
               <button
                 onClick={() => setNewProjectOpen(false)}
                 disabled={creating}
-                className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
               >
                 {t('common.cancel')}
               </button>
               <button
                 onClick={submitNewProject}
                 disabled={creating || !npName.trim() || !npFolder || !npInstallId}
-                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-accent-button px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {creating ? t('projects.creating') : t('projects.create')}
               </button>
@@ -1019,14 +1019,14 @@ export default function ProjectsPage({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setRenameFor(null)}
-                className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/5"
+                className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10"
               >
                 {t('common.cancel')}
               </button>
               <button
                 onClick={saveRename}
                 disabled={!renameValue.trim()}
-                className="rounded-lg bg-blender px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-blender/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-accent-button px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t('projects.save')}
               </button>

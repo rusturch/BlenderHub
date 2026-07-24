@@ -9,6 +9,17 @@
 /** theme color key → the CSS variable it overrides */
 export const THEME_COLOR_VARS = {
   accent: '--color-blender',
+  /** solid primary-button fill — split from accent so buttons recolor without touching tabs/text/borders */
+  'accent-button': '--color-accent-button',
+  /** solid primary-button fill on hover */
+  'accent-button-hover': '--color-accent-button-hover',
+  /** active/selected-item highlight — its /15 tint AND its text/icon; split from
+      accent so selections can be neutral while the accent stays branded */
+  selection: '--color-selection',
+  /** outline around a project card on hover (drawn as a /40 tint of this color) */
+  'card-outline': '--color-card-outline',
+  /** project card background on hover */
+  'card-hover': '--color-card-hover',
   background: '--color-background',
   foreground: '--color-foreground',
   /** text on solid accent/danger buttons */

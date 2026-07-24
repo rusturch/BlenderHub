@@ -67,7 +67,7 @@ export function BehaviorToggle({
           onClick={() => onChange(option.id)}
           disabled={disabled}
           className={`rounded-md px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
-            value === option.id ? 'bg-blender/15 text-blender' : 'text-zinc-400 hover:text-zinc-200'
+            value === option.id ? 'bg-selection/15 text-selection' : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
           {option.label}

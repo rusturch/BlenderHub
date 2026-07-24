@@ -17,6 +17,17 @@
    near-black ramp; utilities like bg-surface-panel come from these definitions. */
 @theme {
   --color-blender: #e87d0d;
+  /* solid primary-button fill/hover split from the accent so buttons recolor
+     without touching accent-tinted tabs/text/borders */
+  --color-accent-button: var(--color-blender);
+  --color-accent-button-hover: #f28c24;
+  /* active/selected-item highlight — split from the accent so a theme can make
+     selections neutral (used as bg-selection/15 tint + text-selection) */
+  --color-selection: var(--color-blender);
+  /* project-card hover: outline (used as border-card-outline/40) and background —
+     split from accent/surface-menu so a theme can restyle cards independently */
+  --color-card-outline: var(--color-blender);
+  --color-card-hover: var(--color-surface-menu);
   --color-background: #0d0d0d;
   --color-foreground: #e5e7eb;
   --color-on-accent: #ffffff;
@@ -37,6 +48,11 @@
    checkbox chrome and color-input swatches follow this, not CSS backgrounds */
 :root {
   color-scheme: dark;
+  /* Blender's brand orange, pinned for semantic "Blender" indicators — the
+     add-on enabled dot, the sync source dot/column, the alpha release badge.
+     Deliberately NOT themeable (not a --color-* @theme token), so a theme's
+     accent never recolors these meaning-carrying marks. */
+  --blender-brand: #e87d0d;
 }
 
 html,
@@ -113,6 +129,78 @@ textarea {
 
 .scrollbar-active::-webkit-scrollbar-thumb:vertical:hover {
   background-color: color-mix(in srgb, var(--color-scrollbar) 32%, transparent);
+}
+
+/* Theme-editor color sliders: the gradient track is set inline per channel; here
+   we just flatten the native control and draw a round white thumb over it. */
+.theme-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+.theme-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+/* Checkboxes: the box keeps the native footprint (13×13, UA margins untouched,
+   fill from the accent), but the MARKS are ours — Chromium picks the native
+   checkmark and indeterminate-dash colors per state with its own heuristics
+   (and forced-colors Windows themes substitute them independently), so the two
+   glyphs can disagree. Drawing both marks from --color-on-accent gives them
+   the single palette source they must share. Whole-pixel sizes only: fractional
+   ones round to different device pixels per table row and the mark thickness
+   appears to vary. */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  border: 1px solid var(--color-zinc-500);
+  background-color: transparent;
+  position: relative;
+  cursor: pointer;
+  forced-color-adjust: none;
+}
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: var(--color-zinc-400);
+}
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+input[type='checkbox']:checked,
+input[type='checkbox']:indeterminate {
+  border-color: transparent;
+  background-color: var(--color-blender);
+}
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-on-accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 11'%3E%3Cpath d='M2.2 5.9 4.5 8.2 8.8 3.3' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 11'%3E%3Cpath d='M2.2 5.9 4.5 8.2 8.8 3.3' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+input[type='checkbox']:indeterminate::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 4px;
+  height: 2px;
+  background-color: var(--color-on-accent);
 }
 
 /* Sticky table headers: borders don't stick with the cell, so the underline is an

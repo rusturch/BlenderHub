@@ -517,6 +517,8 @@ export interface SettingsSyncApi {
 export interface UiStateApi {
   getAll: () => Promise<Record<string, string>>
   set: (key: string, value: string) => Promise<void>
+  /** any window changed a persisted value — fired in every window, writer included */
+  onChanged: (callback: (key: string, value: string) => void) => () => void
 }
 
 /**
@@ -613,6 +615,8 @@ export interface ThemesApi {
   save: (id: string, name: string, colors: Record<string, string>) => Promise<void>
   remove: (id: string) => Promise<void>
   openDir: () => Promise<void>
+  /** floating window with just the theme editor, for live-tweaking colors */
+  openEditorWindow: () => Promise<void>
 }
 
 /** requests originating from native OS chrome outside the page (currently: the tray menu) */
