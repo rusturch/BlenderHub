@@ -1,12 +1,14 @@
-import { stat } from 'fs/promises'
-import { basename } from 'path'
+import { rm, stat } from 'fs/promises'
+import { basename, dirname } from 'path'
 import { BrowserWindow, ipcMain } from 'electron'
+import { downloadArchiveByUrl } from '../addons/extensions-api'
 import { addToLibraryOrExisting } from '../addons/library'
+import { getSuperhiveToken, SUPERHIVE_HOST } from '../addons/superhive'
 import { getInstallsDir, installLocalArchive } from '../blender/installs'
 import { locateInstalls } from '../blender/locate'
 import { addProjectFile, addProjectFolder } from '../projects/store'
 import { requireString } from '../ipc-util'
-import { classifyDroppedPath } from './classify'
+import { classifyDroppedPath, extensionLinkFileName, EXTENSION_LINK_HOSTS } from './classify'
 import type { DroppedItemKind, DropHandleResult } from '../../shared/types'
 
 // Application Security Requirement: unlike the rest of the IPC surface, these paths DO
@@ -21,6 +23,7 @@ const HANDLED_KINDS: ReadonlySet<string> = new Set([
   'project',
   'project-folder',
   'addon',
+  'addon-url',
   'build-archive',
   'build-folder'
 ] satisfies DroppedItemKind[])
@@ -60,6 +63,25 @@ async function handleItem(path: string, kind: DroppedItemKind): Promise<DropHand
       const { entry, existed } = await addToLibraryOrExisting(path)
       if (!existed) broadcast('addons:library-changed', undefined)
       return { status: existed ? 'skipped' : 'ok', detail: entry.name }
+    }
+    case 'addon-url': {
+      // re-validate here — the kind string came from the renderer, so the URL rules
+      // (https + trusted repo host) must hold regardless of what classify said earlier
+      const url = new URL(path)
+      // the repo sites put the archive's checksum right into the download path
+      // (…/download/sha256:<hex>/<file>.zip) — when present, verify against it
+      const sha256 = /\/sha256:([a-fA-F0-9]{64})\//.exec(url.pathname)?.[1]?.toLowerCase() ?? null
+      const host = url.hostname.toLowerCase()
+      const superhive = host === SUPERHIVE_HOST || host.endsWith(`.${SUPERHIVE_HOST}`)
+      const token = superhive ? ((await getSuperhiveToken()) ?? undefined) : undefined
+      const temp = await downloadArchiveByUrl(path, EXTENSION_LINK_HOSTS, sha256, extensionLinkFileName(url), token)
+      try {
+        const { entry, existed } = await addToLibraryOrExisting(temp)
+        if (!existed) broadcast('addons:library-changed', undefined)
+        return { status: existed ? 'skipped' : 'ok', detail: entry.name }
+      } finally {
+        await rm(dirname(temp), { recursive: true, force: true }).catch(() => {})
+      }
     }
     case 'build-archive': {
       const build = await installLocalArchive(path, (progress) => broadcast('builds:install-progress', progress))

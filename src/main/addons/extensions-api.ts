@@ -139,21 +139,13 @@ function assertTrustedArchiveUrl(rawUrl: string, allowedHosts: string[]): URL {
   return url
 }
 
-/**
- * Download a release archive to the downloads dir over https from an allowlisted host,
- * optionally authenticated, and verify its sha256. Returns the temp path; caller deletes.
- */
-export async function downloadFromRepo(
-  release: RemoteRelease,
-  allowedHosts: string[],
+/** shared body of the archive downloaders: https fetch → size-capped hash tap → optional sha256 check */
+async function downloadToTarget(
+  url: URL,
+  target: string,
+  expectedSha256: string | null,
   token?: string
-): Promise<string> {
-  const url = assertTrustedArchiveUrl(release.archiveUrl, allowedHosts)
-  const downloadsRoot = await getDownloadsDir()
-  await mkdir(downloadsRoot, { recursive: true })
-  // Date.now() alone can collide when parallel installs download the same package
-  const target = join(downloadsRoot, `.ext-${release.pkgId}-${Date.now()}-${downloadSeq++}.zip`)
-
+): Promise<void> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
   try {
@@ -179,16 +171,60 @@ export async function downloadFromRepo(
       tap,
       createWriteStream(target)
     )
-    if (hash.digest('hex') !== release.sha256) {
+    if (expectedSha256 && hash.digest('hex') !== expectedSha256) {
       throw new Error('Checksum mismatch — the downloaded extension is corrupted or tampered with')
     }
-    return target
   } catch (error) {
     await rm(target, { force: true }).catch(() => {})
     throw error
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Download a release archive to the downloads dir over https from an allowlisted host,
+ * optionally authenticated, and verify its sha256. Returns the temp path; caller deletes.
+ */
+export async function downloadFromRepo(
+  release: RemoteRelease,
+  allowedHosts: string[],
+  token?: string
+): Promise<string> {
+  const url = assertTrustedArchiveUrl(release.archiveUrl, allowedHosts)
+  const downloadsRoot = await getDownloadsDir()
+  await mkdir(downloadsRoot, { recursive: true })
+  // Date.now() alone can collide when parallel installs download the same package
+  const target = join(downloadsRoot, `.ext-${release.pkgId}-${Date.now()}-${downloadSeq++}.zip`)
+  await downloadToTarget(url, target, release.sha256, token)
+  return target
+}
+
+/**
+ * Download an extension archive by a bare URL (a link dragged out of a repo website).
+ * Same https + allowlist rules; the sha256 check runs when the caller extracted one
+ * from the URL itself. The file keeps `fileName` so the library stores a clean name.
+ * Returns the temp path (inside a private temp dir); caller deletes the whole dir.
+ */
+export async function downloadArchiveByUrl(
+  rawUrl: string,
+  allowedHosts: string[],
+  expectedSha256: string | null,
+  fileName: string,
+  token?: string
+): Promise<string> {
+  const url = assertTrustedArchiveUrl(rawUrl, allowedHosts)
+  const downloadsRoot = await getDownloadsDir()
+  const dir = join(downloadsRoot, `.drop-url-${Date.now()}-${downloadSeq++}`)
+  await mkdir(dir, { recursive: true })
+  const target = join(dir, fileName)
+  try {
+    await downloadToTarget(url, target, expectedSha256, token)
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+    throw error
+  }
+  return target
 }
 
 /** download a release from extensions.blender.org (no auth) */

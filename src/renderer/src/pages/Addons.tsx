@@ -10,7 +10,7 @@ import { cleanErrorMessage } from '../lib/format'
 import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
-import { groupAddons, removedBundledInfo, type AddonSource } from '../../../shared/addon-identity'
+import { groupAddons, removedBundledInfo } from '../../../shared/addon-identity'
 import { compareVersionsDesc } from '../../../shared/blender-builds'
 import type {
   AddonApplyProgress,
@@ -24,6 +24,7 @@ import type {
   VersionAddons
 } from '../../../shared/types'
 import { SOURCE_TABS, TIER_HINT, WIDEST_MINOR } from './addons/constants'
+import type { AddonTab } from './addons/constants'
 import { Badge, BadgeSlot, CYCLE_STYLES, LONGEST_CYCLE } from '../components/Badge'
 import {
   buildMatrix,
@@ -109,7 +110,9 @@ export default function AddonsPage({
   const [installProgress, setInstallProgress] = useState<LibraryInstallProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState(initialSearch ?? '')
-  const [tab, setTab] = useState<AddonSource>('user')
+  // a drop-initiated visit starts on All: the added add-on's row may fold into any
+  // source tab (and can even move once a catalog loads), All shows it regardless
+  const [tab, setTab] = useState<AddonTab>(initialSearch ? 'all' : 'user')
   // Blender-style "Show Tags" filter: a category is visible unless it's in this set
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => new Set())
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
@@ -301,7 +304,7 @@ export default function AddonsPage({
     [data, superhiveCatalog, blenderOrgCatalog, library, superhivePkgIds]
   )
   const countBySource = useMemo(() => {
-    const counts: Record<AddonSource, number> = { user: 0, superhive: 0, blender_org: 0, builtin: 0 }
+    const counts: Record<AddonTab, number> = { all: rows.length, user: 0, superhive: 0, blender_org: 0, builtin: 0 }
     // a row is counted in every tab it belongs to — counts can overlap by design
     for (const row of rows) for (const src of row.sources) counts[src]++
     return counts
@@ -310,35 +313,18 @@ export default function AddonsPage({
   // categories available in the current tab — the filter offers only choices that exist there
   const categories = useMemo(() => {
     const set = new Set<string>()
-    for (const row of rows) if (row.sources.has(tab) && row.category) set.add(row.category)
+    for (const row of rows) if ((tab === 'all' || row.sources.has(tab)) && row.category) set.add(row.category)
     return [...set].sort((a, b) => a.localeCompare(b))
   }, [rows, tab])
 
   const visibleRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return rows.filter((row) => {
-      if (!row.sources.has(tab)) return false
+      if (tab !== 'all' && !row.sources.has(tab)) return false
       if (row.category && hiddenCategories.has(row.category)) return false
       return !q || rowMatchesQuery(row, q)
     })
   }, [rows, tab, query, hiddenCategories])
-
-  // a pre-filled search names a just-added add-on, but its row can live on another
-  // tab than the default one (a dropped file that matches a blender.org catalog
-  // entry or a Superhive purchase folds into that tab's row) — once rows exist,
-  // hop to the first tab that actually shows a match instead of an empty list
-  const initialTabPickedRef = useRef(!initialSearch)
-  useEffect(() => {
-    if (initialTabPickedRef.current || rows.length === 0) return
-    initialTabPickedRef.current = true
-    const q = (initialSearch ?? '').trim().toLowerCase()
-    if (!q) return
-    const hasMatch = (source: AddonSource): boolean =>
-      rows.some((row) => row.sources.has(source) && rowMatchesQuery(row, q))
-    if (hasMatch(tab)) return
-    const fallback = SOURCE_TABS.find(({ key }) => hasMatch(key))
-    if (fallback) setTab(fallback.key)
-  }, [rows, initialSearch, tab])
 
   const okMinors = useMemo(
     () => new Set((data ?? []).filter((version) => !version.error).map((version) => version.minor)),
@@ -1163,15 +1149,17 @@ export default function AddonsPage({
                         <td colSpan={data.length + 1} className="px-4 py-6 text-center text-sm text-zinc-500">
                           {query.trim() || hiddenCategories.size > 0
                             ? t('addons.emptySearch')
-                            : tab === 'user'
-                              ? t('addons.emptyUser')
-                              : tab === 'superhive'
-                                ? superhiveConnected
-                                  ? t('addons.emptySuperhive')
-                                  : t('addons.emptySuperhiveConnect')
-                                : tab === 'blender_org'
-                                  ? t('addons.emptyBlenderOrg')
-                                  : t('addons.emptyBuiltin')}
+                            : tab === 'all'
+                              ? t('addons.emptyAll')
+                              : tab === 'user'
+                                ? t('addons.emptyUser')
+                                : tab === 'superhive'
+                                  ? superhiveConnected
+                                    ? t('addons.emptySuperhive')
+                                    : t('addons.emptySuperhiveConnect')
+                                  : tab === 'blender_org'
+                                    ? t('addons.emptyBlenderOrg')
+                                    : t('addons.emptyBuiltin')}
                         </td>
                       </tr>
                     ) : (

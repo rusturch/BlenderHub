@@ -11,7 +11,7 @@ import type { ExtensionCatalogItem, InstalledBuild, SuperhiveStatus } from '../.
 // standard /api/v1/extensions/ format and authenticates with an Authorization: Bearer
 // header (confirmed against Blender's own cli/blender_ext.py). Downloads come from the
 // same host and are sha256-verified. Only this host (and its subdomains) is allowlisted.
-const SUPERHIVE_HOST = 'superhivemarket.com'
+export const SUPERHIVE_HOST = 'superhivemarket.com'
 const SUPERHIVE_ALLOWED_HOSTS = [SUPERHIVE_HOST]
 const EXTENSIONS_SINCE = '4.2'
 

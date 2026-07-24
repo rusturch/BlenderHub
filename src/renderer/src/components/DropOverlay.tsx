@@ -22,6 +22,7 @@ const KIND_PAGE: Record<Exclude<DroppedItemKind, 'unknown'>, Page> = {
   project: 'projects',
   'project-folder': 'projects',
   addon: 'addons',
+  'addon-url': 'addons',
   'build-archive': 'installs',
   'build-folder': 'installs'
 }
@@ -30,6 +31,7 @@ const KIND_LABEL_KEY: Record<DroppedItemKind, string> = {
   project: 'drop.itemProject',
   'project-folder': 'drop.itemProjectFolder',
   addon: 'drop.itemAddon',
+  'addon-url': 'drop.itemAddonUrl',
   'build-archive': 'drop.itemBuildArchive',
   'build-folder': 'drop.itemBuildFolder',
   unknown: 'drop.itemUnknown'
@@ -61,6 +63,7 @@ function KindIcon({ kind }: { kind: DroppedItemKind }) {
         </svg>
       )
     case 'addon':
+    case 'addon-url':
       return (
         <svg className={className} {...ICON_PROPS}>
           <path d="M10 3.5a2 2 0 1 1 4 0V5h3a1 1 0 0 1 1 1v3h1.5a2 2 0 1 1 0 4H18v4a1 1 0 0 1-1 1h-4v-1.5a2 2 0 1 0-4 0V18H6a1 1 0 0 1-1-1v-4H3.5a2 2 0 1 1 0-4H5V6a1 1 0 0 1 1-1h4z" />
@@ -175,19 +178,27 @@ export default function DropOverlay({
       setDesktopOnly(true)
       return
     }
-    const files = Array.from(event.dataTransfer?.files ?? [])
-    const paths: string[] = []
-    for (const file of files) {
+    const strings: string[] = []
+    for (const file of Array.from(event.dataTransfer?.files ?? [])) {
       try {
         const path = api.getPathForFile(file)
-        if (path && !paths.includes(path)) paths.push(path)
+        if (path && !strings.includes(path)) strings.push(path)
       } catch {
         // not a filesystem-backed file (e.g. an image dragged out of a web page)
       }
     }
-    if (paths.length === 0) return
+    // repo sites' "Drag and Drop into Blender" buttons carry a plain-text download
+    // URL instead of a file — accept those lines too (uri-list # lines are comments)
+    const raw = event.dataTransfer?.getData('text/uri-list') || event.dataTransfer?.getData('text/plain') || ''
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#') || !/^https?:\/\//i.test(trimmed)) continue
+      if (!strings.includes(trimmed)) strings.push(trimmed)
+      if (strings.length >= 100) break
+    }
+    if (strings.length === 0) return
     try {
-      const classified = await api.drop.classify(paths)
+      const classified = await api.drop.classify(strings)
       setRunning(false)
       setFinished(false)
       setItems(classified.map((item) => ({ ...item, status: 'pending' as const, message: null, phase: null })))
@@ -197,38 +208,56 @@ export default function DropOverlay({
   }, [])
 
   useEffect(() => {
-    const hasFiles = (event: DragEvent): boolean =>
-      Array.from(event.dataTransfer?.types ?? []).includes('Files')
+    // a drag started inside this window (text selected in an input being moved) must
+    // not light the overlay up — dragstart/dragend only fire for drags born here
+    let internalDrag = false
+    const onDragStart = (): void => {
+      internalDrag = true
+    }
+    const onDragEnd = (): void => {
+      internalDrag = false
+    }
+    // files from the OS, or a link/text drag from a browser (the repo sites' install
+    // buttons put a plain-text URL into the drag — same payload Blender accepts)
+    const hasPayload = (event: DragEvent): boolean => {
+      if (internalDrag) return false
+      const types = Array.from(event.dataTransfer?.types ?? [])
+      return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain')
+    }
     const onDragEnter = (event: DragEvent): void => {
-      if (!hasFiles(event)) return
+      if (!hasPayload(event)) return
       event.preventDefault()
       depthRef.current += 1
       if (!busyRef.current) setHovering(true)
     }
     const onDragOver = (event: DragEvent): void => {
-      if (!hasFiles(event)) return
+      if (!hasPayload(event)) return
       // without preventDefault the drop never fires and Chromium navigates to the file
       event.preventDefault()
       if (event.dataTransfer) event.dataTransfer.dropEffect = busyRef.current ? 'none' : 'copy'
     }
     const onDragLeave = (event: DragEvent): void => {
-      if (!hasFiles(event)) return
+      if (!hasPayload(event)) return
       depthRef.current = Math.max(0, depthRef.current - 1)
       if (depthRef.current === 0) setHovering(false)
     }
     const onDrop = (event: DragEvent): void => {
-      if (!hasFiles(event)) return
+      if (!hasPayload(event)) return
       event.preventDefault()
       depthRef.current = 0
       setHovering(false)
       if (busyRef.current) return
       void acceptDrop(event)
     }
+    window.addEventListener('dragstart', onDragStart)
+    window.addEventListener('dragend', onDragEnd)
     window.addEventListener('dragenter', onDragEnter)
     window.addEventListener('dragover', onDragOver)
     window.addEventListener('dragleave', onDragLeave)
     window.addEventListener('drop', onDrop)
     return () => {
+      window.removeEventListener('dragstart', onDragStart)
+      window.removeEventListener('dragend', onDragEnd)
       window.removeEventListener('dragenter', onDragEnter)
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('dragleave', onDragLeave)
@@ -281,7 +310,10 @@ export default function DropOverlay({
       // exactly one add-on made it in (a re-dropped duplicate counts — it exists) —
       // hand its name over so the Add-ons page can show that row right away
       const addons = items.filter(
-        (item) => item.kind === 'addon' && (item.status === 'ok' || item.status === 'skipped') && item.message
+        (item) =>
+          (item.kind === 'addon' || item.kind === 'addon-url') &&
+          (item.status === 'ok' || item.status === 'skipped') &&
+          item.message
       )
       onDone(
         landed && landed.kind !== 'unknown' ? KIND_PAGE[landed.kind] : null,
