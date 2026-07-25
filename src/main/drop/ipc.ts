@@ -4,9 +4,8 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { downloadArchiveByUrl } from '../addons/extensions-api'
 import { addToLibraryOrExisting } from '../addons/library'
 import { getSuperhiveToken, SUPERHIVE_HOST } from '../addons/superhive'
-import { getInstallsDir, installLocalArchive } from '../blender/installs'
-import { locateInstalls } from '../blender/locate'
-import { addProjectFile, addProjectFolder } from '../projects/store'
+import { installLocalArchive } from '../blender/installs'
+import { addProjectFile } from '../projects/store'
 import { requireString } from '../ipc-util'
 import { classifyDroppedPath, extensionLinkFileName, EXTENSION_LINK_HOSTS } from './classify'
 import type { DroppedItemKind, DropHandleResult } from '../../shared/types'
@@ -21,11 +20,9 @@ const MAX_DROPPED_PATHS = 100
 
 const HANDLED_KINDS: ReadonlySet<string> = new Set([
   'project',
-  'project-folder',
   'addon',
   'addon-url',
-  'build-archive',
-  'build-folder'
+  'build-archive'
 ] satisfies DroppedItemKind[])
 
 function requirePaths(raw: unknown): string[] {
@@ -54,11 +51,6 @@ async function handleItem(path: string, kind: DroppedItemKind): Promise<DropHand
       await addProjectFile(path)
       return { status: 'ok', detail: basename(path) }
     }
-    case 'project-folder': {
-      if (!(await stat(path)).isDirectory()) throw new Error('Not a folder')
-      await addProjectFolder(path)
-      return { status: 'ok', detail: basename(path) || path }
-    }
     case 'addon': {
       const { entry, existed } = await addToLibraryOrExisting(path)
       if (!existed) broadcast('addons:library-changed', undefined)
@@ -86,13 +78,6 @@ async function handleItem(path: string, kind: DroppedItemKind): Promise<DropHand
     case 'build-archive': {
       const build = await installLocalArchive(path, (progress) => broadcast('builds:install-progress', progress))
       return { status: 'ok', detail: `Blender ${build.version}` }
-    }
-    case 'build-folder': {
-      // builds inside the launcher's own installs folder come back [] — the
-      // regular listing adopts those automatically, so the drop is a no-op
-      const added = await locateInstalls(path, await getInstallsDir())
-      if (added.length === 0) return { status: 'skipped', detail: null }
-      return { status: 'ok', detail: added.map((build) => `Blender ${build.version}`).join(', ') }
     }
     default:
       throw new Error('Unsupported dropped item kind')

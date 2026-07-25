@@ -11,6 +11,10 @@ import type { DroppedItem, DroppedItemKind, DropHandleResult, InstallPhase } fro
 type ItemStatus = 'pending' | 'busy' | 'ok' | 'skipped' | 'error'
 
 interface PanelItem extends DroppedItem {
+  /** stable row identity — a mixed folder yields rows sharing a path with different kinds */
+  key: string
+  /** row checkbox: only checked rows are processed — the user picks what a folder drop adds */
+  selected: boolean
   status: ItemStatus
   /** result detail from main: added name / versions / error text */
   message: string | null
@@ -18,24 +22,24 @@ interface PanelItem extends DroppedItem {
   phase: InstallPhase | null
 }
 
-const KIND_PAGE: Record<Exclude<DroppedItemKind, 'unknown'>, Page> = {
+const KIND_PAGE: Partial<Record<DroppedItemKind, Page>> = {
   project: 'projects',
-  'project-folder': 'projects',
   addon: 'addons',
   'addon-url': 'addons',
-  'build-archive': 'installs',
-  'build-folder': 'installs'
+  'build-archive': 'installs'
 }
 
 const KIND_LABEL_KEY: Record<DroppedItemKind, string> = {
   project: 'drop.itemProject',
-  'project-folder': 'drop.itemProjectFolder',
   addon: 'drop.itemAddon',
   'addon-url': 'drop.itemAddonUrl',
   'build-archive': 'drop.itemBuildArchive',
-  'build-folder': 'drop.itemBuildFolder',
+  folder: 'drop.itemFolder',
   unknown: 'drop.itemUnknown'
 }
+
+/** rows that only inform (folders are rejected, unrecognized files) — never processed */
+const isActionable = (kind: DroppedItemKind): boolean => kind !== 'unknown' && kind !== 'folder'
 
 const ICON_PROPS = {
   viewBox: '0 0 24 24',
@@ -56,7 +60,7 @@ function KindIcon({ kind }: { kind: DroppedItemKind }) {
           <path d="M14 2v6h6" />
         </svg>
       )
-    case 'project-folder':
+    case 'folder':
       return (
         <svg className={className} {...ICON_PROPS}>
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
@@ -70,7 +74,6 @@ function KindIcon({ kind }: { kind: DroppedItemKind }) {
         </svg>
       )
     case 'build-archive':
-    case 'build-folder':
       return (
         <svg className={className} {...ICON_PROPS}>
           <path d="m21 8-9-5-9 5v8l9 5 9-5Z" />
@@ -115,7 +118,7 @@ function StatusBadge({ status }: { status: ItemStatus }) {
   return null
 }
 
-function DropRow({ item }: { item: PanelItem }) {
+function DropRow({ item, onToggle }: { item: PanelItem; onToggle: ((key: string) => void) | null }) {
   const { t } = useTranslation()
   const subline = (() => {
     if (item.status === 'busy') {
@@ -128,12 +131,23 @@ function DropRow({ item }: { item: PanelItem }) {
     if (item.status === 'error') return item.message ?? t('common.error')
     return item.detail ?? t(KIND_LABEL_KEY[item.kind])
   })()
+  const selectable = isActionable(item.kind) && onToggle !== null
   return (
     <div
+      onClick={selectable ? () => onToggle(item.key) : undefined}
       className={`flex items-center gap-3 rounded-lg bg-surface-inset px-3 py-2 ${
-        item.kind === 'unknown' ? 'opacity-60' : ''
-      }`}
+        !isActionable(item.kind) || (!item.selected && item.status === 'pending') ? 'opacity-60' : ''
+      } ${selectable ? 'cursor-pointer' : ''}`}
     >
+      {isActionable(item.kind) && (
+        <input
+          type="checkbox"
+          checked={item.selected}
+          disabled={onToggle === null}
+          onChange={() => onToggle?.(item.key)}
+          onClick={(event) => event.stopPropagation()}
+        />
+      )}
       <div className="text-zinc-400">
         <KindIcon kind={item.kind} />
       </div>
@@ -201,7 +215,16 @@ export default function DropOverlay({
       const classified = await api.drop.classify(strings)
       setRunning(false)
       setFinished(false)
-      setItems(classified.map((item) => ({ ...item, status: 'pending' as const, message: null, phase: null })))
+      setItems(
+        classified.map((item) => ({
+          ...item,
+          key: `${item.kind}|${item.path}`,
+          selected: isActionable(item.kind),
+          status: 'pending' as const,
+          message: null,
+          phase: null
+        }))
+      )
     } catch (error) {
       console.error('drop classification failed', error)
     }
@@ -274,7 +297,9 @@ export default function DropOverlay({
       setItems((current) =>
         current === null
           ? current
-          : current.map((item) => (item.path === path ? { ...item, phase: progress.phase } : item))
+          : current.map((item) =>
+              item.kind === 'build-archive' && item.path === path ? { ...item, phase: progress.phase } : item
+            )
       )
     })
   }, [items !== null])
@@ -283,20 +308,20 @@ export default function DropOverlay({
     if (!items) return
     setRunning(true)
     const { api } = getLauncherApi()
-    const patch = (path: string, change: Partial<PanelItem>): void =>
+    const patch = (key: string, change: Partial<PanelItem>): void =>
       setItems((current) =>
-        current === null ? current : current.map((item) => (item.path === path ? { ...item, ...change } : item))
+        current === null ? current : current.map((item) => (item.key === key ? { ...item, ...change } : item))
       )
     for (const item of items) {
-      if (item.kind === 'unknown') continue
-      patch(item.path, { status: 'busy' })
+      if (!isActionable(item.kind) || !item.selected) continue
+      patch(item.key, { status: 'busy' })
       let result: DropHandleResult
       try {
         result = await api.drop.handle(item.path, item.kind)
       } catch (error) {
         result = { status: 'error', detail: error instanceof Error ? error.message : String(error) }
       }
-      patch(item.path, { status: result.status, message: result.detail })
+      patch(item.key, { status: result.status, message: result.detail })
     }
     setRunning(false)
     setFinished(true)
@@ -315,16 +340,22 @@ export default function DropOverlay({
           (item.status === 'ok' || item.status === 'skipped') &&
           item.message
       )
-      onDone(
-        landed && landed.kind !== 'unknown' ? KIND_PAGE[landed.kind] : null,
-        addons.length === 1 ? addons[0].message : null
-      )
+      onDone(landed ? (KIND_PAGE[landed.kind] ?? null) : null, addons.length === 1 ? addons[0].message : null)
     }
     setItems(null)
     setFinished(false)
   }, [running, finished, items, onDone])
 
-  const supportedCount = items?.filter((item) => item.kind !== 'unknown').length ?? 0
+  const toggleItem = useCallback((key: string): void => {
+    setItems((current) =>
+      current === null
+        ? current
+        : current.map((item) => (item.key === key ? { ...item, selected: !item.selected } : item))
+    )
+  }, [])
+
+  const selectedCount = items?.filter((item) => isActionable(item.kind) && item.selected).length ?? 0
+  const anySupported = items?.some((item) => isActionable(item.kind)) ?? false
 
   return (
     <>
@@ -378,7 +409,7 @@ export default function DropOverlay({
             <h2 className="text-base font-semibold text-zinc-100">{t('drop.dialogTitle')}</h2>
             <div className="mt-3 max-h-80 space-y-1.5 overflow-y-auto pr-1">
               {items.map((item) => (
-                <DropRow key={item.path} item={item} />
+                <DropRow key={item.key} item={item} onToggle={running || finished ? null : toggleItem} />
               ))}
             </div>
             <div className="mt-4 flex justify-end gap-2">
@@ -398,13 +429,13 @@ export default function DropOverlay({
                   >
                     {t('common.cancel')}
                   </button>
-                  {supportedCount > 0 && (
+                  {anySupported && (
                     <button
                       onClick={() => void runAll()}
-                      disabled={running}
+                      disabled={running || selectedCount === 0}
                       className="rounded-lg bg-accent-button px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:opacity-50"
                     >
-                      {running ? t('drop.adding') : t('drop.addCount', { count: supportedCount })}
+                      {running ? t('drop.adding') : t('drop.addCount', { count: selectedCount })}
                     </button>
                   )}
                 </>

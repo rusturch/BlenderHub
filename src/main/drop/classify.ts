@@ -3,12 +3,11 @@ import { basename, extname } from 'path'
 import { BLENDER_ORG_HOST } from '../addons/extensions-api'
 import { SUPERHIVE_HOST } from '../addons/superhive'
 import { listZipEntries } from '../addons/zip-util'
-import { findBlenderRoots } from '../blender/locate'
 import type { DroppedItem, DroppedItemKind } from '../../shared/types'
 
-// Classification is deliberately cheap: fs stats, one zip central-directory read,
-// a bounded directory walk. Nothing here launches Blender or extracts archives —
-// that happens only after the user confirms the drop in the dialog.
+// Classification is deliberately cheap: fs stats and one zip central-directory
+// read. Nothing here launches Blender or extracts archives — that happens only
+// after the user confirms the drop in the dialog.
 
 // Extension links may only come from the repos the launcher already trusts for
 // add-on downloads — the same hosts (and their subdomains) as the catalog installs.
@@ -92,12 +91,9 @@ export async function classifyDroppedPath(path: string): Promise<DroppedItem> {
   } catch {
     return item('unknown', 'File is not accessible')
   }
-  if (info.isDirectory()) {
-    // a folder with Blender executable(s) inside is an installation to register;
-    // any other folder is offered as a project folder
-    const roots = await findBlenderRoots(path).catch(() => [])
-    return item(roots.length > 0 ? 'build-folder' : 'project-folder')
-  }
+  // folders are deliberately not accepted (the user's call — one folder can mean too
+  // many things at once); the dialog shows a localized "drop files instead" notice
+  if (info.isDirectory()) return item('folder')
   const ext = extname(path).toLowerCase()
   if (ext === '.blend') return item('project')
   if (ext === '.py') return item('addon')

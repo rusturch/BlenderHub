@@ -645,23 +645,16 @@ export interface TrayApi {
 
 /**
  * What one path dragged into the window was recognized as:
- * - 'project'        — a .blend file, added to the Projects list
- * - 'project-folder' — a plain folder, registered as a project folder
- * - 'addon'          — a .py/.zip add-on, stored in the add-on library
- * - 'addon-url'      — an extension link dragged out of a repo website
- *                      (extensions.blender.org / Superhive "drag and drop" buttons),
- *                      downloaded into the add-on library
- * - 'build-archive'  — a Blender build archive, extracted into the installs folder
- * - 'build-folder'   — a folder holding Blender installation(s), registered in place
+ * - 'project'       — a .blend file, added to the Projects list
+ * - 'addon'         — a .py/.zip add-on, stored in the add-on library
+ * - 'addon-url'     — an extension link dragged out of a repo website
+ *                     (extensions.blender.org / Superhive "drag and drop" buttons),
+ *                     downloaded into the add-on library
+ * - 'build-archive' — a Blender build archive, extracted into the installs folder
+ * - 'folder'        — folders are not accepted (by design — drop individual files);
+ *                     the dialog shows a localized notice for the row
  */
-export type DroppedItemKind =
-  | 'project'
-  | 'project-folder'
-  | 'addon'
-  | 'addon-url'
-  | 'build-archive'
-  | 'build-folder'
-  | 'unknown'
+export type DroppedItemKind = 'project' | 'addon' | 'addon-url' | 'build-archive' | 'folder' | 'unknown'
 
 export interface DroppedItem {
   path: string

@@ -259,6 +259,17 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
     }
   }, [projectsApi, refreshFiles, alertDialog])
 
+  const addTrackedFile = useCallback(async () => {
+    try {
+      const added = await projectsApi.addFile()
+      if (added === null) return // dialog cancelled
+      await refreshTracked()
+      await refreshFiles()
+    } catch (cause) {
+      await alertDialog(cleanErrorMessage(cause))
+    }
+  }, [projectsApi, refreshTracked, refreshFiles, alertDialog])
+
   const removeFolder = useCallback(
     async (folder: ProjectFolder) => {
       try {
@@ -700,16 +711,20 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
           </button>
         </SectionCard>
 
-        {trackedFiles.length > 0 && (
-          <SectionCard
-            title={t('settings.trackedFiles')}
-            hint={t('settings.trackedFilesHint')}
-            control={
+        <SectionCard
+          title={t('settings.trackedFiles')}
+          hint={t('settings.trackedFilesHint')}
+          control={
+            trackedFiles.length > 0 ? (
               <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">
                 {trackedFiles.length}
               </span>
-            }
-          >
+            ) : undefined
+          }
+        >
+          {trackedFiles.length === 0 ? (
+            <p className="text-xs text-zinc-500">{t('settings.noTrackedFiles')}</p>
+          ) : (
             <div className="-mx-2 max-h-56 overflow-y-auto">
               {trackedFiles.map((path) => (
                 <div
@@ -732,8 +747,16 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
                 </div>
               ))}
             </div>
-          </SectionCard>
-        )}
+          )}
+          <button
+            onClick={addTrackedFile}
+            disabled={!isDesktop}
+            title={desktopOnlyTitle}
+            className={`mt-3 disabled:cursor-not-allowed disabled:opacity-40 ${secondaryButtonClass}`}
+          >
+            + {t('settings.addFile')}
+          </button>
+        </SectionCard>
 
         <SectionCard
           title={t('settings.removeMissingProjects')}
