@@ -3,6 +3,7 @@ import { existsSync } from 'fs'
 import { shell } from 'electron'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'path'
 import { addProjectFile, forgetProjectPath, getProjectFiles, migrateProjectPath } from './store'
+import { isSkippedScanDir } from '../scan-skip'
 
 export const PREVIEW_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
 
@@ -149,7 +150,7 @@ async function searchForFile(dir: string, targetLower: string, depth: number): P
     if (entry.isFile() && entry.name.toLowerCase() === targetLower) return join(dir, entry.name)
   }
   for (const entry of entries) {
-    if (entry.isDirectory() && !entry.name.startsWith('.')) {
+    if (entry.isDirectory() && !isSkippedScanDir(entry.name)) {
       const hit = await searchForFile(join(dir, entry.name), targetLower, depth + 1)
       if (hit) return hit
     }
@@ -177,7 +178,7 @@ async function collectBlendCandidates(dir: string, out: string[], depth: number)
   }
   for (const entry of entries) {
     if (out.length >= MAX_RELINK_CANDIDATES) return
-    if (entry.name.startsWith('.')) continue
+    if (isSkippedScanDir(entry.name)) continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) await collectBlendCandidates(full, out, depth + 1)
     else if (entry.isFile() && entry.name.toLowerCase().endsWith('.blend')) out.push(full)

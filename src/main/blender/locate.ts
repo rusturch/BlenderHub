@@ -3,6 +3,7 @@ import { readdir, stat } from 'fs/promises'
 import { isAbsolute, join, relative, resolve } from 'path'
 import { promisify } from 'util'
 import { updateConfig, readConfig } from '../config'
+import { isSkippedScanDir, isUnderSkippedScanDir } from '../scan-skip'
 import type { LocatedInstall } from '../config'
 import type { InstalledBuild } from '../../shared/types'
 
@@ -64,7 +65,7 @@ export async function findBlenderRoots(dir: string): Promise<BlenderRoot[]> {
       return
     }
     for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      if (!entry.isDirectory() || isSkippedScanDir(entry.name)) continue
       await walk(join(current, entry.name), depthLeft - 1)
     }
   }
@@ -153,7 +154,8 @@ function isInside(parent: string, child: string): boolean {
 // register every Blender found under pickedDir; builds inside the launcher's own
 // installs folder are skipped — those get adopted automatically on the next listing
 export async function locateInstalls(pickedDir: string, managedInstallsDir: string): Promise<InstalledBuild[]> {
-  const roots = await findBlenderRoots(pickedDir)
+  // the walk already skips the recycle bin; this also covers picking it directly
+  const roots = (await findBlenderRoots(pickedDir)).filter((hit) => !isUnderSkippedScanDir(hit.root))
   if (roots.length === 0) throw new Error('No Blender executable found in this folder')
   const managedRoot = resolve(managedInstallsDir)
   const outside = roots.filter((hit) => !isInside(managedRoot, hit.root))
@@ -185,8 +187,17 @@ export async function locateInstalls(pickedDir: string, managedInstallsDir: stri
 
 export async function listLocated(): Promise<InstalledBuild[]> {
   const config = await readConfig()
+  const kept = config.locatedInstalls.filter((entry) => !isUnderSkippedScanDir(entry.path))
+  // a scan of a drive root used to reach the recycle bin, registering builds that
+  // Uninstall had merely moved there — drop such entries once and for good
+  if (kept.length !== config.locatedInstalls.length) {
+    await updateConfig((current) => ({
+      ...current,
+      locatedInstalls: current.locatedInstalls.filter((entry) => !isUnderSkippedScanDir(entry.path))
+    }))
+  }
   const result: InstalledBuild[] = []
-  for (const entry of config.locatedInstalls) {
+  for (const entry of kept) {
     if (await exists(join(entry.path, entry.executableRelative))) {
       result.push(toInstalledBuild(entry))
     }

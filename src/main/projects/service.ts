@@ -3,6 +3,7 @@ import { readdir, stat } from 'fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import { readBlendInfo } from '../blender/blend-parser'
 import { findPreviewSidecar } from './manage'
+import { isSkippedScanDir } from '../scan-skip'
 import type { BlendThumbnail } from '../blender/blend-parser'
 import type { BlendFileInfo } from '../../shared/types'
 
@@ -22,7 +23,7 @@ async function collectBlendFiles(dir: string, out: string[], depth: number): Pro
   }
   for (const entry of entries) {
     if (out.length >= MAX_FILES) return
-    if (entry.name.startsWith('.')) continue
+    if (isSkippedScanDir(entry.name)) continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
       await collectBlendFiles(full, out, depth + 1)
