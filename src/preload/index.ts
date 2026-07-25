@@ -22,6 +22,7 @@ import type {
   NewProjectInput,
   Page,
   ProjectFolder,
+  RelinkResult,
   RemoteBuild,
   RunningBlender,
   SettingsBackupInfo,
@@ -103,7 +104,12 @@ const api: LauncherApi = {
       ipcRenderer.invoke('projects:find-missing', path),
     removeFromList: (path: string): Promise<void> =>
       ipcRenderer.invoke('projects:remove-from-list', path),
-    deleteFile: (path: string): Promise<void> => ipcRenderer.invoke('projects:delete-file', path)
+    deleteFile: (path: string): Promise<void> => ipcRenderer.invoke('projects:delete-file', path),
+    listTrackedFiles: (): Promise<string[]> => ipcRenderer.invoke('projects:list-tracked-files'),
+    relocateFolder: (path: string): Promise<ProjectFolder[] | null> =>
+      ipcRenderer.invoke('projects:relocate-folder', path),
+    removeMissing: (): Promise<void> => ipcRenderer.invoke('projects:remove-missing'),
+    relinkMissing: (): Promise<RelinkResult | null> => ipcRenderer.invoke('projects:relink-missing')
   },
   addons: {
     scan: (): Promise<VersionAddons[]> => ipcRenderer.invoke('addons:scan'),

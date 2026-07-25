@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve } from 'path'
+import { isAbsolute, join, relative, resolve } from 'path'
 import { readConfig, updateConfig } from '../config'
 
 export async function getProjectFolders(): Promise<string[]> {
@@ -7,17 +7,11 @@ export async function getProjectFolders(): Promise<string[]> {
 
 export async function addProjectFolder(folder: string): Promise<void> {
   const normalized = resolve(folder)
-  const isInside = (p: string): boolean => {
-    const rel = relative(normalized, resolve(p))
-    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
-  }
-  // re-adding a folder brings back any files inside it that were removed from the list
   await updateConfig((config) => ({
     ...config,
     projectFolders: config.projectFolders.includes(normalized)
       ? config.projectFolders
-      : [...config.projectFolders, normalized],
-    hiddenFiles: config.hiddenFiles.filter((p) => !isInside(p))
+      : [...config.projectFolders, normalized]
   }))
 }
 
@@ -28,49 +22,59 @@ export async function removeProjectFolder(folder: string): Promise<void> {
   }))
 }
 
+// The registered folder moved on disk: point the registration at the new location and
+// rewrite the old prefix in every stored path, so all its projects re-link in one step.
+export async function relocateProjectFolder(oldRoot: string, newRoot: string): Promise<void> {
+  const oldKey = resolve(oldRoot)
+  const newKey = resolve(newRoot)
+  if (oldKey === newKey) return
+  const isUnder = (p: string): boolean => {
+    const rel = relative(oldKey, resolve(p))
+    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+  }
+  const remap = (p: string): string => (isUnder(p) ? join(newKey, relative(oldKey, resolve(p))) : p)
+  await updateConfig((config) => {
+    const recentlyOpened: Record<string, number> = {}
+    for (const [path, openedAt] of Object.entries(config.recentlyOpened)) {
+      const next = remap(path)
+      recentlyOpened[next] = Math.max(recentlyOpened[next] ?? 0, openedAt)
+    }
+    return {
+      ...config,
+      projectFolders: [
+        ...new Set(config.projectFolders.map((known) => (resolve(known) === oldKey ? newKey : known)))
+      ],
+      projectFiles: [...new Set(config.projectFiles.map(remap))],
+      knownFiles: [...new Set(config.knownFiles.map(remap))],
+      recentlyOpened
+    }
+  })
+}
+
+// "Remove from list": drop entries from individual tracking and scan memory, leaving
+// the files themselves alone. A file that is (or later reappears) inside a tracked
+// folder is simply picked up by the next scan again.
+export async function untrackProjectPaths(paths: string[]): Promise<void> {
+  if (paths.length === 0) return
+  const keys = new Set(paths.map((path) => resolve(path)))
+  await updateConfig((config) => ({
+    ...config,
+    projectFiles: config.projectFiles.filter((known) => !keys.has(resolve(known))),
+    knownFiles: config.knownFiles.filter((known) => !keys.has(resolve(known)))
+  }))
+}
+
 export async function getProjectFiles(): Promise<string[]> {
   return (await readConfig()).projectFiles
 }
 
 export async function addProjectFile(file: string): Promise<void> {
   const normalized = resolve(file)
-  // adding a file explicitly un-hides it — otherwise a prior "Remove from list"
-  // would keep it filtered out of scan results forever
   await updateConfig((config) => ({
     ...config,
     projectFiles: config.projectFiles.some((known) => resolve(known) === normalized)
       ? config.projectFiles
-      : [...config.projectFiles, normalized],
-    hiddenFiles: config.hiddenFiles.filter((known) => resolve(known) !== normalized)
-  }))
-}
-
-export async function removeProjectFile(file: string): Promise<void> {
-  const normalized = resolve(file)
-  await updateConfig((config) => ({
-    ...config,
-    projectFiles: config.projectFiles.filter((known) => resolve(known) !== normalized)
-  }))
-}
-
-export async function getHiddenFiles(): Promise<string[]> {
-  return (await readConfig()).hiddenFiles
-}
-
-export async function addHiddenFile(file: string): Promise<void> {
-  const key = resolve(file)
-  await updateConfig((config) =>
-    config.hiddenFiles.some((known) => resolve(known) === key)
-      ? config
-      : { ...config, hiddenFiles: [...config.hiddenFiles, key] }
-  )
-}
-
-export async function removeHiddenFile(file: string): Promise<void> {
-  const key = resolve(file)
-  await updateConfig((config) => ({
-    ...config,
-    hiddenFiles: config.hiddenFiles.filter((known) => resolve(known) !== key)
+      : [...config.projectFiles, normalized]
   }))
 }
 
@@ -106,7 +110,6 @@ export async function migrateProjectPath(
     return {
       ...config,
       projectFiles,
-      hiddenFiles: config.hiddenFiles.filter((known) => resolve(known) !== oldKey),
       knownFiles: config.knownFiles.filter((known) => resolve(known) !== oldKey),
       recentlyOpened
     }
@@ -146,7 +149,6 @@ export async function forgetProjectPath(path: string): Promise<void> {
     return {
       ...config,
       projectFiles: config.projectFiles.filter((known) => resolve(known) !== key),
-      hiddenFiles: config.hiddenFiles.filter((known) => resolve(known) !== key),
       knownFiles: config.knownFiles.filter((known) => resolve(known) !== key),
       recentlyOpened
     }

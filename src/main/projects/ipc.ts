@@ -5,7 +5,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'path'
 import { findInstalled } from '../blender/installs'
 import { requireString } from '../ipc-util'
 import { refreshTrayMenu } from '../tray'
-import { scanProjectFiles } from './service'
+import { listUnavailableFolders, scanProjectFiles } from './service'
 import {
   clearPreviewSidecar,
   deleteProject,
@@ -13,21 +13,21 @@ import {
   findMissingFile,
   moveProject,
   PREVIEW_EXTENSIONS,
+  relinkMissingFiles,
   renameProject,
   setPreviewSidecar
 } from './manage'
 import {
-  addHiddenFile,
   addProjectFile,
   addProjectFolder,
-  getHiddenFiles,
   getKnownFiles,
   getProjectFiles,
   getProjectFolders,
   recordProjectOpened,
-  removeProjectFile,
+  relocateProjectFolder,
   removeProjectFolder,
-  setKnownFiles
+  setKnownFiles,
+  untrackProjectPaths
 } from './store'
 import type { ProjectFolder } from '../../shared/types'
 
@@ -49,7 +49,30 @@ async function assertAllowed(filePath: string): Promise<string> {
 
 // basename('E:\') is '' — a drive root has no name segment to extract, so fall
 // back to the path itself (e.g. "E:\") rather than showing an empty pill
-const toFolder = (path: string): ProjectFolder => ({ path, name: basename(path) || path })
+async function listFoldersWithStatus(): Promise<ProjectFolder[]> {
+  const folders = await getProjectFolders()
+  const unavailable = new Set(await listUnavailableFolders(folders))
+  return folders.map((path) => ({
+    path,
+    name: basename(path) || path,
+    missing: unavailable.has(path)
+  }))
+}
+
+// scan with the current config and hand back the missing entries (folder-level
+// unavailability is already excluded by the scan itself)
+async function scanMissingFiles(): Promise<{ missingPaths: string[]; folders: string[] }> {
+  const [folders, files, known] = await Promise.all([
+    getProjectFolders(),
+    getProjectFiles(),
+    getKnownFiles()
+  ])
+  const scan = await scanProjectFiles(folders, files, known)
+  return {
+    missingPaths: scan.files.filter((file) => file.missing).map((file) => file.path),
+    folders
+  }
+}
 
 function createEmptyBlend(executable: string, cwd: string, targetPath: string): Promise<void> {
   return new Promise((resolvePromise, reject) => {
@@ -73,7 +96,7 @@ function createEmptyBlend(executable: string, cwd: string, targetPath: string): 
 }
 
 export function registerProjectsIpc(): void {
-  ipcMain.handle('projects:list-folders', async () => (await getProjectFolders()).map(toFolder))
+  ipcMain.handle('projects:list-folders', async () => listFoldersWithStatus())
 
   ipcMain.handle('projects:add-folder', async () => {
     const picked = await dialog.showOpenDialog({
@@ -83,7 +106,7 @@ export function registerProjectsIpc(): void {
     if (!picked.canceled && picked.filePaths[0]) {
       await addProjectFolder(picked.filePaths[0])
     }
-    return (await getProjectFolders()).map(toFolder)
+    return listFoldersWithStatus()
   })
 
   ipcMain.handle('projects:add-file', async () => {
@@ -107,20 +130,54 @@ export function registerProjectsIpc(): void {
 
   ipcMain.handle('projects:remove-folder', async (_event, rawPath: unknown) => {
     await removeProjectFolder(requireString(rawPath, 'folder path'))
-    return (await getProjectFolders()).map(toFolder)
+    return listFoldersWithStatus()
+  })
+
+  ipcMain.handle('projects:relocate-folder', async (_event, rawPath: unknown) => {
+    const oldRoot = resolve(requireString(rawPath, 'folder path'))
+    const folders = await getProjectFolders()
+    if (!folders.some((known) => resolve(known) === oldRoot)) {
+      throw new Error('Not a registered project folder')
+    }
+    const picked = await dialog.showOpenDialog({
+      title: 'Set the new folder location',
+      properties: ['openDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    await relocateProjectFolder(oldRoot, picked.filePaths[0])
+    refreshTrayMenu()
+    return listFoldersWithStatus()
+  })
+
+  ipcMain.handle('projects:remove-missing', async () => {
+    const { missingPaths } = await scanMissingFiles()
+    await untrackProjectPaths(missingPaths)
+  })
+
+  ipcMain.handle('projects:relink-missing', async () => {
+    const picked = await dialog.showOpenDialog({
+      title: 'Find missing files — choose a folder to search',
+      properties: ['openDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    const { missingPaths, folders } = await scanMissingFiles()
+    const relinked = await relinkMissingFiles(missingPaths, picked.filePaths[0], folders)
+    if (relinked > 0) refreshTrayMenu()
+    return { relinked, total: missingPaths.length }
   })
 
   ipcMain.handle('projects:list-files', async () => {
-    const [folders, files, hiddenFiles, known] = await Promise.all([
+    const [folders, files, known] = await Promise.all([
       getProjectFolders(),
       getProjectFiles(),
-      getHiddenFiles(),
       getKnownFiles()
     ])
-    const scan = await scanProjectFiles(folders, files, hiddenFiles, known)
+    const scan = await scanProjectFiles(folders, files, known)
     await setKnownFiles(scan.known)
     return scan.files
   })
+
+  ipcMain.handle('projects:list-tracked-files', async () => getProjectFiles())
 
   ipcMain.handle('projects:rename-file', async (_event, rawPath: unknown, rawName: unknown) => {
     const path = await assertAllowed(requireString(rawPath, 'file path'))
@@ -188,9 +245,9 @@ export function registerProjectsIpc(): void {
 
   ipcMain.handle('projects:remove-from-list', async (_event, rawPath: unknown) => {
     const path = await assertAllowed(requireString(rawPath, 'file path'))
-    // hide folder-scanned files and drop individually-tracked ones; both come back on re-add
-    await addHiddenFile(path)
-    await removeProjectFile(path)
+    // drops the entry only; a file living in (or returning to) a tracked folder
+    // is picked up by the next scan again
+    await untrackProjectPaths([path])
   })
 
   ipcMain.handle('projects:delete-file', async (_event, rawPath: unknown) => {

@@ -185,6 +185,16 @@ function createPreviewFallbackApi(): LauncherApi {
     },
     deleteFile: async () => {
       throw new Error(DESKTOP_ONLY)
+    },
+    listTrackedFiles: async () => [],
+    relocateFolder: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    removeMissing: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    relinkMissing: async () => {
+      throw new Error(DESKTOP_ONLY)
     }
   }
   const addons: LauncherApi['addons'] = {

@@ -53,6 +53,7 @@ export default function ProjectsPage({
   const [creating, setCreating] = useState(false)
 
   const [cardMenuFor, setCardMenuFor] = useState<string | null>(null)
+  const [missingOpen, setMissingOpen] = useState(false)
   const [renameFor, setRenameFor] = useState<BlendFileInfo | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [selectedInstall, setSelectedInstall] = useState<Record<string, string>>({})
@@ -84,8 +85,16 @@ export default function ProjectsPage({
     setScanning(true)
     setError(null)
     try {
-      const fresh = await projectsApi.listFiles()
-      if (seq === refreshSeqRef.current) setFiles(fresh)
+      // folder availability is re-checked along with the files, so the
+      // unavailable-folder banner reacts to a drive coming back or a rescan
+      const [freshFolders, fresh] = await Promise.all([
+        projectsApi.listFolders(),
+        projectsApi.listFiles()
+      ])
+      if (seq === refreshSeqRef.current) {
+        setFolders(freshFolders)
+        setFiles(fresh)
+      }
     } catch (cause) {
       if (seq === refreshSeqRef.current) setError(cleanErrorMessage(cause))
     } finally {
@@ -103,14 +112,13 @@ export default function ProjectsPage({
   useEffect(() => {
     ;(async () => {
       try {
-        setFolders(await projectsApi.listFolders())
         setInstalled(await buildsApi.listInstalled())
       } catch {
-        // preview mode — lists stay empty
+        // preview mode — the list stays empty
       }
       await refreshFiles()
     })()
-  }, [projectsApi, buildsApi, refreshFiles])
+  }, [buildsApi, refreshFiles])
 
   useEffect(() => {
     if (files !== null) lastLoaded = { folders, files, installed }
@@ -267,7 +275,10 @@ export default function ProjectsPage({
     async (file: BlendFileInfo) => {
       const ok = await confirmDialog({
         title: t('projects.removeFromListTitle'),
-        message: t('projects.removeFromListMessage', { name: file.name }),
+        // a missing file has nothing left on disk; an existing one stays there
+        message: t(file.missing ? 'projects.removeFromListMessage' : 'projects.untrackFileMessage', {
+          name: file.name
+        }),
         confirmLabel: t('common.remove')
       })
       if (!ok) return
@@ -364,6 +375,80 @@ export default function ProjectsPage({
     }
   }, [renameFor, renameValue, projectsApi, refreshFiles, patchFiles, alertDialog])
 
+  const missingFiles = useMemo(
+    () =>
+      (files ?? [])
+        .filter((file) => file.missing)
+        .sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path)),
+    [files]
+  )
+  const missingFolders = useMemo(() => folders.filter((folder) => folder.missing), [folders])
+
+  const removeAllMissing = useCallback(async () => {
+    const ok = await confirmDialog({
+      title: t('projects.removeAllMissingTitle'),
+      message: t('projects.removeAllMissingMessage', { count: missingFiles.length }),
+      confirmLabel: t('common.remove')
+    })
+    if (!ok) return
+    try {
+      await projectsApi.removeMissing()
+      patchFiles((prev) => prev.filter((file) => !file.missing))
+      void refreshFiles()
+    } catch (cause) {
+      await alertDialog(cleanErrorMessage(cause))
+    }
+  }, [missingFiles.length, projectsApi, refreshFiles, patchFiles, confirmDialog, alertDialog, t])
+
+  const relinkAllMissing = useCallback(async () => {
+    try {
+      const result = await projectsApi.relinkMissing()
+      if (!result) return
+      await refreshFiles()
+      await alertDialog({
+        title: t('projects.relinkDoneTitle'),
+        message:
+          result.relinked > 0
+            ? t('projects.relinkResult', { relinked: result.relinked, total: result.total })
+            : t('projects.relinkNoneFound')
+      })
+    } catch (cause) {
+      await alertDialog(cleanErrorMessage(cause))
+    }
+  }, [projectsApi, refreshFiles, alertDialog, t])
+
+  const relocateMissingFolder = useCallback(
+    async (folder: ProjectFolder) => {
+      try {
+        const updated = await projectsApi.relocateFolder(folder.path)
+        if (!updated) return
+        setFolders(updated)
+        void refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, refreshFiles, alertDialog]
+  )
+
+  const removeUnavailableFolder = useCallback(
+    async (folder: ProjectFolder) => {
+      const ok = await confirmDialog({
+        title: t('projects.removeFolderTitle'),
+        message: t('projects.removeFolderMessage', { path: folder.path }),
+        confirmLabel: t('common.remove')
+      })
+      if (!ok) return
+      try {
+        setFolders(await projectsApi.removeFolder(folder.path))
+        void refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, refreshFiles, confirmDialog, alertDialog, t]
+  )
+
   const versions = useMemo(() => {
     const present = new Set<string>()
     for (const file of files ?? []) if (file.blenderVersion) present.add(file.blenderVersion)
@@ -374,9 +459,10 @@ export default function ProjectsPage({
 
   const visibleFiles = useMemo(() => {
     const q = query.trim().toLowerCase()
+    // missing files live in the strip above the grid, never among the cards
     return (files ?? []).filter((file) => {
-      // missing files are exempt from the version filter — their version is unknown
-      if (!file.missing && versionFilter !== 'all' && file.blenderVersion !== versionFilter) return false
+      if (file.missing) return false
+      if (versionFilter !== 'all' && file.blenderVersion !== versionFilter) return false
       if (q && !file.name.toLowerCase().includes(q)) return false
       return true
     })
@@ -385,8 +471,6 @@ export default function ProjectsPage({
   const sortedFiles = useMemo(() => {
     const factor = sortDir === 'asc' ? -1 : 1
     return [...visibleFiles].sort((a, b) => {
-      // missing files have no date/size/version — pin them to the top so sorting doesn't bury them
-      if (a.missing !== b.missing) return a.missing ? -1 : 1
       let cmp = 0
       if (sortKey === 'name') cmp = b.name.localeCompare(a.name) * factor
       else if (sortKey === 'date') cmp = (b.mtimeMs - a.mtimeMs) * factor
@@ -482,6 +566,105 @@ export default function ProjectsPage({
         />
       ) : (
         <div className="flex flex-col gap-4">
+          {missingFolders.map((folder) => (
+            <div
+              key={folder.path}
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+            >
+              <WarningIcon className="h-5 w-5 shrink-0 text-amber-400" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-amber-300">
+                  {t('projects.folderUnavailable', { name: folder.name })}
+                </p>
+                <p className="truncate text-xs text-amber-200/70" title={folder.path}>
+                  {folder.path}
+                </p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  {t('projects.folderUnavailableHint')}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => relocateMissingFolder(folder)}
+                  className="rounded-lg bg-accent-button px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover"
+                >
+                  {t('projects.locateFolder')}
+                </button>
+                <button
+                  onClick={() => removeUnavailableFolder(folder)}
+                  className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-white/10"
+                >
+                  {t('projects.removeFolderAction')}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {missingFiles.length > 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                <button
+                  onClick={() => setMissingOpen((open) => !open)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <WarningIcon className="h-5 w-5 shrink-0 text-amber-400" />
+                  <span className="truncate text-sm font-medium text-amber-300">
+                    {t('projects.missingCount', { count: missingFiles.length })}
+                  </span>
+                  <ChevronDownIcon
+                    className={`h-3.5 w-3.5 shrink-0 text-amber-400/80 transition-transform ${missingOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={relinkAllMissing}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:bg-white/10"
+                  >
+                    <SearchIcon className="h-3.5 w-3.5" />
+                    {t('projects.relinkInFolder')}
+                  </button>
+                  <button
+                    onClick={removeAllMissing}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:bg-white/10"
+                  >
+                    {t('projects.removeAllMissing')}
+                  </button>
+                </div>
+              </div>
+              {missingOpen && (
+                <div className="max-h-64 overflow-y-auto border-t border-amber-500/20 p-1.5">
+                  {missingFiles.map((file) => (
+                    <div
+                      key={file.path}
+                      className="flex items-center gap-3 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-white/5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-zinc-200">
+                          {file.name.replace(/\.blend$/i, '')}
+                        </p>
+                        <p className="truncate text-[11px] text-zinc-500" title={file.path}>
+                          {file.path}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => findMissing(file)}
+                        className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-200 transition-colors hover:bg-white/10"
+                      >
+                        {t('projects.findFile')}
+                      </button>
+                      <button
+                        onClick={() => removeFromList(file)}
+                        className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+                      >
+                        {t('projects.removeFromList')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-end gap-2">
             <FilterSelect
               label={t('projects.sort')}
@@ -600,8 +783,12 @@ export default function ProjectsPage({
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
-          {files !== null && files.length === 0 && !scanning ? (
-            <p className="text-sm text-zinc-500">{t('projects.noBlendFiles')}</p>
+          {files !== null && files.length - missingFiles.length === 0 && !scanning ? (
+            // nothing but missing entries or an unavailable folder — the strip and
+            // banner above already explain the situation, a "no files" line would lie
+            missingFiles.length === 0 && missingFolders.length === 0 ? (
+              <p className="text-sm text-zinc-500">{t('projects.noBlendFiles')}</p>
+            ) : null
           ) : visibleFiles.length === 0 && !scanning ? (
             <p className="text-sm text-zinc-500">
               {query.trim()
@@ -628,34 +815,24 @@ export default function ProjectsPage({
                     key={file.path}
                     className="group relative flex flex-col rounded-xl border border-white/5 bg-surface-panel transition-all duration-150 hover:border-card-outline/40 hover:bg-card-hover hover:shadow-lg hover:shadow-black/40"
                     onDoubleClick={() => {
-                      if (!file.missing && selected) requestOpen(file, selected)
+                      if (selected) requestOpen(file, selected)
                     }}
                     onContextMenu={(event) => {
                       event.preventDefault()
                       setCardMenuFor(file.path)
                     }}
                   >
-                    {file.missing ? (
+                    {showVersion && (
                       <span
-                        className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 backdrop-blur-sm"
-                        title={t('projects.missingHint')}
+                        className="absolute left-2 top-2 z-10 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200 backdrop-blur-sm"
+                        title={
+                          file.blenderVersion
+                            ? t('projects.savedInVersion', { version: file.blenderVersion })
+                            : undefined
+                        }
                       >
-                        <WarningIcon className="h-3 w-3" />
-                        {t('projects.missing')}
+                        {file.blenderVersion ?? t('projects.unknown')}
                       </span>
-                    ) : (
-                      showVersion && (
-                        <span
-                          className="absolute left-2 top-2 z-10 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200 backdrop-blur-sm"
-                          title={
-                            file.blenderVersion
-                              ? t('projects.savedInVersion', { version: file.blenderVersion })
-                              : undefined
-                          }
-                        >
-                          {file.blenderVersion ?? t('projects.unknown')}
-                        </span>
-                      )
                     )}
                     <Dropdown
                       className="absolute right-2 top-2 z-10"
@@ -673,104 +850,86 @@ export default function ProjectsPage({
                         </button>
                       }
                     >
-                      {file.missing ? (
-                        <>
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              findMissing(file)
-                            }}
-                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-medium text-blender transition-colors hover:bg-blender/10"
-                          >
-                            <SearchIcon className="h-4 w-4" />
-                            {t('projects.findMissingFile')}
-                          </button>
-                          <div className="my-1 border-t border-white/5" />
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              removeFromList(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                          >
-                            {t('projects.removeFromList')}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              projectsApi.reveal(file.path).catch(() => undefined)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                          >
-                            {t('projects.showInFolder')}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              openRename(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                          >
-                            {t('projects.renameFile')}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              duplicateFile(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                          >
-                            {t('projects.duplicateFile')}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              changePreview(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                          >
-                            {t('projects.changePreviewImage')}
-                          </button>
-                          {file.hasCustomPreview && (
-                            <button
-                              onClick={() => {
-                                setCardMenuFor(null)
-                                resetPreview(file)
-                              }}
-                              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                            >
-                              {t('projects.resetPreview')}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              relocateProject(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                          >
-                            {t('projects.moveProject')}
-                          </button>
-                          <div className="my-1 border-t border-white/5" />
-                          <button
-                            onClick={() => {
-                              setCardMenuFor(null)
-                              deleteProjectFile(file)
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10"
-                          >
-                            {t('projects.deleteFile')}
-                          </button>
-                        </>
+                      <button
+                        onClick={() => {
+                          setCardMenuFor(null)
+                          projectsApi.reveal(file.path).catch(() => undefined)
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+                      >
+                        {t('projects.showInFolder')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCardMenuFor(null)
+                          openRename(file)
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+                      >
+                        {t('projects.renameFile')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCardMenuFor(null)
+                          duplicateFile(file)
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+                      >
+                        {t('projects.duplicateFile')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCardMenuFor(null)
+                          changePreview(file)
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+                      >
+                        {t('projects.changePreviewImage')}
+                      </button>
+                      {file.hasCustomPreview && (
+                        <button
+                          onClick={() => {
+                            setCardMenuFor(null)
+                            resetPreview(file)
+                          }}
+                          className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+                        >
+                          {t('projects.resetPreview')}
+                        </button>
                       )}
+                      <button
+                        onClick={() => {
+                          setCardMenuFor(null)
+                          relocateProject(file)
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+                      >
+                        {t('projects.moveProject')}
+                      </button>
+                      {file.tracked && (
+                        <button
+                          onClick={() => {
+                            setCardMenuFor(null)
+                            removeFromList(file)
+                          }}
+                          className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+                        >
+                          {t('projects.removeFromList')}
+                        </button>
+                      )}
+                      <div className="my-1 border-t border-white/5" />
+                      <button
+                        onClick={() => {
+                          setCardMenuFor(null)
+                          deleteProjectFile(file)
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10"
+                      >
+                        {t('projects.deleteFile')}
+                      </button>
                     </Dropdown>
                     <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-xl bg-surface-inset">
-                      {file.missing ? (
-                        <WarningIcon className="h-10 w-10 text-amber-500/50" />
-                      ) : file.thumbnail ? (
+                      {file.thumbnail ? (
                         <img
                           src={file.thumbnail}
                           alt=""
@@ -788,40 +947,22 @@ export default function ProjectsPage({
                       >
                         {file.name.replace(/\.blend$/i, '')}
                       </p>
-                      {file.missing ? (
-                        <p className="truncate text-[11px] font-medium text-amber-400" title={file.path}>
-                          {t('projects.fileNotFound')}
+                      {(showSize || showDate) && (
+                        <p className="text-[11px] text-zinc-500">
+                          {[
+                            showSize ? formatBytes(file.size) : null,
+                            showDate ? new Date(file.mtimeMs).toLocaleDateString() : null
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </p>
-                      ) : (
-                        <>
-                          {(showSize || showDate) && (
-                            <p className="text-[11px] text-zinc-500">
-                              {[
-                                showSize ? formatBytes(file.size) : null,
-                                showDate ? new Date(file.mtimeMs).toLocaleDateString() : null
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </p>
-                          )}
-                          {showPath && (
-                            <p className="truncate text-[11px] text-zinc-600" title={file.path}>
-                              {file.path}
-                            </p>
-                          )}
-                        </>
+                      )}
+                      {showPath && (
+                        <p className="truncate text-[11px] text-zinc-600" title={file.path}>
+                          {file.path}
+                        </p>
                       )}
                       <div className="mt-auto flex items-center gap-1.5">
-                        {file.missing ? (
-                          <button
-                            onClick={() => findMissing(file)}
-                            className="flex items-center gap-1.5 rounded-lg bg-accent-button px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover"
-                          >
-                            <SearchIcon className="h-3.5 w-3.5" />
-                            {t('projects.findFile')}
-                          </button>
-                        ) : (
-                          <>
                         <button
                           onClick={() => requestOpen(file, selected)}
                           disabled={!selected}
@@ -904,8 +1045,6 @@ export default function ProjectsPage({
                             </>
                           )}
                         </Dropdown>
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>

@@ -16,7 +16,6 @@ export interface LocatedInstall {
 export interface LauncherConfig {
   projectFolders: string[]
   projectFiles: string[]
-  hiddenFiles: string[]
   /** folder-scanned .blend files seen in a previous scan — used to detect vanished files */
   knownFiles: string[]
   locatedInstalls: LocatedInstall[]
@@ -39,7 +38,6 @@ const configPath = (): string => join(getDataRoot(), 'config.json')
 const emptyConfig = (): LauncherConfig => ({
   projectFolders: [],
   projectFiles: [],
-  hiddenFiles: [],
   knownFiles: [],
   locatedInstalls: [],
   addonLibrary: [],
@@ -71,7 +69,6 @@ export async function readConfig(): Promise<LauncherConfig> {
     ...(parsed as Record<string, unknown>),
     projectFolders: Array.isArray(parsed.projectFolders) ? parsed.projectFolders : [],
     projectFiles: Array.isArray(parsed.projectFiles) ? parsed.projectFiles : [],
-    hiddenFiles: Array.isArray(parsed.hiddenFiles) ? parsed.hiddenFiles : [],
     knownFiles: Array.isArray(parsed.knownFiles) ? parsed.knownFiles : [],
     locatedInstalls: Array.isArray(parsed.locatedInstalls) ? parsed.locatedInstalls : [],
     installsDir: typeof parsed.installsDir === 'string' ? parsed.installsDir : undefined,

@@ -84,20 +84,18 @@ async function loadCustomThumbnail(imagePath: string): Promise<string | null> {
 export async function listRecentProjectFiles(
   folders: string[],
   individualFiles: string[],
-  hiddenFiles: string[],
   limit: number
 ): Promise<{ path: string; mtimeMs: number }[]> {
-  const hidden = new Set(hiddenFiles.map((path) => resolve(path)))
   const found = new Map<string, string>()
   for (const root of folders) {
     const files: string[] = []
     await collectBlendFiles(root, files, 0)
     for (const file of files) {
-      if (!found.has(file) && !hidden.has(resolve(file))) found.set(file, root)
+      if (!found.has(file)) found.set(file, root)
     }
   }
   for (const file of individualFiles) {
-    if (file.toLowerCase().endsWith('.blend') && !found.has(file) && !hidden.has(resolve(file))) {
+    if (file.toLowerCase().endsWith('.blend') && !found.has(file)) {
       found.set(file, dirname(file))
     }
   }
@@ -117,18 +115,38 @@ export async function listRecentProjectFiles(
     .slice(0, limit)
 }
 
+// Registered folders whose root cannot be read (moved, renamed, drive offline).
+// Their vanished files get one folder-level banner instead of per-file missing cards.
+export async function listUnavailableFolders(folders: string[]): Promise<string[]> {
+  const result: string[] = []
+  for (const folder of folders) {
+    try {
+      if (!(await stat(folder)).isDirectory()) result.push(folder)
+    } catch {
+      result.push(folder)
+    }
+  }
+  return result
+}
+
 export async function scanProjectFiles(
   folders: string[],
   individualFiles: string[] = [],
-  hiddenFiles: string[] = [],
   knownFiles: string[] = []
 ): Promise<{ files: BlendFileInfo[]; known: string[] }> {
-  const hidden = new Set(hiddenFiles.map((path) => resolve(path)))
   const individualSet = new Set(individualFiles.map((path) => resolve(path)))
   const known = new Set(knownFiles.map((path) => resolve(path)))
   const folderRoots = folders.map((folder) => resolve(folder))
   const insideFolders = (p: string): boolean =>
     folderRoots.some((root) => {
+      const rel = relative(root, p)
+      return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+    })
+  // files under an unreadable root are not reported missing one by one — the folder
+  // itself is the missing thing, and config entries stay put until it is relocated
+  const unavailableRoots = (await listUnavailableFolders(folders)).map((folder) => resolve(folder))
+  const underUnavailable = (p: string): boolean =>
+    unavailableRoots.some((root) => {
       const rel = relative(root, p)
       return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
     })
@@ -140,22 +158,24 @@ export async function scanProjectFiles(
     await collectBlendFiles(root, files, 0)
     for (const file of files) {
       currentFolderPaths.add(resolve(file))
-      if (!found.has(file) && !hidden.has(resolve(file))) found.set(file, root)
+      if (!found.has(file)) found.set(file, root)
     }
   }
   for (const file of individualFiles) {
-    if (file.toLowerCase().endsWith('.blend') && !found.has(file) && !hidden.has(resolve(file))) {
+    if (file.toLowerCase().endsWith('.blend') && !found.has(file)) {
       found.set(file, dirname(file))
     }
   }
 
   const result: BlendFileInfo[] = []
   for (const [file, root] of found) {
+    // listed because of its individual entry: not among the folder-scanned files
+    const tracked = individualSet.has(resolve(file)) && !currentFolderPaths.has(resolve(file))
     try {
       const fileStat = await stat(file)
       const sidecar = await findPreviewSidecar(file)
       const sidecarStat = sidecar ? await stat(sidecar).catch(() => null) : null
-      const cacheKey = `${fileStat.mtimeMs}:${fileStat.size}|${sidecar ?? ''}:${sidecarStat?.mtimeMs ?? ''}`
+      const cacheKey = `${fileStat.mtimeMs}:${fileStat.size}|${sidecar ?? ''}:${sidecarStat?.mtimeMs ?? ''}|${tracked}`
       const cached = cache.get(file)
       if (cached && cached.key === cacheKey) {
         result.push(cached.info)
@@ -172,13 +192,14 @@ export async function scanProjectFiles(
         blenderVersion: parsed.version,
         thumbnail: custom ?? (parsed.thumbnail ? thumbnailToDataUrl(parsed.thumbnail) : null),
         hasCustomPreview: sidecar !== null,
-        missing: false
+        missing: false,
+        tracked
       }
       cache.set(file, { key: cacheKey, info })
       result.push(info)
     } catch {
       // an individually-tracked file that vanished — surface it as missing so it can be relocated
-      if (individualSet.has(resolve(file))) {
+      if (individualSet.has(resolve(file)) && !underUnavailable(resolve(file))) {
         result.push({
           path: file,
           name: basename(file),
@@ -188,17 +209,18 @@ export async function scanProjectFiles(
           blenderVersion: null,
           thumbnail: null,
           hasCustomPreview: false,
-          missing: true
+          missing: true,
+          tracked: true
         })
       }
       // folder-scanned files that fail to read are just skipped
     }
   }
 
-  // folder files seen in a previous scan that are gone now → missing (unless hidden / folder removed)
+  // folder files seen in a previous scan that are gone now → missing (unless folder removed)
   for (const kp of known) {
-    if (currentFolderPaths.has(kp) || hidden.has(kp) || individualSet.has(kp)) continue
-    if (!insideFolders(kp)) continue
+    if (currentFolderPaths.has(kp) || individualSet.has(kp)) continue
+    if (!insideFolders(kp) || underUnavailable(kp)) continue
     result.push({
       path: kp,
       name: basename(kp),
@@ -208,16 +230,16 @@ export async function scanProjectFiles(
       blenderVersion: null,
       thumbnail: null,
       hasCustomPreview: false,
-      missing: true
+      missing: true,
+      tracked: false
     })
   }
 
-  // remember current + still-missing folder files (in-folder, not hidden) for the next scan
+  // remember current + still-missing folder files for the next scan
   const newKnown = new Set<string>()
-  for (const p of currentFolderPaths) if (!hidden.has(p) && insideFolders(p)) newKnown.add(p)
+  for (const p of currentFolderPaths) if (insideFolders(p)) newKnown.add(p)
   for (const kp of known)
-    if (!currentFolderPaths.has(kp) && !hidden.has(kp) && !individualSet.has(kp) && insideFolders(kp))
-      newKnown.add(kp)
+    if (!currentFolderPaths.has(kp) && !individualSet.has(kp) && insideFolders(kp)) newKnown.add(kp)
 
   return { files: result.sort((a, b) => b.mtimeMs - a.mtimeMs), known: [...newKnown] }
 }

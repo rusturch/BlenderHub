@@ -71,6 +71,8 @@ export interface BuildsApi {
 export interface ProjectFolder {
   path: string
   name: string
+  /** the registered root itself cannot be read — moved, renamed or its drive is offline */
+  missing: boolean
 }
 
 export interface BlendFileInfo {
@@ -84,6 +86,8 @@ export interface BlendFileInfo {
   hasCustomPreview: boolean
   /** an individually-tracked file that no longer exists on disk */
   missing: boolean
+  /** listed because of an individual entry, not a folder scan — removable one by one */
+  tracked: boolean
 }
 
 export interface NewProjectInput {
@@ -97,6 +101,12 @@ export interface DuplicatedFile {
   path: string
   mtimeMs: number
   size: number
+}
+
+/** outcome of a bulk relink of missing files against a user-picked folder */
+export interface RelinkResult {
+  relinked: number
+  total: number
 }
 
 export interface ProjectsApi {
@@ -117,6 +127,14 @@ export interface ProjectsApi {
   findMissing: (path: string) => Promise<string | null>
   removeFromList: (path: string) => Promise<void>
   deleteFile: (path: string) => Promise<void>
+  /** raw individually-tracked file entries, for the Settings management list */
+  listTrackedFiles: () => Promise<string[]>
+  /** re-point a registered folder that moved on disk; null when the picker is cancelled */
+  relocateFolder: (path: string) => Promise<ProjectFolder[] | null>
+  /** drop every missing project from the list in one go */
+  removeMissing: () => Promise<void>
+  /** match missing files by name against a user-picked folder; null when cancelled */
+  relinkMissing: () => Promise<RelinkResult | null>
 }
 
 /**

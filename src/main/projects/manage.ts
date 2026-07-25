@@ -1,7 +1,7 @@
 import { constants, copyFile, mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { shell } from 'electron'
-import { basename, dirname, extname, join, resolve } from 'path'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'path'
 import { addProjectFile, forgetProjectPath, getProjectFiles, migrateProjectPath } from './store'
 
 export const PREVIEW_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
@@ -163,4 +163,79 @@ export async function findMissingFile(oldPath: string, searchDir: string): Promi
   if (!found) return null
   await migrateProjectPath(oldPath, found)
   return found
+}
+
+const MAX_RELINK_CANDIDATES = 2000
+
+async function collectBlendCandidates(dir: string, out: string[], depth: number): Promise<void> {
+  if (depth > SEARCH_MAX_DEPTH || out.length >= MAX_RELINK_CANDIDATES) return
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (out.length >= MAX_RELINK_CANDIDATES) return
+    if (entry.name.startsWith('.')) continue
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) await collectBlendCandidates(full, out, depth + 1)
+    else if (entry.isFile() && entry.name.toLowerCase().endsWith('.blend')) out.push(full)
+  }
+}
+
+// How many trailing path segments two paths share — "moved folder" keeps the old
+// subfolder layout, so the candidate whose tail matches longest is the right one.
+function tailMatchScore(a: string, b: string): number {
+  const as = resolve(a).toLowerCase().split(/[\\/]/)
+  const bs = resolve(b).toLowerCase().split(/[\\/]/)
+  let n = 0
+  while (n < as.length && n < bs.length && as[as.length - 1 - n] === bs[bs.length - 1 - n]) n++
+  return n
+}
+
+// Batch findMissingFile: walk the picked folder once, then give each missing project
+// the best same-named candidate. Each candidate is consumed at most once, so two
+// missing files with equal names cannot collapse onto a single file.
+export async function relinkMissingFiles(
+  missingPaths: string[],
+  searchDir: string,
+  registeredFolders: string[]
+): Promise<number> {
+  const candidates: string[] = []
+  await collectBlendCandidates(resolve(searchDir), candidates, 0)
+  const byName = new Map<string, string[]>()
+  for (const candidate of candidates) {
+    const key = basename(candidate).toLowerCase()
+    const list = byName.get(key)
+    if (list) list.push(candidate)
+    else byName.set(key, [candidate])
+  }
+  const roots = registeredFolders.map((folder) => resolve(folder))
+  const insideRegistered = (p: string): boolean =>
+    roots.some((root) => {
+      const rel = relative(root, resolve(p))
+      return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+    })
+  const used = new Set<string>()
+  let relinked = 0
+  for (const oldPath of [...missingPaths].sort()) {
+    const options = byName.get(basename(oldPath).toLowerCase())?.filter((c) => !used.has(c)) ?? []
+    if (options.length === 0) continue
+    let best = options[0]
+    let bestScore = tailMatchScore(oldPath, best)
+    for (const option of options.slice(1)) {
+      const score = tailMatchScore(oldPath, option)
+      if (score > bestScore) {
+        best = option
+        bestScore = score
+      }
+    }
+    used.add(best)
+    // a file that lands outside every registered folder must become individually
+    // tracked, or it would vanish from the list right after relinking
+    await migrateProjectPath(oldPath, best, !insideRegistered(best))
+    relinked++
+  }
+  return relinked
 }

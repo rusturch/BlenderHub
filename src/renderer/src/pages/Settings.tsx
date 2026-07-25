@@ -25,6 +25,7 @@ import type {
 import { BehaviorToggle, SectionCard, StorageUsageCard } from './settings/cells'
 import { ThemeCard } from './settings/ThemeCard'
 import { ChevronDownIcon, XIcon } from './settings/icons'
+import { fileNameOf } from './projects/projects-utils'
 import { SUPERHIVE_DOCS_URL, pathBoxClass, primaryButtonClass, secondaryButtonClass } from './settings/constants'
 
 export default function SettingsPage({ highlight }: { highlight?: string }) {
@@ -37,6 +38,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
 
   const [folders, setFolders] = useState<ProjectFolder[]>([])
   const [files, setFiles] = useState<BlendFileInfo[]>([])
+  const [trackedFiles, setTrackedFiles] = useState<string[]>([])
   const [installsDirPath, setInstallsDirPath] = useState('')
   const [downloadsDirPath, setDownloadsDirPath] = useState('')
   const [libraryDirPath, setLibraryDirPath] = useState('')
@@ -115,6 +117,14 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
     }
   }, [projectsApi])
 
+  const refreshTracked = useCallback(async () => {
+    try {
+      setTrackedFiles(await projectsApi.listTrackedFiles())
+    } catch {
+      // preview mode — list stays empty
+    }
+  }, [projectsApi])
+
   const refreshStorage = useCallback(async () => {
     setStorageLoading(true)
     try {
@@ -129,6 +139,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
   useEffect(() => {
     refreshFolders()
     refreshFiles()
+    refreshTracked()
     ;(async () => {
       try {
         setInstallsDirPath(await buildsApi.getInstallsDir())
@@ -143,7 +154,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
         // preview mode — leave defaults
       }
     })()
-  }, [refreshFolders, refreshFiles, buildsApi, addonsApi])
+  }, [refreshFolders, refreshFiles, refreshTracked, buildsApi, addonsApi])
 
   useEffect(() => {
     refreshStorage()
@@ -271,14 +282,27 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
     })
     if (!ok) return
     try {
-      for (const file of missingFiles) {
-        await projectsApi.removeFromList(file.path)
-      }
+      await projectsApi.removeMissing()
       await refreshFiles()
+      // missing individually-tracked entries are gone from the tracked list too
+      await refreshTracked()
     } catch (cause) {
       await alertDialog(cleanErrorMessage(cause))
     }
-  }, [missingFiles, projectsApi, refreshFiles, confirmDialog, alertDialog, t])
+  }, [missingFiles.length, projectsApi, refreshFiles, refreshTracked, confirmDialog, alertDialog, t])
+
+  const untrackFile = useCallback(
+    async (path: string) => {
+      try {
+        await projectsApi.removeFromList(path)
+        await refreshTracked()
+        await refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, refreshTracked, refreshFiles, alertDialog]
+  )
 
   const changeInstallsDir = useCallback(async () => {
     try {
@@ -675,6 +699,41 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
             + {t('settings.addFolder')}
           </button>
         </SectionCard>
+
+        {trackedFiles.length > 0 && (
+          <SectionCard
+            title={t('settings.trackedFiles')}
+            hint={t('settings.trackedFilesHint')}
+            control={
+              <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">
+                {trackedFiles.length}
+              </span>
+            }
+          >
+            <div className="-mx-2 max-h-56 overflow-y-auto">
+              {trackedFiles.map((path) => (
+                <div
+                  key={path}
+                  className="flex items-center gap-3 rounded-lg px-2 py-1 transition-colors hover:bg-white/5"
+                >
+                  <span className="max-w-[45%] shrink-0 truncate text-xs text-zinc-300">
+                    {fileNameOf(path).replace(/\.blend$/i, '')}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-right text-[11px] text-zinc-600" title={path}>
+                    {path}
+                  </span>
+                  <button
+                    onClick={() => untrackFile(path)}
+                    title={t('common.remove')}
+                    className="shrink-0 rounded-full p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-red-400"
+                  >
+                    <XIcon />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        )}
 
         <SectionCard
           title={t('settings.removeMissingProjects')}
