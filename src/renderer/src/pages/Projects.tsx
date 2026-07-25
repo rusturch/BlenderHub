@@ -501,7 +501,7 @@ export default function ProjectsPage({
             title={t('projects.rescanFolders')}
             onClick={refreshFiles}
             disabled={!isDesktop || scanning}
-            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
+            className="rounded-lg border border-white/10 p-2 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:opacity-50"
           >
             <RefreshIcon className={`h-4 w-4 ${scanning ? 'animate-spin' : ''}`} />
           </button>
@@ -714,7 +714,7 @@ export default function ProjectsPage({
                   <button
                     title={t('projects.displaySettings')}
                     onClick={() => setSettingsOpen((open) => !open)}
-                    className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+                    className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
                   >
                     <GearIcon className="h-4 w-4" />
                   </button>
@@ -824,7 +824,7 @@ export default function ProjectsPage({
                   >
                     {showVersion && (
                       <span
-                        className="absolute left-2 top-2 z-10 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200 backdrop-blur-sm"
+                        className="absolute left-2 top-2 z-10 rounded border border-white/10 bg-surface-card/80 px-1.5 py-0.5 text-[10px] font-semibold text-foreground backdrop-blur-sm"
                         title={
                           file.blenderVersion
                             ? t('projects.savedInVersion', { version: file.blenderVersion })
@@ -844,7 +844,7 @@ export default function ProjectsPage({
                         <button
                           onClick={() => setCardMenuFor(cardMenuFor === file.path ? null : file.path)}
                           title={t('projects.moreActions')}
-                          className="rounded-lg bg-black/50 p-1 text-zinc-200 backdrop-blur-sm transition-colors hover:bg-black/70"
+                          className="rounded-lg border border-white/10 bg-surface-card/80 p-1 text-icon backdrop-blur-sm transition-colors hover:bg-surface-card hover:text-icon-hover"
                         >
                           <DotsIcon className="h-4 w-4" />
                         </button>

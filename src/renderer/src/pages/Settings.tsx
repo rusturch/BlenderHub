@@ -511,7 +511,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
                     setLanguageMenuOpen(false)
                   }}
                   className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
-                    language === code ? 'bg-selection/15 text-selection' : 'text-zinc-300 hover:bg-white/10'
+                    language === code ? 'bg-selection text-selection-text' : 'text-zinc-300 hover:bg-white/10'
                   }`}
                 >
                   {languageLabel(code)}

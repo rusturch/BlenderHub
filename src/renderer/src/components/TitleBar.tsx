@@ -130,7 +130,7 @@ function ThemeMenu() {
         <button
           onClick={toggle}
           title={t('titlebar.theme')}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 [-webkit-app-region:no-drag]"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-icon transition-colors hover:bg-white/10 hover:text-icon-hover [-webkit-app-region:no-drag]"
         >
           <PaletteIcon className="h-[18px] w-[18px]" />
         </button>
@@ -145,7 +145,7 @@ function ThemeMenu() {
           }}
           className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
             selection === entry.selectionId
-              ? 'bg-selection/15 text-selection'
+              ? 'bg-selection text-selection-text'
               : 'text-zinc-300 hover:bg-white/10'
           }`}
         >
@@ -216,7 +216,7 @@ export default function TitleBar({ onUpdateClick }: TitleBarProps) {
           <button
             onClick={() => setMenuOpen((open) => !open)}
             title={t('titlebar.notifications')}
-            className="relative flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 [-webkit-app-region:no-drag]"
+            className="relative flex h-7 w-7 items-center justify-center rounded-md text-icon transition-colors hover:bg-white/10 hover:text-icon-hover [-webkit-app-region:no-drag]"
           >
             <BellIcon className="h-[18px] w-[18px]" />
             {updateAvailable && (

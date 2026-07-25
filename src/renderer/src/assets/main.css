@@ -21,9 +21,18 @@
      without touching accent-tinted tabs/text/borders */
   --color-accent-button: var(--color-blender);
   --color-accent-button-hover: #f28c24;
-  /* active/selected-item highlight — split from the accent so a theme can make
-     selections neutral (used as bg-selection/15 tint + text-selection) */
-  --color-selection: var(--color-blender);
+  /* active/selected-item highlight: the bar (bg-selection, alpha included in the
+     color itself) and the label/icon on it (text-selection-text) are separate
+     tokens, both split from the accent so selections can be neutral */
+  --color-selection: color-mix(in srgb, var(--color-blender) 15%, transparent);
+  --color-selection-text: var(--color-blender);
+  /* neutral interface icons (sidebar nav, icon-only buttons), one color per
+     state. Literal values on purpose: pointing them at the gray ramp would put
+     them back under the text colors they were split away from. Semantic icons
+     (danger, accent, status) keep their own colors. */
+  --color-icon: #9f9fa9;
+  --color-icon-hover: #f4f4f5;
+  --color-icon-selected: #e87d0d;
   /* project-card hover: outline (used as border-card-outline/40) and background —
      split from accent/surface-menu so a theme can restyle cards independently */
   --color-card-outline: var(--color-blender);
@@ -32,6 +41,9 @@
   --color-foreground: #e5e7eb;
   --color-on-accent: #ffffff;
   --color-scrollbar: #ffffff;
+  /* edge fade of a horizontally-scrolled table; alpha lives in the color so a
+     theme sets both how dark and how strong the fade is */
+  --color-scroll-shadow: color-mix(in srgb, var(--color-black) 50%, transparent);
   --color-surface-inset: #0a0a0a;
   --color-surface-drawer: #0e0e0e;
   --color-surface-input: #111111;
@@ -149,6 +161,20 @@ textarea {
   border: 2px solid rgba(0, 0, 0, 0.5);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
   cursor: pointer;
+}
+
+/* Transparency backdrop for color swatches and the alpha slider. Fixed greys on
+   purpose — it is the universal "this is see-through" pattern, not a themed
+   surface. */
+.checkerboard {
+  background-color: #c0c0c0;
+  background-image:
+    linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%),
+    linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%);
+  background-size: 8px 8px;
+  background-position:
+    0 0,
+    4px 4px;
 }
 
 /* Checkboxes: the box keeps the native footprint (13×13, UA margins untouched,

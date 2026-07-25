@@ -817,7 +817,7 @@ export default function InstallsPage({
             }}
             disabled={refreshing}
             title={t('installs.refreshHint')}
-            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
+            className="rounded-lg border border-white/10 p-2 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:opacity-50"
           >
             <RefreshIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
@@ -886,7 +886,7 @@ export default function InstallsPage({
                   <button
                     title={t('installs.displaySettings')}
                     onClick={() => setSettingsOpen((open) => !open)}
-                    className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+                    className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
                   >
                     <GearIcon className="h-4 w-4" />
                   </button>
@@ -964,7 +964,7 @@ export default function InstallsPage({
                 onClick={() => setFilter(tab)}
                 className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
                   filter === tab
-                    ? 'bg-selection/15 text-selection'
+                    ? 'bg-selection text-selection-text'
                     : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
                 }`}
               >
@@ -1327,7 +1327,7 @@ export default function InstallsPage({
                               disabled={removing}
                               onClick={() => setMoreMenuFor(moreMenuFor === row.key ? null : row.key)}
                               title={t('installs.moreActions')}
-                              className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                              className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-icon"
                             >
                               <DotsIcon />
                             </button>
@@ -1531,7 +1531,7 @@ export default function InstallsPage({
                                         setMoreMenuFor(moreMenuFor === entry.key ? null : entry.key)
                                       }
                                       title={t('installs.moreActions')}
-                                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                                      className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-icon"
                                     >
                                       <DotsIcon className="h-3.5 w-3.5" />
                                     </button>

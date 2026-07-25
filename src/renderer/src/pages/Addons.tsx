@@ -718,7 +718,7 @@ export default function AddonsPage({
         onClick={() => runScan()}
         disabled={busy || refreshing || !isDesktop}
         title={isDesktop ? t('addons.rescanTitle') : t('addons.desktopOnly')}
-        className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
+        className="rounded-lg border border-white/10 p-2 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:opacity-50"
       >
         <RefreshIcon className={`h-4 w-4 ${scanning || refreshing ? 'animate-spin' : ''}`} />
       </button>
@@ -802,7 +802,7 @@ export default function AddonsPage({
                         key={key}
                         onClick={() => setTab(key)}
                         className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                          tab === key ? 'bg-selection/15 text-selection' : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
+                          tab === key ? 'bg-selection text-selection-text' : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
                         }`}
                       >
                         {dotOn !== null && (
@@ -839,7 +839,7 @@ export default function AddonsPage({
                           onClick={() => setCategoryMenuOpen((open) => !open)}
                           title={t('addons.filterByCategory')}
                           className={`flex items-center gap-1 rounded-lg border border-white/10 p-1.5 transition-colors hover:bg-white/10 ${
-                            hiddenCategories.size > 0 ? 'text-blender' : 'text-zinc-400 hover:text-zinc-200'
+                            hiddenCategories.size > 0 ? 'text-blender' : 'text-icon hover:text-icon-hover'
                           }`}
                         >
                           <TagIcon className="h-4 w-4" />
@@ -906,7 +906,7 @@ export default function AddonsPage({
                       <button
                         title={t('addons.displaySettings')}
                         onClick={() => setSettingsOpen((open) => !open)}
-                        className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+                        className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
                       >
                         <GearIcon className="h-4 w-4" />
                       </button>

@@ -12,11 +12,13 @@ import {
   cssColorToHex,
   DEFAULT_PRESET_ID,
   DEFAULT_THEME_COLORS,
-  onThemeSelectionChanged
+  onThemeSelectionChanged,
+  withThemeDefaults
 } from '../../lib/theme'
 import {
   sanitizeThemeColors,
   THEME_COLOR_KEYS,
+  THEME_COLOR_VARS,
   THEME_COLORS_UI_KEY,
   THEME_DIRTY_UI_KEY,
   THEME_NAME_MAX,
@@ -63,6 +65,10 @@ const COLOR_GROUPS: { id: string; labelKey: string; keys: ThemeColorKey[] }[] = 
       'accent-button',
       'accent-button-hover',
       'selection',
+      'selection-text',
+      'icon',
+      'icon-hover',
+      'icon-selected',
       'card-outline',
       'card-hover',
       'background',
@@ -70,6 +76,7 @@ const COLOR_GROUPS: { id: string; labelKey: string; keys: ThemeColorKey[] }[] = 
       'on-accent',
       'overlay',
       'shade',
+      'scroll-shadow',
       'scrollbar'
     ]
   },
@@ -124,7 +131,7 @@ const COLOR_GROUPS: { id: string; labelKey: string; keys: ThemeColorKey[] }[] = 
 ]
 
 const iconButtonClass =
-  'rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400'
+  'rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-icon'
 
 function plainColors(source: ThemeColors): Record<string, string> {
   const record: Record<string, string> = {}
@@ -135,12 +142,28 @@ function plainColors(source: ThemeColors): Record<string, string> {
   return record
 }
 
-/** "#rrggbb" / "rrggbb" / "#rgb" / "rgb" → "#rrggbb"; anything else → null */
+/**
+ * What a row shows: the theme's own value, the stock one, or — for keys whose
+ * default is written in CSS in terms of another token — whatever is actually
+ * applied on the document right now.
+ */
+function rowHex(key: ThemeColorKey, colors: ThemeColors): string {
+  const value =
+    colors[key] ??
+    DEFAULT_THEME_COLORS[key] ??
+    getComputedStyle(document.documentElement).getPropertyValue(THEME_COLOR_VARS[key])
+  return cssColorToHex(value ?? '') ?? '#000000'
+}
+
+/** 3/4/6/8 hex digits, with or without "#" → "#rrggbb" / "#rrggbbaa"; else null */
 function parseHexInput(raw: string): string | null {
   const digits = raw.trim().replace(/^#/, '').toLowerCase()
-  if (/^[0-9a-f]{6}$/.test(digits)) return `#${digits}`
-  if (/^[0-9a-f]{3}$/.test(digits)) return `#${[...digits].map((digit) => digit + digit).join('')}`
-  return null
+  const long = /^[0-9a-f]{3,4}$/.test(digits)
+    ? [...digits].map((digit) => digit + digit).join('')
+    : digits
+  if (!/^([0-9a-f]{6}|[0-9a-f]{8})$/.test(long)) return null
+  // a fully opaque value stays in the short form the theme files use
+  return `#${long.length === 8 && long.endsWith('ff') ? long.slice(0, 6) : long}`
 }
 
 /** one editor row: label + typeable hex field + native color swatch */
@@ -187,9 +210,9 @@ function ColorRow({
               event.currentTarget.blur()
             }
           }}
-          maxLength={7}
+          maxLength={9}
           spellCheck={false}
-          className="w-[4.5rem] rounded border border-white/10 bg-surface-input px-1.5 py-0.5 text-center font-mono text-[10px] text-zinc-300 outline-none focus:border-blender/50"
+          className="w-[5.25rem] rounded border border-white/10 bg-surface-input px-1.5 py-0.5 text-center font-mono text-[10px] text-zinc-300 outline-none focus:border-blender/50"
         />
         <ColorPicker hex={hex} onChange={onChange} />
       </span>
@@ -215,7 +238,7 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
     const stored = uiGet(THEME_COLORS_UI_KEY)
     if (stored) {
       try {
-        return { ...DEFAULT_THEME_COLORS, ...sanitizeThemeColors(JSON.parse(stored)) }
+        return withThemeDefaults(sanitizeThemeColors(JSON.parse(stored)))
       } catch {
         // stale value — fall through to the default look
       }
@@ -313,7 +336,7 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
           }
           pendingColors.current = null
           try {
-            setColors({ ...DEFAULT_THEME_COLORS, ...sanitizeThemeColors(JSON.parse(value)) })
+            setColors(withThemeDefaults(sanitizeThemeColors(JSON.parse(value))))
           } catch {
             // half-written value — skip
           }
@@ -354,7 +377,7 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
       }
       pendingColors.current = null
       setSelection(option.selectionId)
-      setColors({ ...DEFAULT_THEME_COLORS, ...option.colors })
+      setColors(withThemeDefaults(option.colors))
       setDirty(false)
       setMenuOpen(false)
       applyThemeSelection(option.selectionId, option.colors)
@@ -377,7 +400,7 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
         const stored = uiGet(THEME_COLORS_UI_KEY)
         if (stored) {
           try {
-            setColors({ ...DEFAULT_THEME_COLORS, ...sanitizeThemeColors(JSON.parse(stored)) })
+            setColors(withThemeDefaults(sanitizeThemeColors(JSON.parse(stored))))
           } catch {
             // half-written value — skip
           }
@@ -553,7 +576,7 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
                 onClick={() => selectTheme(option)}
                 className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
                   selection === option.selectionId
-                    ? 'bg-selection/15 text-selection'
+                    ? 'bg-selection text-selection-text'
                     : 'text-zinc-300 hover:bg-white/10'
                 }`}
               >
@@ -664,7 +687,7 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
                     <ColorRow
                       key={key}
                       label={t(`settings.themeColor.${key}`)}
-                      hex={cssColorToHex(colors[key] ?? DEFAULT_THEME_COLORS[key] ?? '') ?? '#000000'}
+                      hex={rowHex(key, colors)}
                       onChange={(value) => editColor(key, value)}
                     />
                   ))}

@@ -58,7 +58,7 @@ export default function HScrollEdgeShadows({ targetRef, stickyRef, bottomInset =
     return (
       <div
         aria-hidden
-        className={`pointer-events-none absolute w-10 ${gradient} from-black/50 to-transparent transition-opacity duration-200 ${layer} ${rounding} ${
+        className={`pointer-events-none absolute w-10 ${gradient} from-scroll-shadow to-transparent transition-opacity duration-200 ${layer} ${rounding} ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
         style={{

@@ -20,11 +20,34 @@ export interface Hsl {
   l: number
 }
 
+/** "#abc" / "#abcd" / "#rrggbb" / "#rrggbbaa" → "rrggbbaa"; alpha defaults to ff */
+function expandHex(hex: string): string | null {
+  const raw = hex.trim().replace(/^#/, '').toLowerCase()
+  if (/^[0-9a-f]{3,4}$/.test(raw)) {
+    const long = [...raw].map((digit) => digit + digit).join('')
+    return long.length === 6 ? `${long}ff` : long
+  }
+  if (/^[0-9a-f]{6}$/.test(raw)) return `${raw}ff`
+  if (/^[0-9a-f]{8}$/.test(raw)) return raw
+  return null
+}
+
 export function hexToRgb(hex: string): Rgb {
-  const match = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim())
-  if (!match) return { r: 0, g: 0, b: 0 }
-  const n = parseInt(match[1], 16)
+  const digits = expandHex(hex)
+  if (!digits) return { r: 0, g: 0, b: 0 }
+  const n = parseInt(digits.slice(0, 6), 16)
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+}
+
+export function alphaFromHex(hex: string): number {
+  const digits = expandHex(hex)
+  return digits ? parseInt(digits.slice(6), 16) : 255
+}
+
+/** append the alpha byte, dropping it when fully opaque so values stay short */
+export function withAlpha(hex: string, alpha: number): string {
+  const byte = Math.max(0, Math.min(255, Math.round(alpha)))
+  return byte >= 255 ? hex : `${hex}${byte.toString(16).padStart(2, '0')}`
 }
 
 export function rgbToHex({ r, g, b }: Rgb): string {

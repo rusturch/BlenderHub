@@ -1,4 +1,5 @@
 import {
+  DERIVED_THEME_COLOR_KEYS,
   sanitizeThemeColors,
   THEME_COLOR_KEYS,
   THEME_COLOR_VARS,
@@ -21,14 +22,24 @@ export interface ThemePreset {
   id: string
   name: string
   colors: ThemeColors
+  /** "default": true in the file — the look a fresh install starts on */
+  isDefault: boolean
 }
 
-const presetModules = import.meta.glob<{ default: { name?: unknown; colors?: unknown } }>(
-  '../themes/*.json',
-  { eager: true }
-)
+// mod.default is the parsed JSON; its own "default" field is the flag marking
+// the preset a fresh install starts on
+const presetModules = import.meta.glob<{
+  default: { name?: unknown; colors?: unknown; default?: unknown }
+}>('../themes/*.json', { eager: true })
 
-export const DEFAULT_PRESET_ID = 'dark'
+/** the two plain looks head the list (even when neither is the default one);
+    everything else, the default preset included, sorts by name */
+const PINNED_PRESET_IDS = ['dark', 'light']
+
+const presetRank = (id: string): number => {
+  const at = PINNED_PRESET_IDS.indexOf(id)
+  return at === -1 ? PINNED_PRESET_IDS.length : at
+}
 
 // preset names are data that travels with the theme file (like Blender's own
 // presets and user-typed theme names) — deliberately not localized
@@ -37,15 +48,42 @@ export const BUILTIN_THEMES: ThemePreset[] = Object.entries(presetModules)
     const id = path.match(/([^/]+)\.json$/)?.[1]
     if (!id) return []
     const name = typeof mod.default.name === 'string' ? mod.default.name : id
-    return [{ id, name, colors: sanitizeThemeColors(mod.default.colors) }]
+    return [
+      {
+        id,
+        name,
+        colors: sanitizeThemeColors(mod.default.colors),
+        isDefault: mod.default.default === true
+      }
+    ]
   })
-  .sort((a, b) =>
-    a.id === DEFAULT_PRESET_ID ? -1 : b.id === DEFAULT_PRESET_ID ? 1 : a.name.localeCompare(b.name)
-  )
+  .sort((a, b) => presetRank(a.id) - presetRank(b.id) || a.name.localeCompare(b.name))
+
+/**
+ * The preset a fresh install starts on: whichever theme file carries
+ * "default": true, so switching it is a one-line edit in the theme itself and
+ * never touches code. With none (or several) flagged, the list order decides.
+ */
+export const DEFAULT_PRESET_ID =
+  BUILTIN_THEMES.find((preset) => preset.isDefault)?.id ?? BUILTIN_THEMES[0]?.id ?? 'dark'
 
 /** the stock look — also the value base for themes that omit some keys */
 export const DEFAULT_THEME_COLORS: ThemeColors =
   BUILTIN_THEMES.find((preset) => preset.id === DEFAULT_PRESET_ID)?.colors ?? {}
+
+/**
+ * Complete a theme with the stock values. Derived keys are left out: their CSS
+ * defaults are written in terms of the theme's own colors, so a theme saved
+ * before such a key existed keeps following its own palette instead of
+ * inheriting the default theme's.
+ */
+export function withThemeDefaults(colors: ThemeColors): ThemeColors {
+  const merged: ThemeColors = { ...DEFAULT_THEME_COLORS }
+  for (const key of DERIVED_THEME_COLOR_KEYS) {
+    if (!colors[key]) delete merged[key]
+  }
+  return { ...merged, ...colors }
+}
 
 /** override the variables for the given keys, restore defaults for the missing ones */
 export function applyThemeColors(colors: ThemeColors): void {
@@ -82,7 +120,7 @@ export function onThemeSelectionChanged(listener: ThemeSelectionListener): () =>
 
 /** apply a theme and persist it as the active selection (drops any dirty edits) */
 export function applyThemeSelection(selectionId: string, colors: ThemeColors): void {
-  const next = { ...DEFAULT_THEME_COLORS, ...colors }
+  const next = withThemeDefaults(colors)
   applyThemeColors(next)
   uiSet(THEME_SELECTED_UI_KEY, selectionId)
   uiSet(THEME_DIRTY_UI_KEY, '0')
@@ -109,12 +147,14 @@ function applyPersistedTheme(): void {
   // definition, so preset updates propagate without a manual re-select and the
   // stored snapshot never lags behind a newly added color key. User themes and
   // edited presets restore from the stored snapshot.
-  const selected = uiGet(THEME_SELECTED_UI_KEY)
+  // nothing chosen yet (first run) means the default preset, not the bare CSS
+  // fallback — otherwise a fresh install shows neither preset's look
+  const selected = uiGet(THEME_SELECTED_UI_KEY) ?? `${BUILTIN_PREFIX}${DEFAULT_PRESET_ID}`
   const dirty = uiGet(THEME_DIRTY_UI_KEY) === '1'
-  if (selected && selected.startsWith(BUILTIN_PREFIX) && !dirty) {
+  if (selected.startsWith(BUILTIN_PREFIX) && !dirty) {
     const preset = BUILTIN_THEMES.find((p) => p.id === selected.slice(BUILTIN_PREFIX.length))
     if (preset) {
-      const colors = { ...DEFAULT_THEME_COLORS, ...preset.colors }
+      const colors = withThemeDefaults(preset.colors)
       applyThemeColors(colors)
       // keep the stored snapshot (read by main for window chrome, and by the
       // editor) in sync with the freshly applied preset
@@ -145,14 +185,16 @@ function plainThemeColors(colors: ThemeColors): Record<string, string> {
 let colorProbe: CanvasRenderingContext2D | null | undefined
 
 /**
- * Normalize any CSS color to #rrggbb for <input type="color">. Rendered through
- * a 1×1 canvas pixel — the fillStyle getter no longer normalizes CSS Color 4
- * values (oklch et al come back verbatim), but getImageData always yields sRGB
- * bytes. Alpha is dropped; an unparseable value paints black.
+ * Normalize any CSS color to #rrggbb (or #rrggbbaa when it carries alpha, as
+ * the selection tint does). Rendered through a 1×1 canvas pixel — the fillStyle
+ * getter no longer normalizes CSS Color 4 values (oklch et al come back
+ * verbatim), but getImageData always yields sRGB bytes. An unparseable value
+ * keeps the black the probe was primed with.
  */
 export function cssColorToHex(value: string): string | null {
   const trimmed = value.trim()
-  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase()
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed) || /^#[0-9a-fA-F]{8}$/.test(trimmed))
+    return trimmed.toLowerCase()
   if (colorProbe === undefined) {
     const canvas = document.createElement('canvas')
     canvas.width = 1
@@ -165,7 +207,7 @@ export function cssColorToHex(value: string): string | null {
   colorProbe.fillStyle = trimmed
   colorProbe.fillRect(0, 0, 1, 1)
   const [r, g, b, a] = colorProbe.getImageData(0, 0, 1, 1).data
-  if (a === 0) return null
   const channel = (n: number): string => n.toString(16).padStart(2, '0')
-  return `#${channel(r)}${channel(g)}${channel(b)}`
+  const rgb = `#${channel(r)}${channel(g)}${channel(b)}`
+  return a >= 255 ? rgb : `${rgb}${channel(a)}`
 }

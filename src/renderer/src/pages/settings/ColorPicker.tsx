@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import Dropdown from '../../components/Dropdown'
 import { useTranslation } from '../../lib/i18n'
-import { hexToRgb, hslToHsv, hsvToHsl, hsvToRgb, rgbToHex, rgbToHsv } from './color-utils'
+import {
+  alphaFromHex,
+  hexToRgb,
+  hslToHsv,
+  hsvToHsl,
+  hsvToRgb,
+  rgbToHex,
+  rgbToHsv,
+  withAlpha
+} from './color-utils'
 import type { Hsv } from './color-utils'
 import { EyedropperIcon } from './icons'
 
@@ -47,17 +56,20 @@ export function ColorPicker({
   // grays and black (where hex carries neither); it re-syncs from hex only on
   // EXTERNAL changes (typed hex, other window), tracked via selfHex
   const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(hex)))
+  const [alpha, setAlpha] = useState(() => alphaFromHex(hex))
   const selfHex = useRef(hex)
   useEffect(() => {
     if (hex !== selfHex.current) {
       setHsv(rgbToHsv(hexToRgb(hex)))
+      setAlpha(alphaFromHex(hex))
       selfHex.current = hex
     }
   }, [hex])
 
-  const emit = (next: Hsv): void => {
+  const emit = (next: Hsv, nextAlpha = alpha): void => {
     setHsv(next)
-    const nextHex = rgbToHex(hsvToRgb(next))
+    setAlpha(nextAlpha)
+    const nextHex = withAlpha(rgbToHex(hsvToRgb(next)), nextAlpha)
     selfHex.current = nextHex
     if (nextHex !== hex) onChange(nextHex)
   }
@@ -171,9 +183,15 @@ export function ColorPicker({
           type="button"
           onClick={() => setOpen((value) => !value)}
           title={t('settings.colorPickerOpen')}
-          className="h-6 w-9 shrink-0 cursor-pointer rounded border border-white/10"
-          style={{ backgroundColor: hex }}
-        />
+          className="checkerboard relative h-6 w-9 shrink-0 cursor-pointer rounded"
+        >
+          {/* the border belongs to the color layer: on the button it would be
+              drawn over the checkerboard and read as a light outline */}
+          <span
+            className="absolute inset-0 rounded border border-white/10"
+            style={{ backgroundColor: hex }}
+          />
+        </button>
       }
     >
       <div className="flex flex-col gap-3">
@@ -220,7 +238,7 @@ export function ColorPicker({
               type="button"
               onClick={pickFromScreen}
               title={t('settings.colorPickerEyedropper')}
-              className="rounded-md border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+              className="rounded-md border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
             >
               <EyedropperIcon className="h-4 w-4" />
             </button>
@@ -256,6 +274,27 @@ export function ColorPicker({
             </span>
           </div>
         ))}
+        <div className="flex items-center gap-2">
+          <span className="w-3 text-center text-[10px] font-medium text-zinc-400">A</span>
+          {/* the track fades to transparent, so the checkerboard has to sit
+              behind the input rather than on it; the input must be a block —
+              as an inline box it would ride the wrapper's text baseline */}
+          <span className="checkerboard flex-1 rounded-full">
+            <input
+              type="range"
+              ref={(el) => syncRangeValue(el, alpha)}
+              min={0}
+              max={255}
+              value={alpha}
+              onChange={(event) => emit(hsv, Number(event.target.value))}
+              className="theme-slider block h-2.5 w-full"
+              style={{
+                background: `linear-gradient(to right, rgba(${Math.round(rgb.r)},${Math.round(rgb.g)},${Math.round(rgb.b)},0), rgb(${Math.round(rgb.r)},${Math.round(rgb.g)},${Math.round(rgb.b)}))`
+              }}
+            />
+          </span>
+          <span className="w-7 text-right font-mono text-[10px] text-zinc-500">{alpha}</span>
+        </div>
       </div>
     </Dropdown>
   )

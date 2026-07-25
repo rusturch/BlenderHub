@@ -819,7 +819,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
         onClick={() => void runScan()}
         disabled={busy || !isDesktop}
         title={isDesktop ? t('sync.rescanHint') : t('sync.desktopOnlyHint')}
-        className="rounded-lg border border-white/10 p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
+        className="rounded-lg border border-white/10 p-2 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:opacity-50"
       >
         <RefreshIcon className={`h-4 w-4 ${scanning ? 'animate-spin' : ''}`} />
       </button>
@@ -1013,7 +1013,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                     <button
                       title={t('sync.displaySettingsHint')}
                       onClick={() => setSettingsOpen((open) => !open)}
-                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+                      className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
                     >
                       <GearIcon className="h-4 w-4" />
                     </button>
@@ -1369,7 +1369,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                       onClick={() => void syncApi.revealBackup(backup.id).catch(() => {})}
                       disabled={!isDesktop}
                       title={t('sync.revealBackupHint')}
-                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 disabled:opacity-50"
+                      className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover disabled:opacity-50"
                     >
                       <FolderOpenIcon />
                     </button>
@@ -1377,7 +1377,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                       onClick={() => void deleteOne(backup)}
                       disabled={busy || !isDesktop}
                       title={t('sync.deleteBackupHint')}
-                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                      className="rounded-lg border border-white/10 p-1.5 text-icon transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
                     >
                       <TrashIcon />
                     </button>

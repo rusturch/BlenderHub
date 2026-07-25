@@ -13,9 +13,16 @@ export const THEME_COLOR_VARS = {
   'accent-button': '--color-accent-button',
   /** solid primary-button fill on hover */
   'accent-button-hover': '--color-accent-button-hover',
-  /** active/selected-item highlight — its /15 tint AND its text/icon; split from
-      accent so selections can be neutral while the accent stays branded */
+  /** the bar behind the selected item — carries its own alpha (#rrggbbaa), so a
+      theme sets both the tint's color and how strong it reads */
   selection: '--color-selection',
+  /** label of the selected item (defaults to the highlight color) */
+  'selection-text': '--color-selection-text',
+  /** neutral icons (sidebar nav, icon-only buttons), one key per state — they
+      no longer follow the text color of whatever holds them */
+  icon: '--color-icon',
+  'icon-hover': '--color-icon-hover',
+  'icon-selected': '--color-icon-selected',
   /** outline around a project card on hover (drawn as a /40 tint of this color) */
   'card-outline': '--color-card-outline',
   /** project card background on hover */
@@ -28,6 +35,8 @@ export const THEME_COLOR_VARS = {
   overlay: '--color-white',
   /** dimming behind dialogs and thumbnail gradients (black/60, …) */
   shade: '--color-black',
+  /** fade over the edges of a horizontally-scrolled table — carries its own alpha */
+  'scroll-shadow': '--color-scroll-shadow',
   scrollbar: '--color-scrollbar',
   'surface-inset': '--color-surface-inset',
   'surface-drawer': '--color-surface-drawer',
@@ -62,6 +71,20 @@ export const THEME_COLOR_VARS = {
 } as const
 
 export type ThemeColorKey = keyof typeof THEME_COLOR_VARS
+
+/**
+ * Keys whose stock value is defined in CSS as another token (see main.css) —
+ * a theme that omits them has to follow its own palette, not the default one,
+ * so they are left out when filling a partial theme with the stock values.
+ */
+export const DERIVED_THEME_COLOR_KEYS = [
+  'accent-button',
+  'selection',
+  'selection-text',
+  'scroll-shadow',
+  'card-outline',
+  'card-hover'
+] as const satisfies readonly ThemeColorKey[]
 
 export const THEME_COLOR_KEYS = Object.keys(THEME_COLOR_VARS) as ThemeColorKey[]
 
