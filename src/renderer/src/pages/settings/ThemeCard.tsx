@@ -56,29 +56,28 @@ interface ThemeOption {
 
 // labels come from settings.themeColor.<key> — every ThemeColorKey has an entry
 // in the locale files
+// rows render in a two-column grid, so keys are ordered to land in related
+// pairs: (background, foreground), (button fill, its hover), …
 const COLOR_GROUPS: { id: string; labelKey: string; keys: ThemeColorKey[] }[] = [
   {
-    id: 'general',
-    labelKey: 'settings.themesGroupGeneral',
-    keys: [
-      'accent',
-      'accent-button',
-      'accent-button-hover',
-      'selection',
-      'selection-text',
-      'icon',
-      'icon-hover',
-      'icon-selected',
-      'card-outline',
-      'card-hover',
-      'background',
-      'foreground',
-      'on-accent',
-      'overlay',
-      'shade',
-      'scroll-shadow',
-      'scrollbar'
-    ]
+    id: 'window',
+    labelKey: 'settings.themesGroupWindow',
+    keys: ['background', 'foreground', 'overlay', 'shade', 'scroll-shadow', 'scrollbar']
+  },
+  {
+    id: 'accent',
+    labelKey: 'settings.themesGroupAccent',
+    keys: ['accent', 'on-accent', 'accent-button', 'accent-button-hover']
+  },
+  {
+    id: 'selection',
+    labelKey: 'settings.themesGroupSelection',
+    keys: ['selection', 'selection-text', 'icon', 'icon-hover', 'icon-selected']
+  },
+  {
+    id: 'cards',
+    labelKey: 'settings.themesGroupCards',
+    keys: ['card-outline', 'card-hover']
   },
   {
     id: 'surfaces',
@@ -248,7 +247,7 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   // the floating editor exists to tweak colors — greet it with a group open
   const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set(standalone ? ['general'] : [])
+    () => new Set(standalone ? ['window'] : [])
   )
   const [editName, setEditName] = useState('')
 
