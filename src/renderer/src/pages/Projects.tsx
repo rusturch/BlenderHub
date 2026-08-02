@@ -53,6 +53,11 @@ export default function ProjectsPage({
   const [creating, setCreating] = useState(false)
 
   const [cardMenuFor, setCardMenuFor] = useState<string | null>(null)
+  // set only when the menu was summoned by right-click — then it opens at the cursor
+  // instead of under the "⋮" button
+  const [cardMenuAt, setCardMenuAt] = useState<{ x: number; y: number } | null>(null)
+  // single click marks a card; double click is what opens it
+  const [selectedCard, setSelectedCard] = useState<string | null>(null)
   const [missingOpen, setMissingOpen] = useState(false)
   const [renameFor, setRenameFor] = useState<BlendFileInfo | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -813,36 +818,113 @@ export default function ProjectsPage({
                 return (
                   <div
                     key={file.path}
-                    className="group relative flex flex-col rounded-xl border border-white/5 bg-surface-panel transition-all duration-150 hover:border-card-outline/40 hover:bg-card-hover hover:shadow-lg hover:shadow-black/40"
+                    className={`group relative flex cursor-pointer flex-col rounded-xl border transition-all duration-150 ${
+                      selectedCard === file.path
+                        ? 'border-card-outline bg-card-hover shadow-lg shadow-black/40 ring-1 ring-card-outline/40'
+                        : 'border-white/5 bg-surface-panel hover:border-card-outline/40 hover:bg-card-hover hover:shadow-lg hover:shadow-black/40'
+                    }`}
+                    onClick={() => setSelectedCard(file.path)}
                     onDoubleClick={() => {
                       if (selected) requestOpen(file, selected)
                     }}
                     onContextMenu={(event) => {
                       event.preventDefault()
+                      setSelectedCard(file.path)
+                      setCardMenuAt({ x: event.clientX, y: event.clientY })
                       setCardMenuFor(file.path)
                     }}
                   >
+                    {/* the version to open with, over the thumbnail: picking one here is the
+                        only version control on the card now that Open is gone */}
                     {showVersion && (
-                      <span
-                        className="absolute left-2 top-2 z-10 rounded border border-white/10 bg-surface-card/80 px-1.5 py-0.5 text-[10px] font-semibold text-foreground backdrop-blur-sm"
-                        title={
-                          file.blenderVersion
-                            ? t('projects.savedInVersion', { version: file.blenderVersion })
-                            : undefined
-                        }
-                      >
-                        {file.blenderVersion ?? t('projects.unknown')}
-                      </span>
+                      <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
+                        <Dropdown
+                          open={menuFor === file.path}
+                          onClose={() => setMenuFor(null)}
+                          align="left"
+                          menuClassName="flex max-h-64 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl"
+                          trigger={
+                            <button
+                              onClick={() => setMenuFor(menuFor === file.path ? null : file.path)}
+                              disabled={installedSorted.length === 0}
+                              title={t('projects.chooseVersion')}
+                              // py-1 + leading-4 gives the same 16px line box the "⋮" gets
+                              // from its icon, so both corners of the card match in height
+                              className="flex items-center gap-1 rounded-lg border border-white/10 bg-surface-card/80 px-2 py-1 text-[11px] font-semibold leading-4 text-foreground backdrop-blur-sm transition-colors hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {selected ? selected.version : '—'}
+                              <ChevronDownIcon className="h-3 w-3" />
+                            </button>
+                          }
+                        >
+                          <div className="min-h-0 flex-1 overflow-y-auto">
+                            {installedSorted.map((build) => {
+                              const isNativeRow = native != null && build.id === native.id
+                              const isSelectedRow = selected != null && build.id === selected.id
+                              return (
+                                <button
+                                  key={build.id}
+                                  onClick={() => {
+                                    setSelectedInstall((prev) => ({ ...prev, [file.path]: build.id }))
+                                    setMenuFor(null)
+                                  }}
+                                  title={`${t('projects.blenderBuildLabel', { version: build.version, cycle: build.releaseCycle })}${isNativeRow ? t('projects.projectVersionSuffix') : ''}`}
+                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/10"
+                                >
+                                  <span
+                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${isNativeRow ? 'bg-emerald-400' : 'bg-transparent'}`}
+                                  />
+                                  {build.version}
+                                  {isSelectedRow && (
+                                    <CheckIcon className="h-3.5 w-3.5 shrink-0 text-blender" />
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {file.blenderVersion && !native && onShowInstalls && (
+                            <>
+                              <div className="my-1 shrink-0 border-t border-white/5" />
+                              <button
+                                onClick={() => {
+                                  setMenuFor(null)
+                                  onShowInstalls(file.blenderVersion!)
+                                }}
+                                className="flex w-full shrink-0 items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-blender transition-colors hover:bg-blender/10"
+                              >
+                                <DownloadIcon className="h-3.5 w-3.5" />
+                                {t('projects.installVersion', { version: file.blenderVersion })}
+                              </button>
+                            </>
+                          )}
+                        </Dropdown>
+                        {mismatch && (
+                          <span
+                            title={t('projects.versionMismatch', {
+                              fileVersion: file.blenderVersion ?? '—',
+                              selectedVersion: selected?.version ?? ''
+                            })}
+                            className="flex items-center rounded-lg border border-white/10 bg-surface-card/80 p-1 text-amber-400 backdrop-blur-sm"
+                          >
+                            <WarningIcon className="h-4 w-4" />
+                          </span>
+                        )}
+                      </div>
                     )}
                     <Dropdown
                       className="absolute right-2 top-2 z-10"
                       open={cardMenuFor === file.path}
                       onClose={() => setCardMenuFor(null)}
-                      align="right"
+                      align={cardMenuAt ? 'left' : 'right'}
+                      at={cardMenuFor === file.path ? cardMenuAt : null}
                       menuClassName="min-w-52 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
                       trigger={
                         <button
-                          onClick={() => setCardMenuFor(cardMenuFor === file.path ? null : file.path)}
+                          onClick={() => {
+                            // button press keeps the old behaviour: anchored under it
+                            setCardMenuAt(null)
+                            setCardMenuFor(cardMenuFor === file.path ? null : file.path)
+                          }}
                           title={t('projects.moreActions')}
                           className="rounded-lg border border-white/10 bg-surface-card/80 p-1 text-icon backdrop-blur-sm transition-colors hover:bg-surface-card hover:text-icon-hover"
                         >
@@ -962,90 +1044,6 @@ export default function ProjectsPage({
                           {file.path}
                         </p>
                       )}
-                      <div className="mt-auto flex items-center gap-1.5">
-                        <button
-                          onClick={() => requestOpen(file, selected)}
-                          disabled={!selected}
-                          title={
-                            selected
-                              ? t('projects.openWithVersion', { version: selected.version })
-                              : t('projects.installFirst')
-                          }
-                          className="rounded-lg bg-accent-button px-3 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {t('common.open')}
-                        </button>
-                        {mismatch && (
-                          <span
-                            title={t('projects.versionMismatch', {
-                              fileVersion: file.blenderVersion ?? '—',
-                              selectedVersion: selected?.version ?? ''
-                            })}
-                            className="flex items-center text-amber-400"
-                          >
-                            <WarningIcon className="h-4 w-4" />
-                          </span>
-                        )}
-                        <Dropdown
-                          className="ml-auto"
-                          open={menuFor === file.path}
-                          onClose={() => setMenuFor(null)}
-                          align="right"
-                          menuClassName="flex max-h-64 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl"
-                          trigger={
-                            <button
-                              onClick={() => setMenuFor(menuFor === file.path ? null : file.path)}
-                              disabled={installedSorted.length === 0}
-                              title={t('projects.chooseVersion')}
-                              className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              {selected ? selected.version : '—'}
-                              <ChevronDownIcon className="h-3 w-3" />
-                            </button>
-                          }
-                        >
-                          <div className="min-h-0 flex-1 overflow-y-auto">
-                            {installedSorted.map((build) => {
-                              const isNativeRow = native != null && build.id === native.id
-                              const isSelectedRow = selected != null && build.id === selected.id
-                              return (
-                                <button
-                                  key={build.id}
-                                  onClick={() => {
-                                    setSelectedInstall((prev) => ({ ...prev, [file.path]: build.id }))
-                                    setMenuFor(null)
-                                  }}
-                                  title={`${t('projects.blenderBuildLabel', { version: build.version, cycle: build.releaseCycle })}${isNativeRow ? t('projects.projectVersionSuffix') : ''}`}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/10"
-                                >
-                                  <span
-                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${isNativeRow ? 'bg-emerald-400' : 'bg-transparent'}`}
-                                  />
-                                  {build.version}
-                                  {isSelectedRow && (
-                                    <CheckIcon className="h-3.5 w-3.5 shrink-0 text-blender" />
-                                  )}
-                                </button>
-                              )
-                            })}
-                          </div>
-                          {file.blenderVersion && !native && onShowInstalls && (
-                            <>
-                              <div className="my-1 shrink-0 border-t border-white/5" />
-                              <button
-                                onClick={() => {
-                                  setMenuFor(null)
-                                  onShowInstalls(file.blenderVersion!)
-                                }}
-                                className="flex w-full shrink-0 items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-blender transition-colors hover:bg-blender/10"
-                              >
-                                <DownloadIcon className="h-3.5 w-3.5" />
-                                {t('projects.installVersion', { version: file.blenderVersion })}
-                              </button>
-                            </>
-                          )}
-                        </Dropdown>
-                      </div>
                     </div>
                   </div>
                 )

@@ -24,6 +24,12 @@ interface DropdownProps {
   menuClassName?: string
   /** extra classes for the anchor wrapper (e.g. ml-auto, absolute positioning) */
   className?: string
+  /**
+   * Viewport point to open at instead of under the trigger — for context menus, which
+   * belong at the cursor. The trigger still anchors dismissal, so a click on it closes
+   * the menu as usual.
+   */
+  at?: { x: number; y: number } | null
 }
 
 // The menu is rendered in a portal with fixed positioning so it is never clipped
@@ -36,14 +42,21 @@ export default function Dropdown({
   children,
   align = 'right',
   menuClassName = '',
-  className = ''
+  className = '',
+  at = null
 }: DropdownProps) {
   const anchorRef = useRef<HTMLSpanElement>(null)
   return (
     <span ref={anchorRef} className={`inline-flex ${className}`}>
       {trigger}
       {open && (
-        <DropdownMenu anchorRef={anchorRef} onClose={onClose} align={align} className={menuClassName}>
+        <DropdownMenu
+          anchorRef={anchorRef}
+          onClose={onClose}
+          align={align}
+          className={menuClassName}
+          at={at}
+        >
           {children}
         </DropdownMenu>
       )}
@@ -56,12 +69,14 @@ function DropdownMenu({
   onClose,
   align,
   className,
+  at,
   children
 }: {
   anchorRef: RefObject<HTMLSpanElement | null>
   onClose: () => void
   align: 'left' | 'right'
   className: string
+  at: { x: number; y: number } | null
   children: ReactNode
 }): ReactNode {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -81,8 +96,12 @@ function DropdownMenu({
   useLayoutEffect(() => {
     const anchor = anchorRef.current
     const menu = menuRef.current
-    if (!anchor || !menu) return
-    const a = anchor.getBoundingClientRect()
+    if (!menu || (!anchor && !at)) return
+    // a cursor point behaves like a zero-size anchor: the flip/clamp rules below then
+    // place the menu at it exactly the way they place one under a trigger
+    const a = at
+      ? { top: at.y, bottom: at.y, left: at.x, right: at.x }
+      : anchor!.getBoundingClientRect()
     const m = menu.getBoundingClientRect()
     const vw = window.innerWidth
     const vh = window.innerHeight
