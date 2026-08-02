@@ -15,6 +15,7 @@ export const STORAGE_META: Record<StorageCategory, { labelKey: string; color: st
   installs: { labelKey: 'settings.storageInstalls', color: 'bg-[var(--blender-brand)]' },
   downloads: { labelKey: 'settings.storageDownloads', color: 'bg-sky-500' },
   library: { labelKey: 'settings.storageLibrary', color: 'bg-emerald-500' },
+  assets: { labelKey: 'settings.storageAssets', color: 'bg-amber-500' },
   backups: { labelKey: 'settings.storageBackups', color: 'bg-violet-500' },
   other: { labelKey: 'settings.storageOther', color: 'bg-zinc-500' }
 }

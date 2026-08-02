@@ -17,6 +17,7 @@ import type {
   SyncComponentId,
   SyncOpResult
 } from '../../shared/types'
+import { getAssetLibraryFixupExtra } from '../asset-library/service'
 import { copyComponentItems, expandEntries, fingerprintComponent } from './components'
 import type { ComponentFingerprint, ResolvedItem } from './components'
 import { createSnapshot, findBackup } from './backups'
@@ -30,7 +31,7 @@ import type { BaselineEntry } from './state'
 // the copy — everything else in the copied preferences stays — then saves, which also
 // rewrites the file in the target version's own format. Same invariants as the add-ons
 // batch script: constant code, payload via file + env var, registry state decides success.
-const FIXUP_SCRIPT = `import bpy, json, os, sys
+export const FIXUP_SCRIPT = `import bpy, json, os, sys
 
 with open(os.environ["BLH_SYNC_FILE"], "r", encoding="utf-8") as f:
     payload = json.load(f)
@@ -69,6 +70,47 @@ for module in sorted(desired - current):
     ok = is_enabled(module)
     results.append({"op": "enable", "module": module, "ok": ok,
                     "error": None if ok else (error or "could not enable it — its files may be missing, or its extension repository is not part of the copied preferences")})
+
+# the copied preferences carry the SOURCE's asset-library list; the launcher's
+# own entry must survive the copy — restored here so the very save that fixes
+# the add-ons also fixes the library (no drift, no extra launch). The payload is
+# attached per TARGET and only when the launcher recorded a registration there
+# (getAssetLibraryFixupExtra), so a base the user removed the entry from never
+# gets it back through this side path. Path-first match: an entry already
+# pointing at the folder counts, whatever its name.
+lib = payload.get("asset_library")
+if lib:
+    libs = bpy.context.preferences.filepaths.asset_libraries
+    def lib_path(e):
+        return e.path if hasattr(e, "path") else getattr(e, "directory", "")
+    def lib_set_path(e, value):
+        if hasattr(e, "path"):
+            e.path = value
+        else:
+            e.directory = value
+    def lib_norm(p):
+        return os.path.normcase(os.path.normpath(p)) if p else ""
+    directory = os.path.normpath(lib["dir"])
+    if not any(lib_norm(lib_path(e)) == lib_norm(directory) for e in libs):
+        match = next((e for e in libs if e.name == lib["name"]), None)
+        if match is not None:
+            lib_set_path(match, directory)
+        elif callable(getattr(libs, "new", None)):
+            try:
+                entry = libs.new(name=lib["name"], directory=directory)
+            except TypeError:
+                entry = libs.new(name=lib["name"])
+                lib_set_path(entry, directory)
+            if hasattr(entry, "import_method"):
+                for method in ("APPEND_REUSE", "PACK", "APPEND"):
+                    try:
+                        entry.import_method = method
+                        break
+                    except TypeError:
+                        continue
+        else:
+            bpy.ops.preferences.asset_library_add(directory=directory)
+            libs[len(libs) - 1].name = lib["name"]
 
 try:
     bpy.ops.wm.save_userpref()
@@ -226,9 +268,16 @@ export async function applySettingsSync(
       onProgress?.({ minor, index, total, phase: 'fixup' })
       try {
         const scriptPath = await ensureScript('.settings-sync-fixup.py', FIXUP_SCRIPT)
+        // launcher asset library (when this TARGET is recorded as registered):
+        // restored by the fixup in the same save, so an Apply from a
+        // not-yet-registered source cannot strip the target's entry
+        const assetLibraryExtra = await getAssetLibraryFixupExtra(target.base).catch(() => null)
         const payloadPath = await writeDataFile(
           `.sync-fixup-${minor}.json`,
-          JSON.stringify({ enabled: savedModules ? [...savedModules] : null })
+          JSON.stringify({
+            enabled: savedModules ? [...savedModules] : null,
+            asset_library: assetLibraryExtra
+          })
         )
         const stdout = await runBlenderScript(
           target.executable as string,

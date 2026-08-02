@@ -16,6 +16,7 @@ import {
 } from './installs'
 import { locateInstalls } from './locate'
 import { listRunningBlenders, requestCloseBlenders } from './running'
+import { scheduleAssetLibraryReconcile } from '../asset-library/service'
 import { requireString } from '../ipc-util'
 import type { InstallProgress, RemoteBuild } from '../../shared/types'
 
@@ -77,12 +78,16 @@ export function registerBlenderIpc(): void {
     const controller = new AbortController()
     installsInFlight.set(buildId, controller)
     try {
-      return await installBuild(
+      const installed = await installBuild(
         build,
         (progress) => broadcast('builds:install-progress', progress),
         rawKeepExisting === true,
         controller.signal
       )
+      // a new version may need the launcher asset library registered (deferred
+      // anyway until the version has run once and owns a userpref.blend)
+      scheduleAssetLibraryReconcile()
+      return installed
     } catch (error) {
       // a cancel is the user's own doing, not a failure to report as one
       const phase = controller.signal.aborted ? 'cancelled' : 'error'
@@ -111,7 +116,9 @@ export function registerBlenderIpc(): void {
       properties: ['openDirectory']
     })
     if (picked.canceled || !picked.filePaths[0]) return null
-    return locateInstalls(picked.filePaths[0], await getInstallsDir())
+    const located = await locateInstalls(picked.filePaths[0], await getInstallsDir())
+    if (located.length > 0) scheduleAssetLibraryReconcile()
+    return located
   })
 
   ipcMain.handle('builds:launch', (_event, rawId: unknown) => launchInstalled(requireString(rawId, 'install id')))

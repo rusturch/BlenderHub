@@ -29,6 +29,11 @@ export interface ParsedExtensionRepo {
   remoteUrl: string | null
 }
 
+export interface ParsedAssetLibrary {
+  name: string
+  directory: string
+}
+
 export interface ParsedUserpref {
   versionCode: number
   /** module names exactly as Blender stores them ('node_wrangler', 'bl_ext.repo.pkg') */
@@ -36,6 +41,8 @@ export interface ParsedUserpref {
   /** Preferences → File Paths → Script Directories (3.6+: many; ≤3.5: single) */
   scriptDirectories: string[]
   extensionRepos: ParsedExtensionRepo[]
+  /** Preferences → File Paths → Asset Libraries (3.0+; empty on older versions) */
+  assetLibraries: ParsedAssetLibrary[]
 }
 
 // --- low-level blend structure -------------------------------------------
@@ -413,7 +420,30 @@ export async function parseUserpref(filePath: string): Promise<ParsedUserpref> {
     }
   }
 
-  return { versionCode: file.versionCode, enabledModules, scriptDirectories, extensionRepos }
+  // asset libraries (3.0+): UserDef.asset_libraries -> bUserAssetLibrary
+  const assetLibraries: ParsedAssetLibrary[] = []
+  const librariesField = findField(file, userStructIndex, ['asset_libraries'])
+  if (librariesField) {
+    const libStructIndex = structIndexByName(file, 'bUserAssetLibrary')
+    if (libStructIndex !== null) {
+      const nameField = findField(file, libStructIndex, ['name'])
+      // 'dirpath' since 3.2; the earliest releases stored it as 'path'
+      const dirField = findField(file, libStructIndex, ['dirpath', 'path'])
+      if (nameField && dirField && !dirField.rawName.startsWith('*')) {
+        for (const block of walkList(
+          file,
+          libStructIndex,
+          readPointer(file, userBlock.bodyStart + librariesField.offset)
+        )) {
+          const name = readCString(file, block.bodyStart + nameField.offset, nameField.byteSize)
+          const directory = readCString(file, block.bodyStart + dirField.offset, dirField.byteSize)
+          if (name || directory) assetLibraries.push({ name, directory })
+        }
+      }
+    }
+  }
+
+  return { versionCode: file.versionCode, enabledModules, scriptDirectories, extensionRepos, assetLibraries }
 }
 
 // --- semantic canonical dump (settings-sync drift detection) ---------------

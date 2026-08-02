@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../lib/i18n'
-import { uiGet, uiSet } from '../lib/ui-store'
 import { getLauncherApi } from '../lib/preview-fallback'
 import logo from '../assets/icon.png'
 import { DISCORD_INVITE_URL, SHOW_COMMUNITY_LINKS, SUPPORT_URL } from '../../../shared/app-config'
@@ -157,22 +156,6 @@ function HeartIcon({ className = 'h-5 w-5' }: IconProps) {
   )
 }
 
-function PanelToggleIcon({ className = 'h-4 w-4' }: IconProps) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m15 6-6 6 6 6" />
-    </svg>
-  )
-}
-
 const MAIN_NAV_ITEMS: { id: Page; labelKey: string; icon: ReactNode }[] = [
   { id: 'projects', labelKey: 'nav.projects', icon: <FolderIcon className="h-5 w-5 shrink-0" /> },
   { id: 'installs', labelKey: 'nav.installs', icon: <DownloadIcon className="h-5 w-5 shrink-0" /> },
@@ -184,17 +167,14 @@ interface SidebarProps {
   current: Page
   onNavigate: (page: Page) => void
   onUpdateClick: () => void
+  /** owned by App — the toggle for it lives in the title bar */
+  collapsed: boolean
 }
 
-export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarProps) {
+export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed }: SidebarProps) {
   const { t } = useTranslation()
-  const [collapsed, setCollapsed] = useState(() => uiGet('sidebar.collapsed') === '1')
   const [version, setVersion] = useState('')
   const [updateAvailable, setUpdateAvailable] = useState(false)
-
-  useEffect(() => {
-    uiSet('sidebar.collapsed', collapsed ? '1' : '0')
-  }, [collapsed])
 
   useEffect(() => {
     const { api } = getLauncherApi()
@@ -328,15 +308,6 @@ export default function Sidebar({ current, onNavigate, onUpdateClick }: SidebarP
           {!collapsed && t('nav.settings')}
         </button>
       </nav>
-      <div className="border-t border-white/5 p-2">
-        <button
-          onClick={() => setCollapsed((prev) => !prev)}
-          title={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
-          className="flex w-full items-center justify-center rounded-lg p-2 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
-        >
-          <PanelToggleIcon className={`h-4 w-4 transition-transform ${collapsed ? 'rotate-180' : ''}`} />
-        </button>
-      </div>
     </aside>
   )
 }

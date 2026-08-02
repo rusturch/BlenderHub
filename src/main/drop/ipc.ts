@@ -5,6 +5,7 @@ import { downloadArchiveByUrl } from '../addons/extensions-api'
 import { addToLibraryOrExisting } from '../addons/library'
 import { getSuperhiveToken, SUPERHIVE_HOST } from '../addons/superhive'
 import { installLocalArchive } from '../blender/installs'
+import { scheduleAssetLibraryReconcile } from '../asset-library/service'
 import { addProjectFile } from '../projects/store'
 import { requireString } from '../ipc-util'
 import { classifyDroppedPath, extensionLinkFileName, EXTENSION_LINK_HOSTS } from './classify'
@@ -77,6 +78,7 @@ async function handleItem(path: string, kind: DroppedItemKind): Promise<DropHand
     }
     case 'build-archive': {
       const build = await installLocalArchive(path, (progress) => broadcast('builds:install-progress', progress))
+      scheduleAssetLibraryReconcile()
       return { status: 'ok', detail: `Blender ${build.version}` }
     }
     default:

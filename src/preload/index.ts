@@ -6,6 +6,8 @@ import type {
   AddonUninstallTarget,
   ApplyPlanOutcome,
   ApplyPlanRequest,
+  AssetLibraryInfo,
+  AssetLibraryProgress,
   BlendFileInfo,
   DroppedItem,
   DroppedItemKind,
@@ -241,6 +243,19 @@ const api: LauncherApi = {
     classify: (paths: string[]): Promise<DroppedItem[]> => ipcRenderer.invoke('drop:classify', paths),
     handle: (path: string, kind: DroppedItemKind): Promise<DropHandleResult> =>
       ipcRenderer.invoke('drop:handle', path, kind)
+  },
+  assetLibrary: {
+    status: (): Promise<AssetLibraryInfo> => ipcRenderer.invoke('assetlib:status'),
+    reconcile: (): Promise<AssetLibraryInfo> => ipcRenderer.invoke('assetlib:reconcile'),
+    unregister: (): Promise<AssetLibraryInfo> => ipcRenderer.invoke('assetlib:unregister'),
+    openDir: (): Promise<void> => ipcRenderer.invoke('assetlib:open-dir'),
+    onProgress: (callback: (progress: AssetLibraryProgress) => void): (() => void) => {
+      const listener = (_event: unknown, progress: AssetLibraryProgress): void => callback(progress)
+      ipcRenderer.on('assetlib:progress', listener)
+      return () => {
+        ipcRenderer.removeListener('assetlib:progress', listener)
+      }
+    }
   },
   // webUtils only exists in the preload world — File objects cross the context
   // bridge by reference, so the page can resolve dragged-in files to OS paths

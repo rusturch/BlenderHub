@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { requireString } from '../ipc-util'
 import { withExclusiveOp } from '../op-lock'
 import { invalidateAddonsCache } from '../addons/ipc'
+import { scheduleAssetLibraryReconcile } from '../asset-library/service'
 import { HIDDEN_SYNC_COMPONENT_IDS, SYNC_COMPONENT_IDS } from '../../shared/types'
 import type { SettingsSyncRequest, SyncComponentId, SyncLinks, SyncScanResult } from '../../shared/types'
 import { scanSettings } from './scan'
@@ -140,6 +141,9 @@ export function registerSettingsSyncIpc(): void {
       )
       cache = outcome.data
       invalidateAddonsCache()
+      // restore puts exact old bytes back — a pre-registration userpref.blend loses
+      // the launcher asset library entry until the deferred reconcile re-adds it
+      scheduleAssetLibraryReconcile()
       return outcome
     })
   )

@@ -5,6 +5,7 @@ import { join, resolve } from 'path'
 import { getDataRoot } from '../paths'
 import { getDownloadsDir, getInstallsDir, listInstalled } from '../blender/installs'
 import { getLibraryDir } from '../addons/library'
+import { getAssetsDir } from '../asset-library/service'
 import type { StorageCategoryUsage, StorageInstallUsage, StorageUsage } from '../../shared/types'
 
 // How much disk each part of the launcher's portable data folder takes, so the
@@ -92,17 +93,20 @@ export async function computeStorageUsage(): Promise<StorageUsage> {
   installs.sort((a, b) => b.bytes - a.bytes)
   const installsBytes = installs.reduce((sum, entry) => sum + entry.bytes, 0)
 
-  const [downloadsBytes, libraryBytes, backupsBytes, otherBytes] = await Promise.all([
+  const assetsDir = getAssetsDir()
+  const [downloadsBytes, libraryBytes, assetsBytes, backupsBytes, otherBytes] = await Promise.all([
     dirSize(downloadsDir),
     dirSize(libraryDir),
+    dirSize(assetsDir),
     dirSize(backupsDir),
-    otherDataRootSize(dataRoot, [installsDir, downloadsDir, libraryDir, backupsDir])
+    otherDataRootSize(dataRoot, [installsDir, downloadsDir, libraryDir, assetsDir, backupsDir])
   ])
 
   const categories: StorageCategoryUsage[] = [
     { category: 'installs', path: installsDir, bytes: installsBytes, missing: !existsSync(installsDir) },
     { category: 'downloads', path: downloadsDir, bytes: downloadsBytes, missing: !existsSync(downloadsDir) },
     { category: 'library', path: libraryDir, bytes: libraryBytes, missing: !existsSync(libraryDir) },
+    { category: 'assets', path: assetsDir, bytes: assetsBytes, missing: !existsSync(assetsDir) },
     { category: 'backups', path: backupsDir, bytes: backupsBytes, missing: !existsSync(backupsDir) },
     { category: 'other', path: dataRoot, bytes: otherBytes, missing: false }
   ]

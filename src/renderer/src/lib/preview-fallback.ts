@@ -270,7 +270,7 @@ function createPreviewFallbackApi(): LauncherApi {
     usage: async () => ({
       dataRoot: '',
       totalBytes: 0,
-      categories: (['installs', 'downloads', 'library', 'backups', 'other'] as StorageCategory[]).map(
+      categories: (['installs', 'downloads', 'library', 'assets', 'backups', 'other'] as StorageCategory[]).map(
         (category) => ({ category, path: '', bytes: 0, missing: true })
       ),
       installs: []
@@ -343,6 +343,20 @@ function createPreviewFallbackApi(): LauncherApi {
       throw new Error(DESKTOP_ONLY)
     }
   }
+  const assetLibrary: LauncherApi['assetLibrary'] = {
+    // no Blender configs in the browser — the card renders disabled and empty
+    status: async () => ({ enabled: false, dir: '', versions: [] }),
+    reconcile: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    unregister: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    openDir: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    onProgress: () => () => {}
+  }
   return {
     platform: previewPlatform(),
     builds,
@@ -355,6 +369,7 @@ function createPreviewFallbackApi(): LauncherApi {
     themes,
     tray,
     drop,
+    assetLibrary,
     // browsers expose no OS paths for dragged files — the overlay shows its
     // desktop-only notice before ever calling this
     getPathForFile: () => ''

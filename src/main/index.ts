@@ -10,6 +10,8 @@ import { registerSettingsSyncIpc } from './sync/ipc'
 import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
 import { registerUiStateIpc, readUiState } from './ui-state'
+import { registerAssetLibraryIpc } from './asset-library/ipc'
+import { setupAssetLibrary } from './asset-library/service'
 import { registerThemesIpc } from './themes/ipc'
 import { closeThemeEditorWindow } from './themes/editor-window'
 import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
@@ -139,8 +141,10 @@ if (!app.requestSingleInstanceLock()) {
     registerStorageIpc()
     registerUpdatesIpc()
     registerThemesIpc()
+    registerAssetLibraryIpc()
     setupTray()
     setupAutostart()
+    setupAssetLibrary()
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

@@ -547,7 +547,7 @@ export interface UiStateApi {
  * - 'backups'   — settings snapshots taken before a sync overwrite
  * - 'other'     — everything else in the data root (config.json, ui-state.json, …)
  */
-export type StorageCategory = 'installs' | 'downloads' | 'library' | 'backups' | 'other'
+export type StorageCategory = 'installs' | 'downloads' | 'library' | 'assets' | 'backups' | 'other'
 
 export interface StorageCategoryUsage {
   category: StorageCategory
@@ -637,6 +637,65 @@ export interface ThemesApi {
   openEditorWindow: () => Promise<void>
 }
 
+/**
+ * One Blender preferences base (a minor version's config dir, or a portable
+ * build's own base) as the launcher asset library sees it:
+ * - 'registered'   — our entry is present and points at the current assets folder
+ * - 'stale'        — our entry is present but its path is outdated (a moved data/ folder); a reconcile repairs it
+ * - 'unregistered' — no entry yet; the next reconcile adds it
+ * - 'user-removed' — the entry was ours and disappeared: the user deleted it inside
+ *                    Blender — respected, never re-added silently (an explicit Fix re-adds)
+ * - 'running'      — reconcile outcome only: this Blender is open, writing its prefs
+ *                    would be overwritten on exit — deferred to a later reconcile
+ * - 'no-userpref'  — the version never ran yet; creating userpref.blend headlessly would
+ *                    suppress Blender's own first-run settings-migration offer — deferred
+ * - 'unsupported'  — Blender < 3.0 has no asset libraries
+ * - 'error'        — the headless write (or the prefs read) failed; see `error`
+ */
+export type AssetLibraryEntryStatus =
+  | 'registered'
+  | 'stale'
+  | 'unregistered'
+  | 'user-removed'
+  | 'running'
+  | 'no-userpref'
+  | 'unsupported'
+  | 'error'
+
+export interface AssetLibraryVersionStatus {
+  minor: string
+  /** representative full version of the base ('4.5.11') */
+  version: string
+  /** true — a portable Blender build's own base, not the standard per-user dir */
+  portable: boolean
+  status: AssetLibraryEntryStatus
+  error?: string
+}
+
+export interface AssetLibraryInfo {
+  enabled: boolean
+  /** absolute path of the launcher-owned assets folder (data/assets) */
+  dir: string
+  versions: AssetLibraryVersionStatus[]
+}
+
+export interface AssetLibraryProgress {
+  action: 'register' | 'unregister'
+  done: number
+  total: number
+}
+
+export interface AssetLibraryApi {
+  /** cheap read-only snapshot — parses each userpref.blend directly, no Blender launches */
+  status: () => Promise<AssetLibraryInfo>
+  /** register/repair the entry in every base that needs it (headless Blender per base); returns the refreshed status */
+  reconcile: () => Promise<AssetLibraryInfo>
+  /** remove our entry everywhere (the "Remove from Blender" choice when disabling) */
+  unregister: () => Promise<AssetLibraryInfo>
+  openDir: () => Promise<void>
+  onProgress: (callback: (progress: AssetLibraryProgress) => void) => () => void
+}
+
 /** requests originating from native OS chrome outside the page (currently: the tray menu) */
 export interface TrayApi {
   /** the tray's page shortcuts (Projects/Installs/…) ask the open window to switch tabs */
@@ -694,6 +753,7 @@ export interface LauncherApi {
   themes: ThemesApi
   tray: TrayApi
   drop: DropApi
+  assetLibrary: AssetLibraryApi
   /** synchronous webUtils bridge: the OS path of a File dragged into the window ('' when it has none) */
   getPathForFile: (file: File) => string
 }

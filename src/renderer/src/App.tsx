@@ -6,6 +6,7 @@ import DropOverlay from './components/DropOverlay'
 import { DialogProvider } from './components/Dialog'
 import { LanguageProvider } from './lib/i18n'
 import { getLauncherApi } from './lib/preview-fallback'
+import { uiGet, uiSet } from './lib/ui-store'
 import ProjectsPage from './pages/Projects'
 import InstallsPage from './pages/Installs'
 import AddonsPage from './pages/Addons'
@@ -22,6 +23,12 @@ export default function App() {
   // bumped after a completed drag-and-drop: remounts the page area so the target
   // tab re-reads its data even when the drop landed on the tab already open
   const [dropEpoch, setDropEpoch] = useState(0)
+  // the sidebar renders it, the title bar toggles it — so it lives in their parent
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => uiGet('sidebar.collapsed') === '1')
+
+  useEffect(() => {
+    uiSet('sidebar.collapsed', sidebarCollapsed ? '1' : '0')
+  }, [sidebarCollapsed])
 
   const navigate = (target: Page): void => {
     // plain sidebar navigation clears any prefilled search / settings focus
@@ -63,9 +70,18 @@ export default function App() {
     <LanguageProvider>
       <DialogProvider>
         <div className="flex h-full flex-col">
-          <TitleBar onUpdateClick={() => openSettings('updates')} />
+          <TitleBar
+            onUpdateClick={() => openSettings('updates')}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
+          />
           <div className="flex min-h-0 flex-1">
-            <Sidebar current={page} onNavigate={navigate} onUpdateClick={() => openSettings('updates')} />
+            <Sidebar
+              current={page}
+              onNavigate={navigate}
+              onUpdateClick={() => openSettings('updates')}
+              collapsed={sidebarCollapsed}
+            />
             <main className="min-w-0 flex-1" key={dropEpoch}>
               {page === 'projects' && (
                 <ProjectsPage

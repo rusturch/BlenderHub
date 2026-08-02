@@ -23,6 +23,7 @@ import type {
   UpdateDownloadProgress
 } from '../../../shared/types'
 import { BehaviorToggle, SectionCard, StorageUsageCard } from './settings/cells'
+import { AssetLibraryCard } from './settings/AssetLibraryCard'
 import { ThemeCard } from './settings/ThemeCard'
 import { ChevronDownIcon, XIcon } from './settings/icons'
 import { fileNameOf } from './projects/projects-utils'
@@ -870,6 +871,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
             </button>
           </div>
         </SectionCard>
+
+        <AssetLibraryCard />
       </div>
     </PageLayout>
   )
