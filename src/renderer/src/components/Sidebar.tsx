@@ -301,7 +301,11 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
             )}
           </>
         )}
-        <div className="my-1 border-t border-white/5" />
+        {/* only a separator when something actually sits above it — with the update
+            banner absent and Activity/community links hidden, Settings is alone here */}
+        {(updateAvailable || SHOW_ACTIVITY || SHOW_COMMUNITY_LINKS) && (
+          <div className="my-1 border-t border-white/5" />
+        )}
         <button
           title={collapsed ? t('nav.settings') : undefined}
           onClick={() => onNavigate('settings')}
