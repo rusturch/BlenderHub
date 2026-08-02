@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
 import logo from '../assets/icon.png'
-import { DISCORD_INVITE_URL, SHOW_COMMUNITY_LINKS, SUPPORT_URL } from '../../../shared/app-config'
+import { DISCORD_INVITE_URL, SHOW_ACTIVITY, SHOW_COMMUNITY_LINKS, SUPPORT_URL } from '../../../shared/app-config'
 import type { Page } from '../../../shared/types'
 
 export type { Page }
@@ -237,7 +237,8 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
         ))}
       </nav>
       <div className="flex-1" />
-      <nav className="flex flex-col gap-1 px-2 pb-1">
+      {/* pb matches px: the last button sits as far from the bottom edge as from the sides */}
+      <nav className="flex flex-col gap-1 px-2 pb-2">
         {updateAvailable && (
           <button
             title={collapsed ? t('nav.updateAvailable') : undefined}
@@ -248,14 +249,16 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
             {!collapsed && t('nav.updateAvailable')}
           </button>
         )}
-        <button
-          title={collapsed ? t('nav.activity') : undefined}
-          onClick={() => onNavigate('activity')}
-          className={navButtonClass(current === 'activity')}
-        >
-          <ActivityIcon className="h-5 w-5 shrink-0" />
-          {!collapsed && t('nav.activity')}
-        </button>
+        {SHOW_ACTIVITY && (
+          <button
+            title={collapsed ? t('nav.activity') : undefined}
+            onClick={() => onNavigate('activity')}
+            className={navButtonClass(current === 'activity')}
+          >
+            <ActivityIcon className="h-5 w-5 shrink-0" />
+            {!collapsed && t('nav.activity')}
+          </button>
+        )}
         {SHOW_COMMUNITY_LINKS && (
           <>
             {DISCORD_INVITE_URL ? (

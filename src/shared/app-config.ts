@@ -35,3 +35,6 @@ export const SUPPORT_URL: string = ''
 
 /** Temporary: hides the Discord/Support Us buttons entirely until the links above are set. */
 export const SHOW_COMMUNITY_LINKS = false
+
+/** Temporary: hides the sidebar's Activity button. The page itself is left in place. */
+export const SHOW_ACTIVITY = false
