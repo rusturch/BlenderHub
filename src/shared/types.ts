@@ -589,14 +589,14 @@ export interface UpdateCheckResult {
   updateAvailable: boolean
   /** release page for the manual-download fallback */
   releaseUrl: string
-  /** this build can replace its own exe (Windows portable build only) */
+  /** this build can replace itself (Windows folder build in a writable location) */
   canSelfUpdate: boolean
-  /** a sha256-verified new exe is already staged next to the current one */
+  /** a sha256-verified update archive is downloaded and unpacked, ready to swap in */
   downloaded: boolean
   error?: string
 }
 
-export type UpdateDownloadPhase = 'downloading' | 'verifying' | 'ready' | 'error'
+export type UpdateDownloadPhase = 'downloading' | 'verifying' | 'extracting' | 'ready' | 'error'
 
 export interface UpdateDownloadProgress {
   phase: UpdateDownloadPhase
@@ -610,7 +610,7 @@ export interface UpdatesApi {
   getVersion: () => Promise<string>
   /** cached between calls; refresh=true forces a new probe of GitHub Releases */
   check: (refresh?: boolean) => Promise<UpdateCheckResult>
-  /** download the new portable exe next to the current one and verify its sha256 */
+  /** download the update archive, verify its sha256 and unpack it into staging */
   download: () => Promise<UpdateCheckResult>
   onDownloadProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void
   /** fired after every completed check/download — keeps the sidebar badge in sync */

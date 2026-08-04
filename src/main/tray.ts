@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, Notification, screen, Tray } from 'electron'
 import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 import { onUiStateSet, readUiState } from './ui-state'
+import { reconcileTrayIconPromotion } from './tray-promotion'
 import { readBlendInfo } from './blender/blend-parser'
 import { listInstalled } from './blender/installs'
 import { getProjectFiles, getProjectFolders, recordProjectOpened } from './projects/store'
@@ -238,6 +239,9 @@ function ensureTray(): void {
   tray.setToolTip('Blender Hub')
   refreshTrayMenu()
   tray.on('click', showWindow)
+  // the portable exe runs from a new temp path each launch, which orphans the
+  // icon's "show on taskbar" choice — carry it over to this launch's entry
+  reconcileTrayIconPromotion()
 }
 
 // the tray icon exists exactly while at least one behavior can hide the window,

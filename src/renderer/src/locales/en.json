@@ -116,6 +116,7 @@
   "settings.updatesDownload": "Download update",
   "settings.updatesDownloading": "Downloading… {progress}",
   "settings.updatesVerifying": "Verifying checksum…",
+  "settings.updatesExtracting": "Unpacking the update…",
   "settings.updatesReady": "Update downloaded and verified — restart to apply it.",
   "settings.updatesRestart": "Restart & update",
   "settings.updatesManualOnly": "This build can’t replace itself — grab the new version from the releases page.",

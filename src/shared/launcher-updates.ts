@@ -2,12 +2,14 @@ import { compareVersionsDesc } from './blender-builds'
 import { GITHUB_REPO } from './app-config'
 
 /**
- * Matches electron-builder.yml portable.artifactName. Version-less on purpose:
- * self-update swaps the exe in place, so a versioned name would go stale after
- * the first update. Releases up to v0.1.1 shipped blender-hub-<version>-portable.exe.
+ * Matches electron-builder.yml win.artifactName. Version-less on purpose: the
+ * self-updater downloads this asset by fixed name, so a versioned one would go
+ * stale after the first update. History: releases up to v0.1.1 shipped
+ * blender-hub-<version>-portable.exe, 0.1.2–0.3.x a single-file portable
+ * BlenderHub.exe; the folder build ships as BlenderHub.zip.
  */
-export function portableExeName(): string {
-  return 'BlenderHub.exe'
+export function updateZipName(): string {
+  return 'BlenderHub.zip'
 }
 
 export function releasesLatestUrl(): string {

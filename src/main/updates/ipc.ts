@@ -10,7 +10,7 @@ import type { UpdateCheckResult, UpdateDownloadProgress } from '../../shared/typ
 
 // Application Security Requirement: the renderer never passes URLs or paths —
 // the release location is a compile-time constant and every path derives from
-// the portable exe env var, both resolved in the main process.
+// the app's own install folder, both resolved in the main process.
 
 function broadcast(channel: string, payload: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {

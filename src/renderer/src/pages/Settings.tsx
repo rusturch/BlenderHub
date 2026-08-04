@@ -445,6 +445,9 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
             {updateProgress?.phase === 'verifying' && (
               <p className="text-xs text-zinc-400">{t('settings.updatesVerifying')}</p>
             )}
+            {updateProgress?.phase === 'extracting' && (
+              <p className="text-xs text-zinc-400">{t('settings.updatesExtracting')}</p>
+            )}
             {updateInfo?.downloaded && (
               <p className="text-xs text-emerald-400">{t('settings.updatesReady')}</p>
             )}

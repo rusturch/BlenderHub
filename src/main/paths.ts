@@ -24,8 +24,9 @@ const FALLBACK_DIR_NAME = 'BlenderHub'
 const LEGACY_DIR_NAMES = ['BlenderHub', 'BlenderLauncher']
 
 function appRootDir(): string {
-  // electron-builder's portable target runs the exe from a temp unpack dir;
-  // this env var points at the folder the user actually launched from
+  // legacy single-file portable builds (≤0.3.x) ran the exe from a temp unpack
+  // dir; their stub set this env var to the folder the user launched from. The
+  // folder (zip) build runs in place, so the exe's own directory is the root.
   const portableDir = process.env['PORTABLE_EXECUTABLE_DIR']
   if (portableDir) return portableDir
   if (app.isPackaged) return dirname(app.getPath('exe'))
@@ -42,7 +43,7 @@ function standardDataRoot(name: string): string {
   return join(process.env['XDG_DATA_HOME'] ?? join(homedir(), '.local', 'share'), name)
 }
 
-function isWritableDir(dir: string): boolean {
+export function isWritableDir(dir: string): boolean {
   // fs.access() is unreliable for directories on Windows — probe with a real write
   const probe = join(dir, `.write-probe-${process.pid}`)
   try {

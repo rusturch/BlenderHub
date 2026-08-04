@@ -64,6 +64,18 @@ function setUiValue(key: string, value: string): Promise<void> {
   return run
 }
 
+/** Main-process write path (renderer writes go through ui:set-state). Fires the
+ * same listeners and window broadcast as a renderer write so every subscriber
+ * stays in sync no matter which side originated the change. */
+export function setUiValueFromMain(key: string, value: string): Promise<void> {
+  return setUiValue(key, value).then(() => {
+    for (const listener of listeners) listener(key, value)
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send('ui:state-changed', key, value)
+    }
+  })
+}
+
 export function registerUiStateIpc(): void {
   ipcMain.handle('ui:get-state', () => readUiState())
   ipcMain.handle('ui:set-state', (_event, rawKey: unknown, rawValue: unknown) => {

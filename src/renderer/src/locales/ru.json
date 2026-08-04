@@ -116,6 +116,7 @@
   "settings.updatesDownload": "Скачать обновление",
   "settings.updatesDownloading": "Скачивание… {progress}",
   "settings.updatesVerifying": "Проверка контрольной суммы…",
+  "settings.updatesExtracting": "Распаковка обновления…",
   "settings.updatesReady": "Обновление скачано и проверено — перезапусти, чтобы применить.",
   "settings.updatesRestart": "Перезапустить и обновить",
   "settings.updatesManualOnly": "Эта сборка не может заменить себя сама — скачай новую версию со страницы релизов.",
