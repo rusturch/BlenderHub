@@ -206,13 +206,14 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
 
   return (
     <aside
-      className={`flex ${collapsed ? 'w-16' : 'w-56'} shrink-0 flex-col border-r border-white/5 bg-surface-panel transition-[width] duration-150`}
+      // no border-r: the content area draws that hairline on its own left edge, so it
+      // stays identical to the one along its top and curves with the corner between them
+      className={`flex ${collapsed ? 'w-16' : 'w-56'} shrink-0 flex-col bg-surface-panel transition-[width] duration-150`}
     >
       <div className="flex h-[68px] shrink-0 items-center gap-2.5 px-4">
-        {/* max-w-none overrides Tailwind's preflight `img { max-width: 100% }` — without it,
-            the collapsed column's content box (63px minus 32px padding = 31px, one pixel
-            short of the border eaten by aside's own border-box border-r) clamps this fixed
-            32px logo down to 31px wide, squashing it by a pixel relative to its height */}
+        {/* max-w-none overrides Tailwind's preflight `img { max-width: 100% }`: collapsed,
+            this column leaves exactly 32px between its paddings, so any pixel taken off
+            that width clamps this fixed-size logo and squashes it against its own height */}
         <img src={logo} alt="" className="h-8 w-8 max-w-none shrink-0" />
         {!collapsed && (
           <div className="min-w-0 leading-tight">

@@ -69,7 +69,9 @@ export default function App() {
   return (
     <LanguageProvider>
       <DialogProvider>
-        <div className="flex h-full flex-col">
+        {/* panel-colored shell: the only place it shows through is the rounded corner
+            where the content area is cut away from it */}
+        <div className="flex h-full flex-col bg-surface-panel">
           <TitleBar
             onUpdateClick={() => openSettings('updates')}
             sidebarCollapsed={sidebarCollapsed}
@@ -82,7 +84,15 @@ export default function App() {
               onUpdateClick={() => openSettings('updates')}
               collapsed={sidebarCollapsed}
             />
-            <main className="min-w-0 flex-1" key={dropEpoch}>
+            {/* both hairlines live here, on the content's own edges: one element, one
+                border colour, so the horizontal and vertical separators cannot drift
+                apart — and they follow the rounded corner. The alpha is higher than a
+                plain divider because it composites over the dark content background
+                rather than the lighter panel it used to sit on. */}
+            <main
+              className="min-w-0 flex-1 rounded-tl-xl border-l border-t border-white/10 bg-background"
+              key={dropEpoch}
+            >
               {page === 'projects' && (
                 <ProjectsPage
                   versionFilter={projectsVersion}

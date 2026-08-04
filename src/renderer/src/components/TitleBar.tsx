@@ -219,7 +219,9 @@ export default function TitleBar({ onUpdateClick, sidebarCollapsed, onToggleSide
 
   return (
     <div
-      className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-white/5 bg-surface-panel [-webkit-app-region:drag]"
+      // no border-b: the bar and the sidebar share a background and must read as one
+      // panel. The content area draws that hairline on its own top edge instead.
+      className="flex h-10 shrink-0 items-center justify-end gap-1 bg-surface-panel [-webkit-app-region:drag]"
       style={{
         paddingLeft: mac ? MAC_TRAFFIC_LIGHTS_WIDTH : EDGE_PADDING,
         paddingRight: mac ? EDGE_PADDING : WINDOWS_OVERLAY_WIDTH
