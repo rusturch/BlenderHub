@@ -9,8 +9,10 @@ import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
 import type { BlendFileInfo, InstalledBuild, ProjectFolder } from '../../../shared/types'
-import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon } from './projects/icons'
+import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon } from './projects/icons'
 import { fileNameOf, readFlag } from './projects/projects-utils'
+import { buildProjectTree, isUnderKey } from './projects/tree'
+import FolderTree from './projects/FolderTree'
 import { FilterSelect } from '../components/FilterSelect'
 import type { ProjectsPageProps } from './projects/types'
 
@@ -22,6 +24,17 @@ let lastLoaded: {
   files: BlendFileInfo[]
   installed: InstalledBuild[]
 } | null = null
+
+// Tree selection and fold state survive tab switches the same way, but deliberately
+// not a launcher restart — no stale paths ever land in ui-state.json.
+let treeSelectedSnapshot: string | null = null
+let treeExpandedSnapshot: Set<string> | null = null
+
+// Drop flows land on a freshly remounted page; a restored tree filter could hide
+// the just-added file, so App clears the snapshot before remounting.
+export function clearProjectsTreeSelection(): void {
+  treeSelectedSnapshot = null
+}
 
 export default function ProjectsPage({
   versionFilter,
@@ -72,6 +85,11 @@ export default function ProjectsPage({
     const stored = Number(uiGet('projects.cardSize'))
     return Number.isFinite(stored) && stored >= 150 && stored <= 340 ? stored : 200
   })
+  const [treeVisible, setTreeVisible] = useState(() => readFlag('projects.treeVisible', false))
+  const [treeCounts, setTreeCounts] = useState(() => readFlag('projects.treeCounts', false))
+  const [treeGuides, setTreeGuides] = useState(() => readFlag('projects.treeGuides', true))
+  const [treeSelected, setTreeSelected] = useState<string | null>(treeSelectedSnapshot)
+  const [treeExpanded, setTreeExpanded] = useState<Set<string> | null>(treeExpandedSnapshot)
 
   useEffect(() => {
     uiSet('projects.showDate', showDate ? '1' : '0')
@@ -79,7 +97,15 @@ export default function ProjectsPage({
     uiSet('projects.showPath', showPath ? '1' : '0')
     uiSet('projects.showVersion', showVersion ? '1' : '0')
     uiSet('projects.cardSize', String(cardSize))
-  }, [showDate, showSize, showPath, showVersion, cardSize])
+    uiSet('projects.treeVisible', treeVisible ? '1' : '0')
+    uiSet('projects.treeCounts', treeCounts ? '1' : '0')
+    uiSet('projects.treeGuides', treeGuides ? '1' : '0')
+  }, [showDate, showSize, showPath, showVersion, cardSize, treeVisible, treeCounts, treeGuides])
+
+  useEffect(() => {
+    treeSelectedSnapshot = treeSelected
+    treeExpandedSnapshot = treeExpanded
+  }, [treeSelected, treeExpanded])
 
   // Guarded by a sequence number: optimistic patches (rename/duplicate/delete) kick a
   // background reconcile scan, and a stale response from an earlier scan must not
@@ -131,17 +157,24 @@ export default function ProjectsPage({
 
   const addFolder = useCallback(async () => {
     try {
-      setFolders(await projectsApi.addFolder())
+      const updated = await projectsApi.addFolder()
+      // an active tree filter would hide the new folder's projects
+      if (updated.length !== folders.length) setTreeSelected(null)
+      setFolders(updated)
       await refreshFiles()
     } catch (cause) {
       await alertDialog(cleanErrorMessage(cause))
     }
-  }, [projectsApi, refreshFiles, alertDialog])
+  }, [projectsApi, folders.length, refreshFiles, alertDialog])
 
   const addFile = useCallback(async () => {
     try {
       const added = await projectsApi.addFile()
-      if (added) await refreshFiles()
+      if (added) {
+        // an active tree filter would hide the just-added file
+        setTreeSelected(null)
+        await refreshFiles()
+      }
     } catch (cause) {
       await alertDialog(cleanErrorMessage(cause))
     }
@@ -180,6 +213,8 @@ export default function ProjectsPage({
         folder: npFolder
       })
       setNewProjectOpen(false)
+      // the fresh project may live outside the currently selected tree node
+      setTreeSelected(null)
       await refreshFiles()
       await projectsApi.openFile(createdPath, npInstallId)
     } catch (cause) {
@@ -462,16 +497,65 @@ export default function ProjectsPage({
     return ['all', ...[...present].sort(compareVersionsDesc)]
   }, [files, versionFilter])
 
+  // built from the full live list, not the filtered one — the panel must not
+  // reshuffle while a search is being typed
+  const tree = useMemo(() => buildProjectTree(files ?? [], folders), [files, folders])
+
+  // Validated synchronously on render — a stale selection must not filter the grid
+  // for even a single frame. When compression absorbed the selected folder into a
+  // deeper chain node (its last direct file vanished), the selection follows that
+  // heir instead of dropping the filter; a node that is really gone falls back to
+  // "All projects" — never an inexplicably empty grid.
+  const effectiveTreeSelected = useMemo(() => {
+    if (!treeSelected || tree.nodeKeys.has(treeSelected)) return treeSelected
+    const heirs = [...tree.nodeKeys].filter((key) => isUnderKey(key, treeSelected))
+    return heirs.sort((a, b) => a.length - b.length)[0] ?? null
+  }, [tree, treeSelected])
+
+  // reconcile the stored value so the module snapshot and future renders agree
+  useEffect(() => {
+    if (files !== null && effectiveTreeSelected !== treeSelected) {
+      setTreeSelected(effectiveTreeSelected)
+    }
+  }, [files, effectiveTreeSelected, treeSelected])
+
+  // first tree after a fresh start: roots expanded, deeper levels folded
+  useEffect(() => {
+    if (treeExpanded === null && tree.nodes.length > 0) {
+      setTreeExpanded(new Set(tree.nodes.map((node) => node.key)))
+    }
+  }, [tree, treeExpanded])
+
+  const toggleTreeNode = useCallback((key: string) => {
+    setTreeExpanded((prev) => {
+      const next = new Set(prev ?? [])
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  // hiding the panel clears the filter — an invisible active filter is exactly
+  // the kind of forgotten state this page tries hard not to have
+  const toggleTreePanel = useCallback(() => {
+    if (treeVisible) setTreeSelected(null)
+    setTreeVisible(!treeVisible)
+  }, [treeVisible])
+
   const visibleFiles = useMemo(() => {
     const q = query.trim().toLowerCase()
     // missing files live in the strip above the grid, never among the cards
     return (files ?? []).filter((file) => {
       if (file.missing) return false
+      if (effectiveTreeSelected) {
+        const key = tree.keyOfFile.get(file.path)
+        if (!key || !isUnderKey(key, effectiveTreeSelected)) return false
+      }
       if (versionFilter !== 'all' && file.blenderVersion !== versionFilter) return false
       if (q && !file.name.toLowerCase().includes(q)) return false
       return true
     })
-  }, [files, versionFilter, query])
+  }, [files, tree, effectiveTreeSelected, versionFilter, query])
 
   const sortedFiles = useMemo(() => {
     const factor = sortDir === 'asc' ? -1 : 1
@@ -570,7 +654,19 @@ export default function ProjectsPage({
           hint={t('projects.emptyHint')}
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex gap-4">
+          {treeVisible && (
+            <FolderTree
+              nodes={tree.nodes}
+              selected={effectiveTreeSelected}
+              expanded={treeExpanded ?? new Set()}
+              showCounts={treeCounts}
+              showGuides={treeGuides}
+              onSelect={setTreeSelected}
+              onToggle={toggleTreeNode}
+            />
+          )}
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
           {missingFolders.map((folder) => (
             <div
               key={folder.path}
@@ -671,6 +767,15 @@ export default function ProjectsPage({
           )}
 
           <div className="flex flex-wrap items-end gap-2">
+            <button
+              title={t('projects.treeToggle')}
+              onClick={toggleTreePanel}
+              className={`self-end rounded-lg border border-white/10 p-1.5 transition-colors hover:bg-white/10 ${
+                treeVisible ? 'bg-white/10 text-icon-selected' : 'text-icon hover:text-icon-hover'
+              }`}
+            >
+              <PanelLeftIcon className="h-4 w-4" />
+            </button>
             <FilterSelect
               label={t('projects.sort')}
               value={sortKey}
@@ -763,6 +868,28 @@ export default function ProjectsPage({
                     className="accent-blender"
                   />
                   {t('projects.version')}
+                </label>
+                <div className="my-1 border-t border-white/5" />
+                <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                  {t('projects.treeToggle')}
+                </p>
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
+                  <input
+                    type="checkbox"
+                    checked={treeCounts}
+                    onChange={(event) => setTreeCounts(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('projects.treeFileCounts')}
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
+                  <input
+                    type="checkbox"
+                    checked={treeGuides}
+                    onChange={(event) => setTreeGuides(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('projects.treeGuides')}
                 </label>
                 <div className="my-1 border-t border-white/5" />
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
@@ -1050,6 +1177,7 @@ export default function ProjectsPage({
               })}
             </div>
           )}
+          </div>
         </div>
       )}
 

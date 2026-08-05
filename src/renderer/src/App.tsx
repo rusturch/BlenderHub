@@ -7,7 +7,7 @@ import { DialogProvider } from './components/Dialog'
 import { LanguageProvider } from './lib/i18n'
 import { getLauncherApi } from './lib/preview-fallback'
 import { uiGet, uiSet } from './lib/ui-store'
-import ProjectsPage from './pages/Projects'
+import ProjectsPage, { clearProjectsTreeSelection } from './pages/Projects'
 import InstallsPage from './pages/Installs'
 import AddonsPage from './pages/Addons'
 import SyncPage from './pages/Sync'
@@ -61,6 +61,9 @@ export default function App() {
     // not navigate(): it would wipe the add-on search being handed over
     setAddonsSearch(target === 'addons' && addonSearch ? addonSearch : '')
     if (target === 'installs') setInstallsSearch('')
+    // the remounted Projects page must not hide the dropped file behind a
+    // previously selected tree folder
+    if (target === 'projects') clearProjectsTreeSelection()
     setSettingsHighlight(null)
     setDropEpoch((epoch) => epoch + 1)
     setPage(target)
