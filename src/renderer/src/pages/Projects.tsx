@@ -1065,21 +1065,7 @@ export default function ProjectsPage({
     selected: InstalledBuild | null,
     mismatch: boolean,
     variant: 'card' | 'row'
-  ) => {
-    const warning = mismatch ? (
-      <span
-        title={t('projects.versionMismatch', {
-          fileVersion: file.blenderVersion ?? '—',
-          selectedVersion: selected?.version ?? ''
-        })}
-        className={`flex shrink-0 items-center rounded-lg border border-white/10 p-1 text-amber-400 ${
-          variant === 'card' ? 'bg-surface-card/80 backdrop-blur-sm' : ''
-        }`}
-      >
-        <WarningIcon className="h-4 w-4" />
-      </span>
-    ) : null
-    const picker = (
+  ) => (
       <Dropdown
         open={menuFor === file.path}
         onClose={() => setMenuFor(null)}
@@ -1089,15 +1075,27 @@ export default function ProjectsPage({
           <button
             onClick={() => setMenuFor(menuFor === file.path ? null : file.path)}
             disabled={installedSorted.length === 0}
-            title={t('projects.chooseVersion')}
+            title={
+              mismatch
+                ? `${t('projects.chooseVersion')}\n${t('projects.versionMismatch', {
+                    fileVersion: file.blenderVersion ?? '—',
+                    selectedVersion: selected?.version ?? ''
+                  })}`
+                : t('projects.chooseVersion')
+            }
             // py-1 + leading-4 gives the same 16px line box the "⋮" gets
-            // from its icon, so both corners of the card match in height
-            className={`flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold leading-4 text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            // from its icon, so both corners of the card match in height. A version
+            // that is not the file's own turns the whole button amber and takes the
+            // warning glyph inside it — one control saying one thing, not two.
+            className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold leading-4 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              mismatch ? 'border-amber-500/40 text-amber-400' : 'border-white/10 text-foreground'
+            } ${
               variant === 'card'
                 ? 'bg-surface-card/80 backdrop-blur-sm hover:bg-surface-card'
                 : 'hover:bg-white/10'
             }`}
           >
+            {mismatch && <WarningIcon className="h-3.5 w-3.5 shrink-0" />}
             {variant === 'row' ? (
               // list rows form a column of buttons, so they all take the width of the
               // longest installed version: the label shares a grid cell with an
@@ -1156,21 +1154,7 @@ export default function ProjectsPage({
           </>
         )}
       </Dropdown>
-    )
-    // On a card the badge trails the picker, left to right. In a row it leads it, so
-    // the picker stays flush with the column of "⋮" buttons whether it warns or not.
-    return variant === 'card' ? (
-      <>
-        {picker}
-        {warning}
-      </>
-    ) : (
-      <>
-        {warning}
-        {picker}
-      </>
-    )
-  }
+  )
 
   const actionsMenu = (file: BlendFileInfo, variant: 'card' | 'row') => (
     <Dropdown
