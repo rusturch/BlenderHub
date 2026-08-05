@@ -75,17 +75,14 @@ export default function App() {
         {/* panel-colored shell: the only place it shows through is the rounded corner
             where the content area is cut away from it */}
         <div className="flex h-full flex-col bg-surface-panel">
-          <TitleBar
-            onUpdateClick={() => openSettings('updates')}
-            sidebarCollapsed={sidebarCollapsed}
-            onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
-          />
+          <TitleBar onUpdateClick={() => openSettings('updates')} />
           <div className="flex min-h-0 flex-1">
             <Sidebar
               current={page}
               onNavigate={navigate}
               onUpdateClick={() => openSettings('updates')}
               collapsed={sidebarCollapsed}
+              onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
             />
             {/* both hairlines live here, on the content's own edges: one element, one
                 border colour, so the horizontal and vertical separators cannot drift

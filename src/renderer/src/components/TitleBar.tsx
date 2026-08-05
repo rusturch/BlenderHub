@@ -40,23 +40,6 @@ function BellIcon({ className = 'h-5 w-5' }: { className?: string }) {
   )
 }
 
-function PanelLeftIcon({ className = 'h-5 w-5' }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M9 4v16" />
-    </svg>
-  )
-}
-
 function PaletteIcon({ className = 'h-5 w-5' }: { className?: string }) {
   return (
     <svg
@@ -184,11 +167,9 @@ function ThemeMenu() {
 
 interface TitleBarProps {
   onUpdateClick: () => void
-  sidebarCollapsed: boolean
-  onToggleSidebar: () => void
 }
 
-export default function TitleBar({ onUpdateClick, sidebarCollapsed, onToggleSidebar }: TitleBarProps) {
+export default function TitleBar({ onUpdateClick }: TitleBarProps) {
   const { t } = useTranslation()
   const mac = isMac()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -227,15 +208,6 @@ export default function TitleBar({ onUpdateClick, sidebarCollapsed, onToggleSide
         paddingRight: mac ? EDGE_PADDING : WINDOWS_OVERLAY_WIDTH
       }}
     >
-      {/* mr-auto pins the sidebar toggle to the left edge — it acts on the panel right
-          below it, while the rest of the bar's controls stay grouped on the right */}
-      <button
-        onClick={onToggleSidebar}
-        title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
-        className="mr-auto flex h-7 w-7 items-center justify-center rounded-md text-icon transition-colors hover:bg-white/10 hover:text-icon-hover [-webkit-app-region:no-drag]"
-      >
-        <PanelLeftIcon className="h-[18px] w-[18px]" />
-      </button>
       <ThemeMenu />
       <Dropdown
         open={menuOpen}

@@ -156,6 +156,23 @@ function HeartIcon({ className = 'h-5 w-5' }: IconProps) {
   )
 }
 
+function PanelLeftIcon({ className = 'h-4 w-4' }: IconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+    </svg>
+  )
+}
+
 const MAIN_NAV_ITEMS: { id: Page; labelKey: string; icon: ReactNode }[] = [
   { id: 'projects', labelKey: 'nav.projects', icon: <FolderIcon className="h-5 w-5 shrink-0" /> },
   { id: 'installs', labelKey: 'nav.installs', icon: <DownloadIcon className="h-5 w-5 shrink-0" /> },
@@ -167,11 +184,18 @@ interface SidebarProps {
   current: Page
   onNavigate: (page: Page) => void
   onUpdateClick: () => void
-  /** owned by App — the toggle for it lives in the title bar */
+  /** owned by App, toggled from this panel's own header */
   collapsed: boolean
+  onToggleCollapsed: () => void
 }
 
-export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed }: SidebarProps) {
+export default function Sidebar({
+  current,
+  onNavigate,
+  onUpdateClick,
+  collapsed,
+  onToggleCollapsed
+}: SidebarProps) {
   const { t } = useTranslation()
   const [version, setVersion] = useState('')
   const [updateAvailable, setUpdateAvailable] = useState(false)
@@ -214,17 +238,55 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
       className={`flex ${collapsed ? 'w-16' : 'w-56'} shrink-0 flex-col bg-surface-panel transition-[width] duration-150`}
     >
       <div className="flex h-[68px] shrink-0 items-center gap-2.5 px-4">
-        {/* max-w-none overrides Tailwind's preflight `img { max-width: 100% }`: collapsed,
-            this column leaves exactly 32px between its paddings, so any pixel taken off
-            that width clamps this fixed-size logo and squashes it against its own height */}
-        <img src={logo} alt="" className="h-8 w-8 max-w-none shrink-0" />
+        {/* Collapsed, the panel is only wide enough for one control, so the toggle takes
+            the logo's place while the pointer rests on it. The hover target is scoped to
+            this 32px box rather than the whole header on purpose: with the header as the
+            target, collapsing would flash the swap, because the pointer — sitting on the
+            expanded button at the far edge — stays inside the shrinking header for a
+            moment after the click. */}
+        <span className="group relative flex h-8 w-8 shrink-0">
+          {/* max-w-none overrides Tailwind's preflight `img { max-width: 100% }`: collapsed,
+              this column leaves exactly 32px between its paddings, so any pixel taken off
+              that width clamps this fixed-size logo and squashes it against its own height */}
+          <img
+            src={logo}
+            alt=""
+            className={`h-8 w-8 max-w-none ${
+              collapsed ? 'transition-opacity group-hover:opacity-0' : ''
+            }`}
+          />
+          {collapsed && (
+            <button
+              onClick={onToggleCollapsed}
+              title={t('sidebar.expand')}
+              // grown past the 32px logo box to the nav buttons' 48x36 footprint, so its
+              // highlight matches theirs exactly; the box it grows from is a fixed size,
+              // so this stays put while the panel's width animates
+              className="absolute -inset-x-2 -inset-y-0.5 flex items-center justify-center rounded-lg text-icon opacity-0 transition hover:bg-white/10 hover:text-icon-hover group-hover:opacity-100"
+            >
+              <PanelLeftIcon className="h-5 w-5" />
+            </button>
+          )}
+        </span>
         {!collapsed && (
-          <div className="min-w-0 leading-tight">
-            <p className="truncate font-logo text-sm font-bold text-zinc-100">
-              Blender <span className="text-[var(--blender-brand)]">Hub</span>
-            </p>
-            {version && <p className="text-[11px] text-zinc-500">v{version}</p>}
-          </div>
+          <>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate font-logo text-sm font-bold text-zinc-100">
+                Blender <span className="text-[var(--blender-brand)]">Hub</span>
+              </p>
+              {version && <p className="text-[11px] text-zinc-500">v{version}</p>}
+            </div>
+            {/* -mr-1.5 cancels the button's own padding around its 20px icon, so the icon
+                — not the invisible 32px hit area — ends up the same 16px from the panel
+                edge as the logo is from the other one */}
+            <button
+              onClick={onToggleCollapsed}
+              title={t('sidebar.collapse')}
+              className="-mr-1.5 ml-auto flex h-8 w-8 items-center justify-center rounded-md text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
+            >
+              <PanelLeftIcon className="h-5 w-5" />
+            </button>
+          </>
         )}
       </div>
       <nav className="flex flex-col gap-1 px-2">
