@@ -764,7 +764,7 @@ export default function AddonsPage({
   }, [data, visibleRows])
 
   return (
-    <PageLayout title={t('addons.title')} actions={headerActions}>
+    <PageLayout title={t('addons.title')} actions={headerActions} scrollTargetRef={tableScrollRef}>
       <div className="flex flex-col gap-4">
         {!isDesktop && (
           <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-xs leading-relaxed text-sky-300">

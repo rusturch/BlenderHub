@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react'
 import PageLayout, { EmptyState } from '../components/PageLayout'
 import Dropdown from '../components/Dropdown'
 import { useDialog } from '../components/Dialog'
@@ -11,7 +12,7 @@ import { uiGet, uiSet } from '../lib/ui-store'
 import { useBackdropClose } from '../lib/use-backdrop-close'
 import { setCompactDragImage } from '../lib/drag-image'
 import type { BlendFileInfo, InstalledBuild, ProjectFolder } from '../../../shared/types'
-import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon } from './projects/icons'
+import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon, GridIcon, ListIcon } from './projects/icons'
 import { fileNameOf, readFlag } from './projects/projects-utils'
 import {
   buildProjectTree,
@@ -75,8 +76,14 @@ export default function ProjectsPage({
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
-  const [sortKey, setSortKey] = useState<'name' | 'date' | 'version' | 'size'>('date')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  // sort survives tab switches and restarts like the rest of the view settings
+  const [sortKey, setSortKey] = useState<'name' | 'date' | 'version' | 'size'>(() => {
+    const stored = uiGet('projects.sortKey')
+    return stored === 'name' || stored === 'version' || stored === 'size' ? stored : 'date'
+  })
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() =>
+    uiGet('projects.sortDir') === 'asc' ? 'asc' : 'desc'
+  )
   const [query, setQuery] = useState('')
   const [addMenuOpen, setAddMenuOpen] = useState(false)
 
@@ -109,10 +116,12 @@ export default function ProjectsPage({
   const [selectedInstall, setSelectedInstall] = useState<Record<string, string>>({})
 
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>(() =>
+    uiGet('projects.viewMode') === 'list' ? 'list' : 'cards'
+  )
   const [showDate, setShowDate] = useState(() => readFlag('projects.showDate', true))
   const [showSize, setShowSize] = useState(() => readFlag('projects.showSize', false))
   const [showPath, setShowPath] = useState(() => readFlag('projects.showPath', true))
-  const [showVersion, setShowVersion] = useState(() => readFlag('projects.showVersion', true))
   const [cardSize, setCardSize] = useState(() => {
     const stored = Number(uiGet('projects.cardSize'))
     return Number.isFinite(stored) && stored >= 150 && stored <= 340 ? stored : 200
@@ -126,31 +135,40 @@ export default function ProjectsPage({
   const [treeDirectOnly, setTreeDirectOnly] = useState(() =>
     readFlag('projects.treeDirectOnly', false)
   )
+  const [showFavoriteChips, setShowFavoriteChips] = useState(() =>
+    readFlag('projects.favoriteChips', true)
+  )
   const [treeSelected, setTreeSelected] = useState<string | null>(treeSelectedSnapshot)
   const [treeExpanded, setTreeExpanded] = useState<Set<string> | null>(treeExpandedSnapshot)
 
   useEffect(() => {
+    uiSet('projects.viewMode', viewMode)
     uiSet('projects.showDate', showDate ? '1' : '0')
     uiSet('projects.showSize', showSize ? '1' : '0')
     uiSet('projects.showPath', showPath ? '1' : '0')
-    uiSet('projects.showVersion', showVersion ? '1' : '0')
     uiSet('projects.cardSize', String(cardSize))
     uiSet('projects.treeVisible', treeVisible ? '1' : '0')
     uiSet('projects.treeCounts', treeCounts ? '1' : '0')
     uiSet('projects.treeGuides', treeGuides ? '1' : '0')
     uiSet('projects.treeFullHierarchy', treeFullHierarchy ? '1' : '0')
     uiSet('projects.treeDirectOnly', treeDirectOnly ? '1' : '0')
+    uiSet('projects.favoriteChips', showFavoriteChips ? '1' : '0')
+    uiSet('projects.sortKey', sortKey)
+    uiSet('projects.sortDir', sortDir)
   }, [
+    viewMode,
     showDate,
     showSize,
     showPath,
-    showVersion,
     cardSize,
     treeVisible,
     treeCounts,
     treeGuides,
     treeFullHierarchy,
-    treeDirectOnly
+    treeDirectOnly,
+    showFavoriteChips,
+    sortKey,
+    sortDir
   ])
 
   useEffect(() => {
@@ -358,6 +376,16 @@ export default function ProjectsPage({
       }
     },
     [projectsApi, bestInstallFor, alertDialog]
+  )
+
+  // widest label a version picker can ever show, used as its invisible measure
+  const longestVersionLabel = useMemo(
+    () =>
+      installedSorted.reduce(
+        (longest, build) => (build.version.length > longest.length ? build.version : longest),
+        '—'
+      ),
+    [installedSorted]
   )
 
   const nativeInstallFor = useCallback(
@@ -927,12 +955,21 @@ export default function ProjectsPage({
   const toggleTreePanel = useCallback(() => {
     if (treeVisible) {
       const shownAsChip =
+        showFavoriteChips &&
         treeSelected !== null &&
         favorites.some((path) => tree.keyOfPath.get(pathKeyOf(path)) === treeSelected)
       if (!shownAsChip) setTreeSelected(null)
     }
     setTreeVisible(!treeVisible)
-  }, [treeVisible, treeSelected, favorites, tree])
+  }, [treeVisible, treeSelected, favorites, tree, showFavoriteChips])
+
+  // Hiding the chips is the same as owning no favorites at all: with the panel closed
+  // they were the only thing pointing at the active filter, so the grid goes back to
+  // showing everything instead of keeping a filter nothing on screen explains.
+  const toggleFavoriteChips = useCallback(() => {
+    if (showFavoriteChips && !treeVisible) setTreeSelected(null)
+    setShowFavoriteChips(!showFavoriteChips)
+  }, [showFavoriteChips, treeVisible])
 
   const visibleFiles = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -982,6 +1019,264 @@ export default function ProjectsPage({
   })
   const renameBackdrop = useBackdropClose(() => setRenameFor(null))
   const folderDialogBackdrop = useBackdropClose(() => setFolderDialog(null))
+
+  // Cards and list rows carry the same controls and gestures; only their placement
+  // differs — floating over a thumbnail, or sitting in a row of cells.
+  const buildOf = (file: BlendFileInfo) => {
+    const native = nativeInstallFor(file)
+    const selectedId = selectedInstall[file.path]
+    const selected =
+      (selectedId ? installedSorted.find((build) => build.id === selectedId) : null) ??
+      native ??
+      installedSorted[0] ??
+      null
+    const mismatch =
+      selected != null && (native ? selected.id !== native.id : Boolean(file.blenderVersion))
+    return { native, selected, mismatch }
+  }
+
+  const itemHandlers = (file: BlendFileInfo, selected: InstalledBuild | null) => ({
+    onClick: () => setSelectedCard(file.path),
+    onDoubleClick: () => {
+      if (selected) requestOpen(file, selected)
+    },
+    onContextMenu: (event: ReactMouseEvent) => {
+      event.preventDefault()
+      setSelectedCard(file.path)
+      setCardMenuAt({ x: event.clientX, y: event.clientY })
+      setCardMenuFor(file.path)
+    },
+    draggable: true,
+    onDragStart: (event: ReactDragEvent<HTMLElement>) => {
+      event.dataTransfer.setData(TREE_DRAG_TYPE, file.path)
+      event.dataTransfer.effectAllowed = 'move'
+      setCompactDragImage(event, 'project')
+      setDragItem({ kind: 'project', path: file.path })
+    },
+    onDragEnd: () => {
+      setDragItem(null)
+      setDropOverKey(null)
+    }
+  })
+
+  const versionPicker = (
+    file: BlendFileInfo,
+    native: InstalledBuild | null,
+    selected: InstalledBuild | null,
+    mismatch: boolean,
+    variant: 'card' | 'row'
+  ) => {
+    const warning = mismatch ? (
+      <span
+        title={t('projects.versionMismatch', {
+          fileVersion: file.blenderVersion ?? '—',
+          selectedVersion: selected?.version ?? ''
+        })}
+        className={`flex shrink-0 items-center rounded-lg border border-white/10 p-1 text-amber-400 ${
+          variant === 'card' ? 'bg-surface-card/80 backdrop-blur-sm' : ''
+        }`}
+      >
+        <WarningIcon className="h-4 w-4" />
+      </span>
+    ) : null
+    const picker = (
+      <Dropdown
+        open={menuFor === file.path}
+        onClose={() => setMenuFor(null)}
+        align="left"
+        menuClassName="flex max-h-64 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl"
+        trigger={
+          <button
+            onClick={() => setMenuFor(menuFor === file.path ? null : file.path)}
+            disabled={installedSorted.length === 0}
+            title={t('projects.chooseVersion')}
+            // py-1 + leading-4 gives the same 16px line box the "⋮" gets
+            // from its icon, so both corners of the card match in height
+            className={`flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold leading-4 text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              variant === 'card'
+                ? 'bg-surface-card/80 backdrop-blur-sm hover:bg-surface-card'
+                : 'hover:bg-white/10'
+            }`}
+          >
+            {variant === 'row' ? (
+              // list rows form a column of buttons, so they all take the width of the
+              // longest installed version: the label shares a grid cell with an
+              // invisible measure. A card badge stays as wide as its own text.
+              <span className="grid">
+                <span aria-hidden="true" className="invisible col-start-1 row-start-1">
+                  {longestVersionLabel}
+                </span>
+                <span className="col-start-1 row-start-1">
+                  {selected ? selected.version : '—'}
+                </span>
+              </span>
+            ) : (
+              (selected ? selected.version : '—')
+            )}
+            <ChevronDownIcon className="h-3 w-3" />
+          </button>
+        }
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {installedSorted.map((build) => {
+            const isNativeRow = native != null && build.id === native.id
+            const isSelectedRow = selected != null && build.id === selected.id
+            return (
+              <button
+                key={build.id}
+                onClick={() => {
+                  setSelectedInstall((prev) => ({ ...prev, [file.path]: build.id }))
+                  setMenuFor(null)
+                }}
+                title={`${t('projects.blenderBuildLabel', { version: build.version, cycle: build.releaseCycle })}${isNativeRow ? t('projects.projectVersionSuffix') : ''}`}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/10"
+              >
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${isNativeRow ? 'bg-emerald-400' : 'bg-transparent'}`}
+                />
+                {build.version}
+                {isSelectedRow && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-blender" />}
+              </button>
+            )
+          })}
+        </div>
+        {file.blenderVersion && !native && onShowInstalls && (
+          <>
+            <div className="my-1 shrink-0 border-t border-white/5" />
+            <button
+              onClick={() => {
+                setMenuFor(null)
+                onShowInstalls(file.blenderVersion!)
+              }}
+              className="flex w-full shrink-0 items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-blender transition-colors hover:bg-blender/10"
+            >
+              <DownloadIcon className="h-3.5 w-3.5" />
+              {t('projects.installVersion', { version: file.blenderVersion })}
+            </button>
+          </>
+        )}
+      </Dropdown>
+    )
+    // On a card the badge trails the picker, left to right. In a row it leads it, so
+    // the picker stays flush with the column of "⋮" buttons whether it warns or not.
+    return variant === 'card' ? (
+      <>
+        {picker}
+        {warning}
+      </>
+    ) : (
+      <>
+        {warning}
+        {picker}
+      </>
+    )
+  }
+
+  const actionsMenu = (file: BlendFileInfo, variant: 'card' | 'row') => (
+    <Dropdown
+      className={variant === 'card' ? 'absolute right-2 top-2 z-10' : 'shrink-0'}
+      open={cardMenuFor === file.path}
+      onClose={() => setCardMenuFor(null)}
+      align={cardMenuAt ? 'left' : 'right'}
+      at={cardMenuFor === file.path ? cardMenuAt : null}
+      menuClassName="min-w-52 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
+      trigger={
+        <button
+          onClick={() => {
+            // button press keeps the old behaviour: anchored under it
+            setCardMenuAt(null)
+            setCardMenuFor(cardMenuFor === file.path ? null : file.path)
+          }}
+          title={t('projects.moreActions')}
+          className={`rounded-lg border border-white/10 p-1 text-icon transition-colors hover:text-icon-hover ${
+            variant === 'card'
+              ? 'bg-surface-card/80 backdrop-blur-sm hover:bg-surface-card'
+              : 'hover:bg-white/10'
+          }`}
+        >
+          <DotsIcon className="h-4 w-4" />
+        </button>
+      }
+    >
+      <button
+        onClick={() => {
+          setCardMenuFor(null)
+          projectsApi.reveal(file.path).catch(() => undefined)
+        }}
+        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+      >
+        {t('projects.showInFolder')}
+      </button>
+      <button
+        onClick={() => {
+          setCardMenuFor(null)
+          openRename(file)
+        }}
+        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+      >
+        {t('projects.renameFile')}
+      </button>
+      <button
+        onClick={() => {
+          setCardMenuFor(null)
+          duplicateFile(file)
+        }}
+        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+      >
+        {t('projects.duplicateFile')}
+      </button>
+      <button
+        onClick={() => {
+          setCardMenuFor(null)
+          changePreview(file)
+        }}
+        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+      >
+        {t('projects.changePreviewImage')}
+      </button>
+      {file.hasCustomPreview && (
+        <button
+          onClick={() => {
+            setCardMenuFor(null)
+            resetPreview(file)
+          }}
+          className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+        >
+          {t('projects.resetPreview')}
+        </button>
+      )}
+      <button
+        onClick={() => {
+          setCardMenuFor(null)
+          relocateProject(file)
+        }}
+        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+      >
+        {t('projects.moveProject')}
+      </button>
+      {file.tracked && (
+        <button
+          onClick={() => {
+            setCardMenuFor(null)
+            removeFromList(file)
+          }}
+          className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+        >
+          {t('projects.removeFromList')}
+        </button>
+      )}
+      <div className="my-1 border-t border-white/5" />
+      <button
+        onClick={() => {
+          setCardMenuFor(null)
+          deleteProjectFile(file)
+        }}
+        className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10"
+      >
+        {t('projects.deleteFile')}
+      </button>
+    </Dropdown>
+  )
 
   return (
     <PageLayout
@@ -1240,7 +1535,7 @@ export default function ProjectsPage({
                 }
               >
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                  {t('projects.showOnCards')}
+                  {t('projects.showDetails')}
                 </p>
                 <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                   <input
@@ -1268,15 +1563,6 @@ export default function ProjectsPage({
                     className="accent-blender"
                   />
                   {t('projects.path')}
-                </label>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
-                  <input
-                    type="checkbox"
-                    checked={showVersion}
-                    onChange={(event) => setShowVersion(event.target.checked)}
-                    className="accent-blender"
-                  />
-                  {t('projects.version')}
                 </label>
                 <div className="my-1 border-t border-white/5" />
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
@@ -1318,29 +1604,67 @@ export default function ProjectsPage({
                   />
                   {t('projects.treeDirectOnly')}
                 </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
+                  <input
+                    type="checkbox"
+                    checked={showFavoriteChips}
+                    onChange={toggleFavoriteChips}
+                    className="accent-blender"
+                  />
+                  {t('projects.favoriteFilters')}
+                </label>
                 <div className="my-1 border-t border-white/5" />
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                  {t('projects.size')}
+                  {t('projects.view')}
                 </p>
-                <div className="px-2 pb-2 pt-1">
-                  <input
-                    type="range"
-                    min={150}
-                    max={340}
-                    step={2}
-                    value={cardSize}
-                    onChange={(event) => setCardSize(Number(event.target.value))}
-                    className="w-full accent-blender"
-                  />
-                  <p className="mt-1 text-center text-[11px] text-zinc-500">
-                    {(cardSize / 200).toFixed(2)}x
-                  </p>
+                <div className="flex gap-1 px-2 pb-1">
+                  {[
+                    { mode: 'cards' as const, label: t('projects.viewCards'), icon: GridIcon },
+                    { mode: 'list' as const, label: t('projects.viewList'), icon: ListIcon }
+                  ].map(({ mode, label, icon: Icon }) => (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      // basis-0 splits the row in equal halves whatever the locale;
+                      // the tight padding keeps the longer label from forcing it open
+                      className={`flex min-w-0 flex-1 basis-0 items-center justify-center gap-1.5 rounded-md border px-1.5 py-1 text-xs transition-colors ${
+                        viewMode === mode
+                          ? 'border-white/10 bg-white/10 text-foreground'
+                          : 'border-transparent text-icon hover:bg-white/10 hover:text-icon-hover'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {label}
+                    </button>
+                  ))}
                 </div>
+                {viewMode === 'cards' && (
+                  <>
+                    <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                      {t('projects.size')}
+                    </p>
+                    <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+                      <input
+                        type="range"
+                        min={150}
+                        max={340}
+                        step={2}
+                        value={cardSize}
+                        onChange={(event) => setCardSize(Number(event.target.value))}
+                        className="min-w-0 flex-1 accent-blender"
+                      />
+                      {/* fixed width: the slider must not shift as the number changes */}
+                      <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-zinc-500">
+                        {(cardSize / 200).toFixed(2)}x
+                      </span>
+                    </div>
+                  </>
+                )}
               </Dropdown>
             </div>
           </div>
 
-          {favoriteChips.length > 0 && (
+          {showFavoriteChips && favoriteChips.length > 0 && (
             <div className="-mt-1 flex flex-wrap items-center gap-1">
               <button
                 onClick={() => selectTreeNode(null)}
@@ -1386,227 +1710,87 @@ export default function ProjectsPage({
                   ? t('projects.noProjectsInVersion', { version: versionFilter })
                   : t('projects.noProjectsInFolder')}
             </p>
+          ) : viewMode === 'list' ? (
+            <div className="overflow-hidden rounded-xl border border-white/5">
+              {sortedFiles.map((file, index) => {
+                const { native, selected, mismatch } = buildOf(file)
+                return (
+                  <div
+                    key={file.path}
+                    {...itemHandlers(file, selected)}
+                    className={`flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors ${
+                      index > 0 ? 'border-t border-white/5' : ''
+                    } ${
+                      selectedCard === file.path
+                        ? 'bg-card-hover ring-1 ring-inset ring-card-outline/40'
+                        : 'bg-surface-card hover:bg-card-hover'
+                    }`}
+                  >
+                    <div className="flex h-9 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface-inset">
+                      {file.thumbnail ? (
+                        <img
+                          src={file.thumbnail}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          draggable={false}
+                        />
+                      ) : (
+                        <CubeIcon className="h-5 w-5 text-zinc-700" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-zinc-100" title={file.path}>
+                        {file.name.replace(/\.blend$/i, '')}
+                      </p>
+                      {showPath && (
+                        <p className="truncate text-[11px] text-zinc-600" title={file.path}>
+                          {file.path}
+                        </p>
+                      )}
+                    </div>
+                    {showDate && (
+                      <p className="w-24 shrink-0 text-right text-[11px] tabular-nums text-zinc-500">
+                        {new Date(file.mtimeMs).toLocaleDateString()}
+                      </p>
+                    )}
+                    {showSize && (
+                      <p className="w-20 shrink-0 text-right text-[11px] tabular-nums text-zinc-500">
+                        {formatBytes(file.size)}
+                      </p>
+                    )}
+                    {/* picker and mismatch warning share one cell, so the row keeps the
+                        same right edge whether or not the file needs another version */}
+                    <div className="flex shrink-0 items-center justify-end gap-1">
+                      {versionPicker(file, native, selected, mismatch, 'row')}
+                    </div>
+                    {actionsMenu(file, 'row')}
+                  </div>
+                )
+              })}
+            </div>
           ) : (
             <div
               className="grid gap-3"
               style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }}
             >
               {sortedFiles.map((file) => {
-                const native = nativeInstallFor(file)
-                const selectedId = selectedInstall[file.path]
-                const selected =
-                  (selectedId ? installedSorted.find((build) => build.id === selectedId) : null) ??
-                  native ??
-                  installedSorted[0] ??
-                  null
-                const mismatch =
-                  selected != null && (native ? selected.id !== native.id : Boolean(file.blenderVersion))
+                const { native, selected, mismatch } = buildOf(file)
                 return (
                   <div
                     key={file.path}
+                    {...itemHandlers(file, selected)}
                     className={`group relative flex cursor-pointer flex-col rounded-xl border transition-all duration-150 ${
                       selectedCard === file.path
                         ? 'border-card-outline bg-card-hover shadow-lg shadow-black/40 ring-1 ring-card-outline/40'
                         : 'border-white/5 bg-surface-panel hover:border-card-outline/40 hover:bg-card-hover hover:shadow-lg hover:shadow-black/40'
                     }`}
-                    onClick={() => setSelectedCard(file.path)}
-                    onDoubleClick={() => {
-                      if (selected) requestOpen(file, selected)
-                    }}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      setSelectedCard(file.path)
-                      setCardMenuAt({ x: event.clientX, y: event.clientY })
-                      setCardMenuFor(file.path)
-                    }}
-                    draggable
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData(TREE_DRAG_TYPE, file.path)
-                      event.dataTransfer.effectAllowed = 'move'
-                      setCompactDragImage(event, 'project')
-                      setDragItem({ kind: 'project', path: file.path })
-                    }}
-                    onDragEnd={() => {
-                      setDragItem(null)
-                      setDropOverKey(null)
-                    }}
                   >
                     {/* the version to open with, over the thumbnail: picking one here is the
                         only version control on the card now that Open is gone */}
-                    {showVersion && (
-                      <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
-                        <Dropdown
-                          open={menuFor === file.path}
-                          onClose={() => setMenuFor(null)}
-                          align="left"
-                          menuClassName="flex max-h-64 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl"
-                          trigger={
-                            <button
-                              onClick={() => setMenuFor(menuFor === file.path ? null : file.path)}
-                              disabled={installedSorted.length === 0}
-                              title={t('projects.chooseVersion')}
-                              // py-1 + leading-4 gives the same 16px line box the "⋮" gets
-                              // from its icon, so both corners of the card match in height
-                              className="flex items-center gap-1 rounded-lg border border-white/10 bg-surface-card/80 px-2 py-1 text-[11px] font-semibold leading-4 text-foreground backdrop-blur-sm transition-colors hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              {selected ? selected.version : '—'}
-                              <ChevronDownIcon className="h-3 w-3" />
-                            </button>
-                          }
-                        >
-                          <div className="min-h-0 flex-1 overflow-y-auto">
-                            {installedSorted.map((build) => {
-                              const isNativeRow = native != null && build.id === native.id
-                              const isSelectedRow = selected != null && build.id === selected.id
-                              return (
-                                <button
-                                  key={build.id}
-                                  onClick={() => {
-                                    setSelectedInstall((prev) => ({ ...prev, [file.path]: build.id }))
-                                    setMenuFor(null)
-                                  }}
-                                  title={`${t('projects.blenderBuildLabel', { version: build.version, cycle: build.releaseCycle })}${isNativeRow ? t('projects.projectVersionSuffix') : ''}`}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/10"
-                                >
-                                  <span
-                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${isNativeRow ? 'bg-emerald-400' : 'bg-transparent'}`}
-                                  />
-                                  {build.version}
-                                  {isSelectedRow && (
-                                    <CheckIcon className="h-3.5 w-3.5 shrink-0 text-blender" />
-                                  )}
-                                </button>
-                              )
-                            })}
-                          </div>
-                          {file.blenderVersion && !native && onShowInstalls && (
-                            <>
-                              <div className="my-1 shrink-0 border-t border-white/5" />
-                              <button
-                                onClick={() => {
-                                  setMenuFor(null)
-                                  onShowInstalls(file.blenderVersion!)
-                                }}
-                                className="flex w-full shrink-0 items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-blender transition-colors hover:bg-blender/10"
-                              >
-                                <DownloadIcon className="h-3.5 w-3.5" />
-                                {t('projects.installVersion', { version: file.blenderVersion })}
-                              </button>
-                            </>
-                          )}
-                        </Dropdown>
-                        {mismatch && (
-                          <span
-                            title={t('projects.versionMismatch', {
-                              fileVersion: file.blenderVersion ?? '—',
-                              selectedVersion: selected?.version ?? ''
-                            })}
-                            className="flex items-center rounded-lg border border-white/10 bg-surface-card/80 p-1 text-amber-400 backdrop-blur-sm"
-                          >
-                            <WarningIcon className="h-4 w-4" />
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    <Dropdown
-                      className="absolute right-2 top-2 z-10"
-                      open={cardMenuFor === file.path}
-                      onClose={() => setCardMenuFor(null)}
-                      align={cardMenuAt ? 'left' : 'right'}
-                      at={cardMenuFor === file.path ? cardMenuAt : null}
-                      menuClassName="min-w-52 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
-                      trigger={
-                        <button
-                          onClick={() => {
-                            // button press keeps the old behaviour: anchored under it
-                            setCardMenuAt(null)
-                            setCardMenuFor(cardMenuFor === file.path ? null : file.path)
-                          }}
-                          title={t('projects.moreActions')}
-                          className="rounded-lg border border-white/10 bg-surface-card/80 p-1 text-icon backdrop-blur-sm transition-colors hover:bg-surface-card hover:text-icon-hover"
-                        >
-                          <DotsIcon className="h-4 w-4" />
-                        </button>
-                      }
-                    >
-                      <button
-                        onClick={() => {
-                          setCardMenuFor(null)
-                          projectsApi.reveal(file.path).catch(() => undefined)
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                      >
-                        {t('projects.showInFolder')}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCardMenuFor(null)
-                          openRename(file)
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                      >
-                        {t('projects.renameFile')}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCardMenuFor(null)
-                          duplicateFile(file)
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                      >
-                        {t('projects.duplicateFile')}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCardMenuFor(null)
-                          changePreview(file)
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                      >
-                        {t('projects.changePreviewImage')}
-                      </button>
-                      {file.hasCustomPreview && (
-                        <button
-                          onClick={() => {
-                            setCardMenuFor(null)
-                            resetPreview(file)
-                          }}
-                          className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                        >
-                          {t('projects.resetPreview')}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setCardMenuFor(null)
-                          relocateProject(file)
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                      >
-                        {t('projects.moveProject')}
-                      </button>
-                      {file.tracked && (
-                        <button
-                          onClick={() => {
-                            setCardMenuFor(null)
-                            removeFromList(file)
-                          }}
-                          className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-                        >
-                          {t('projects.removeFromList')}
-                        </button>
-                      )}
-                      <div className="my-1 border-t border-white/5" />
-                      <button
-                        onClick={() => {
-                          setCardMenuFor(null)
-                          deleteProjectFile(file)
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10"
-                      >
-                        {t('projects.deleteFile')}
-                      </button>
-                    </Dropdown>
+                    <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
+                      {versionPicker(file, native, selected, mismatch, 'card')}
+                    </div>
+                    {actionsMenu(file, 'card')}
                     <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-xl bg-surface-inset">
                       {file.thumbnail ? (
                         <img

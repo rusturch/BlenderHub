@@ -19,7 +19,9 @@ export default function MirrorVScrollbar({ targetRef, className = '' }: MirrorVS
   const barRef = useRef<HTMLDivElement>(null)
   const [scrollHeight, setScrollHeight] = useState(0)
   const [clientHeight, setClientHeight] = useState(0)
-  const syncingRef = useRef(false)
+  // the last position this component wrote into the bar, so the scroll event that write
+  // provokes can be told apart from one the user caused
+  const echoRef = useRef(Number.NaN)
 
   useEffect(() => {
     const target = targetRef.current
@@ -44,17 +46,21 @@ export default function MirrorVScrollbar({ targetRef, className = '' }: MirrorVS
     const target = targetRef.current
     const bar = barRef.current
     if (!target || !bar) return
+    // Scroll events are delivered asynchronously, so a flag raised and dropped around the
+    // write below is already down by the time the write's own event arrives. Matching on
+    // the value instead is what makes the echo recognisable — and that matters beyond
+    // tidiness: writing scrollTop cancels an in-progress smooth scroll, so an unfiltered
+    // echo would kill "back to top" the moment its animation moved a single frame.
+    const near = (a: number, b: number): boolean => Math.abs(a - b) < 1
     const followTarget = () => {
-      if (syncingRef.current) return
-      syncingRef.current = true
-      bar.scrollTop = target.scrollTop
-      syncingRef.current = false
+      if (near(bar.scrollTop, target.scrollTop)) return
+      echoRef.current = target.scrollTop
+      bar.scrollTop = echoRef.current
     }
     const followBar = () => {
-      if (syncingRef.current) return
-      syncingRef.current = true
+      if (near(bar.scrollTop, echoRef.current)) return // our own write coming back
+      if (near(target.scrollTop, bar.scrollTop)) return
       target.scrollTop = bar.scrollTop
-      syncingRef.current = false
     }
     followTarget()
     target.addEventListener('scroll', followTarget, { passive: true })
