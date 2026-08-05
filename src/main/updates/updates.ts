@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import { createHash } from 'crypto'
-import { createReadStream, existsSync } from 'fs'
+import { createReadStream, existsSync, rmSync } from 'fs'
 import { mkdir, readdir, rm } from 'fs/promises'
 import { dirname, join } from 'path'
 import { pipeline } from 'stream/promises'
@@ -84,6 +84,26 @@ const BACKUP_DIR_NAME = '.update-backup'
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+/**
+ * Recursive delete for trees that contain an app.asar. Electron's patched fs
+ * reports an asar as a directory and opens+caches the archive the moment a
+ * recursive walk stats it — after which the delete fails with EBUSY (caught
+ * live on the first zip→zip update attempt). process.noAsar turns the patch
+ * off; the call is synchronous on purpose: the flag is process-global, and
+ * blocking the main thread keeps unrelated fs calls (lazy requires from our
+ * own app.asar included) from running while asar support is off.
+ * Exported for the ELECTRON_RUN_AS_NODE harness.
+ */
+export function rmTreeWithAsarSync(path: string): void {
+  const previous = process.noAsar
+  process.noAsar = true
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
+  } finally {
+    process.noAsar = previous
+  }
+}
+
 async function sha256OfFile(path: string): Promise<string> {
   const hash = createHash('sha256')
   await pipeline(createReadStream(path), hash)
@@ -157,7 +177,7 @@ function systemTar(): string {
  */
 async function extractStaged(): Promise<string> {
   const target = stagedDir()
-  await rm(target, { recursive: true, force: true })
+  rmTreeWithAsarSync(target) // a previous extraction left an app.asar in here
   await mkdir(target, { recursive: true })
   await new Promise<void>((resolve, reject) => {
     const tar = spawn(systemTar(), ['-xf', zipPath(), '-C', target], {
@@ -408,18 +428,27 @@ export function cleanupAfterUpdate(): void {
   if (process.platform !== 'win32' || !app.isPackaged) return
   const appDir = dirname(process.execPath)
   void (async () => {
-    await rm(stagedDir(), { recursive: true, force: true }).catch(() => {})
+    // deferred past startup: these trees hold an app.asar, so their removal is
+    // a synchronous noAsar pass that briefly blocks the main thread
+    await delay(3000)
     // the helper may still be finishing its own cleanup right behind us — retry
-    for (const leftover of [
-      join(appDir, BACKUP_DIR_NAME),
-      // legacy single-exe portable leftovers (releases ≤0.3.x)
-      join(appDir, 'BlenderHub.exe.update'),
-      join(appDir, 'BlenderHub.exe.old')
-    ]) {
+    for (const leftover of [stagedDir(), join(appDir, BACKUP_DIR_NAME)]) {
       if (!existsSync(leftover)) continue
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
-          await rm(leftover, { recursive: true, force: true })
+          rmTreeWithAsarSync(leftover)
+          break
+        } catch {
+          await delay(2000)
+        }
+      }
+    }
+    // legacy single-exe portable leftovers (releases ≤0.3.x) — plain files
+    for (const leftover of [join(appDir, 'BlenderHub.exe.update'), join(appDir, 'BlenderHub.exe.old')]) {
+      if (!existsSync(leftover)) continue
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          await rm(leftover, { force: true })
           break
         } catch {
           await delay(2000)
