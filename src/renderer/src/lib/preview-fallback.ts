@@ -196,6 +196,13 @@ function createPreviewFallbackApi(): LauncherApi {
     createFolder: async () => {
       throw new Error(DESKTOP_ONLY)
     },
+    listKeptFolders: async () => [],
+    hideFolder: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    hideEmptyFolders: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
     moveFolder: async () => {
       throw new Error(DESKTOP_ONLY)
     },

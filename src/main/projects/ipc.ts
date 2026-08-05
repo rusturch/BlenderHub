@@ -23,13 +23,17 @@ import {
   setPreviewSidecar
 } from './manage'
 import {
+  addKeptFolder,
   addProjectFile,
   addProjectFolder,
+  clearKeptFolders,
+  getKeptFolders,
   getKnownFiles,
   getProjectFiles,
   getProjectFolders,
   recordProjectOpened,
   relocateProjectFolder,
+  removeKeptFolders,
   removeProjectFolder,
   setKnownFiles,
   untrackProjectPaths
@@ -211,6 +215,27 @@ export function registerProjectsIpc(): void {
     if (error) throw new Error(error)
   })
 
+  ipcMain.handle('projects:list-kept-folders', async () => {
+    const kept = await getKeptFolders()
+    const alive: string[] = []
+    const dead: string[] = []
+    for (const folder of kept) {
+      if (existsSync(folder)) alive.push(folder)
+      else dead.push(folder)
+    }
+    // a folder deleted outside the launcher must not linger as a ghost row
+    if (dead.length > 0) await removeKeptFolders(dead)
+    return alive
+  })
+
+  ipcMain.handle('projects:hide-folder', async (_event, rawPath: unknown) => {
+    await removeKeptFolders([requireString(rawPath, 'folder path')])
+  })
+
+  ipcMain.handle('projects:hide-empty-folders', async () => {
+    await clearKeptFolders()
+  })
+
   ipcMain.handle('projects:create-folder', async (_event, rawPath: unknown, rawName: unknown) => {
     const parent = await assertAllowedFolder(requireString(rawPath, 'folder path'))
     const safeName = requireString(rawName, 'folder name')
@@ -222,12 +247,20 @@ export function registerProjectsIpc(): void {
     const target = join(parent, safeName)
     if (existsSync(target)) throw new Error('A folder with this name already exists here')
     await mkdir(target)
+    // it holds no .blend yet — remember it so the tree can show it right away
+    await addKeptFolder(target)
     return target
   })
 
-  ipcMain.handle('projects:move-folder', async (_event, rawPath: unknown) => {
+  ipcMain.handle('projects:move-folder', async (_event, rawPath: unknown, rawDest: unknown) => {
     const path = await assertAllowedFolder(requireString(rawPath, 'folder path'))
     assertSafeFolderTarget(path)
+    if (rawDest !== undefined && rawDest !== null) {
+      const dest = await assertAllowedFolder(requireString(rawDest, 'destination folder'))
+      const moved = await moveFolderOnDisk(path, dest)
+      refreshTrayMenu()
+      return moved
+    }
     const picked = await dialog.showOpenDialog({
       title: 'Move folder to…',
       // start where the folder lives now, not wherever the OS last left the picker
@@ -315,8 +348,14 @@ export function registerProjectsIpc(): void {
     await clearPreviewSidecar(path)
   })
 
-  ipcMain.handle('projects:move', async (_event, rawPath: unknown) => {
+  ipcMain.handle('projects:move', async (_event, rawPath: unknown, rawDest: unknown) => {
     const path = await assertAllowed(requireString(rawPath, 'file path'))
+    // a destination given by the page (drag and drop) must itself be a known folder;
+    // without one the user picks it in a dialog
+    if (rawDest !== undefined && rawDest !== null) {
+      const dest = await assertAllowedFolder(requireString(rawDest, 'destination folder'))
+      return moveProject(path, dest)
+    }
     const picked = await dialog.showOpenDialog({
       title: 'Move project to…',
       defaultPath: dirname(path),

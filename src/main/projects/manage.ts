@@ -3,10 +3,12 @@ import { existsSync } from 'fs'
 import { shell } from 'electron'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'path'
 import {
+  addKeptFolder,
   addProjectFile,
   forgetProjectPath,
   forgetProjectPathsUnder,
   getProjectFiles,
+  getProjectFolders,
   isPathUnder,
   migrateProjectPath,
   remapProjectPaths
@@ -14,6 +16,45 @@ import {
 import { isSkippedScanDir } from '../scan-skip'
 
 export const PREVIEW_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
+
+const EMPTY_CHECK_MAX_DEPTH = 8
+// Proving a folder empty means walking all of it, and a tracked drive root would mean
+// walking the drive. Past this many directories the answer is "assume something is in
+// there": the folder simply is not kept — far better than stalling the operation.
+const EMPTY_CHECK_MAX_DIRS = 400
+
+/** stops at the first .blend — this only answers "is anything left in here?" */
+async function holdsBlendFiles(dir: string, budget = { dirs: EMPTY_CHECK_MAX_DIRS }, depth = 0): Promise<boolean> {
+  if (depth > EMPTY_CHECK_MAX_DEPTH) return false
+  if (budget.dirs-- <= 0) return true
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return false
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.toLowerCase().endsWith('.blend')) return true
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory() && !entry.name.startsWith('.')) {
+      if (await holdsBlendFiles(join(dir, entry.name), budget, depth + 1)) return true
+    }
+  }
+  return false
+}
+
+/**
+ * A folder whose last project just left would drop out of the tree mid-gesture — the
+ * user moved a file, not the folder. Keep it listed (dimmed) until they hide it.
+ */
+async function keepIfEmptied(dir: string): Promise<void> {
+  try {
+    if (!(await holdsBlendFiles(dir))) await addKeptFolder(dir)
+  } catch {
+    // best effort — never fail the operation the user actually asked for
+  }
+}
 
 // A custom preview lives next to the .blend as "<name>-preview.<ext>", e.g.
 // scene.blend → scene-preview.png. It is auto-detected on scan.
@@ -76,7 +117,12 @@ export async function moveProject(blendPath: string, destDir: string): Promise<s
   if (sidecar) {
     await moveFile(sidecar, join(dir, basename(sidecar))).catch(() => undefined)
   }
-  await migrateProjectPath(blendPath, targetPath)
+  // landing inside a tracked folder means the scan finds it again on its own; only a
+  // file that ends up outside every root needs an individual entry to stay listed
+  const roots = await getProjectFolders()
+  const insideTracked = roots.some((root) => isPathUnder(targetPath, root))
+  await migrateProjectPath(blendPath, targetPath, !insideTracked)
+  await keepIfEmptied(dirname(blendPath))
   return targetPath
 }
 
@@ -174,6 +220,7 @@ export async function moveFolderOnDisk(folderPath: string, destDir: string): Pro
     await rm(folderPath, { recursive: true, force: true })
   }
   await remapProjectPaths(folderPath, targetPath)
+  await keepIfEmptied(dirname(folderPath))
   return targetPath
 }
 
@@ -192,6 +239,7 @@ export async function deleteProject(blendPath: string): Promise<void> {
   if (existsSync(blendPath)) await shell.trashItem(blendPath)
   if (sidecar && existsSync(sidecar)) await shell.trashItem(sidecar)
   await forgetProjectPath(blendPath)
+  await keepIfEmptied(dirname(blendPath))
 }
 
 const SEARCH_MAX_DEPTH = 8

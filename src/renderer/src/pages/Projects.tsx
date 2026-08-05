@@ -9,6 +9,7 @@ import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
 import { useBackdropClose } from '../lib/use-backdrop-close'
+import { setCompactDragImage } from '../lib/drag-image'
 import type { BlendFileInfo, InstalledBuild, ProjectFolder } from '../../../shared/types'
 import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon } from './projects/icons'
 import { fileNameOf, readFlag } from './projects/projects-utils'
@@ -16,11 +17,13 @@ import {
   buildProjectTree,
   defaultExpandedKeys,
   isUnderKey,
+  parentPathOf,
   pathKeyOf,
   resolveSelection
 } from './projects/tree'
 import type { TreeNode } from './projects/tree'
-import FolderTree from './projects/FolderTree'
+import FolderTree, { TREE_DRAG_TYPE } from './projects/FolderTree'
+import type { TreeDnd } from './projects/FolderTree'
 import { FilterSelect } from '../components/FilterSelect'
 import type { ProjectsPageProps } from './projects/types'
 
@@ -31,6 +34,7 @@ let lastLoaded: {
   folders: ProjectFolder[]
   files: BlendFileInfo[]
   installed: InstalledBuild[]
+  kept: string[]
 } | null = null
 
 // Tree selection and fold state survive tab switches the same way, but deliberately
@@ -64,6 +68,8 @@ export default function ProjectsPage({
   const [folders, setFolders] = useState<ProjectFolder[]>(() => lastLoaded?.folders ?? [])
   const [files, setFiles] = useState<BlendFileInfo[] | null>(() => lastLoaded?.files ?? null)
   const [installed, setInstalled] = useState<InstalledBuild[]>(() => lastLoaded?.installed ?? [])
+  // folders shown while they hold no projects — created here, or emptied by a move
+  const [keptFolders, setKeptFolders] = useState<string[]>(() => lastLoaded?.kept ?? [])
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -157,13 +163,15 @@ export default function ProjectsPage({
     try {
       // folder availability is re-checked along with the files, so the
       // unavailable-folder banner reacts to a drive coming back or a rescan
-      const [freshFolders, fresh] = await Promise.all([
+      const [freshFolders, fresh, kept] = await Promise.all([
         projectsApi.listFolders(),
-        projectsApi.listFiles()
+        projectsApi.listFiles(),
+        projectsApi.listKeptFolders()
       ])
       if (seq === refreshSeqRef.current) {
         setFolders(freshFolders)
         setFiles(fresh)
+        setKeptFolders(kept)
       }
     } catch (cause) {
       if (seq === refreshSeqRef.current) setError(cleanErrorMessage(cause))
@@ -179,6 +187,62 @@ export default function ProjectsPage({
     setFiles((prev) => (prev ? updater(prev) : prev))
   }, [])
 
+  const isUnderPath = useCallback((path: string, root: string): boolean => {
+    const p = pathKeyOf(path)
+    const r = pathKeyOf(root)
+    return p === r || p.startsWith(r + '\\') || p.startsWith(r + '/')
+  }, [])
+
+  /**
+   * A folder was renamed, moved or deleted: rewrite the loaded paths in place instead
+   * of waiting on a rescan. The rescan walks every tracked root — a whole drive in the
+   * common case — so waiting for it made each tree action feel like a stall.
+   */
+  const patchTree = useCallback(
+    (oldPath: string, newPath: string | null) => {
+      refreshSeqRef.current++
+      const under = (path: string): boolean => isUnderPath(path, oldPath)
+      const moved = (path: string): string => `${newPath}${path.slice(oldPath.length)}`
+      setFiles((prev) => {
+        if (prev === null) return prev
+        if (newPath === null) return prev.filter((file) => !under(file.path))
+        return prev.map((file) =>
+          under(file.path)
+            ? {
+                ...file,
+                path: moved(file.path),
+                folder: under(file.folder) ? moved(file.folder) : file.folder
+              }
+            : file
+        )
+      })
+      setFolders((prev) =>
+        newPath === null
+          ? prev.filter((folder) => !under(folder.path))
+          : prev.map((folder) =>
+              under(folder.path)
+                ? { ...folder, path: moved(folder.path), name: fileNameOf(moved(folder.path)) }
+                : folder
+            )
+      )
+      setKeptFolders((prev) =>
+        newPath === null
+          ? prev.filter((path) => !under(path))
+          : prev.map((path) => (under(path) ? moved(path) : path))
+      )
+    },
+    [isUnderPath]
+  )
+
+  /** main keeps an emptied folder listed — mirror that locally so it does not blink */
+  const keepIfEmptied = useCallback(
+    (dir: string, remaining: BlendFileInfo[]) => {
+      if (remaining.some((file) => !file.missing && isUnderPath(file.path, dir))) return
+      setKeptFolders((prev) => (prev.some((path) => pathKeyOf(path) === pathKeyOf(dir)) ? prev : [...prev, dir]))
+    },
+    [isUnderPath]
+  )
+
   useEffect(() => {
     ;(async () => {
       try {
@@ -191,8 +255,8 @@ export default function ProjectsPage({
   }, [buildsApi, refreshFiles])
 
   useEffect(() => {
-    if (files !== null) lastLoaded = { folders, files, installed }
-  }, [folders, files, installed])
+    if (files !== null) lastLoaded = { folders, files, installed, kept: keptFolders }
+  }, [folders, files, installed, keptFolders])
 
   const addFolder = useCallback(async () => {
     try {
@@ -541,14 +605,20 @@ export default function ProjectsPage({
   // built from the full live list, not the filtered one — the panel must not
   // reshuffle while a search is being typed
   const tree = useMemo(
-    () => buildProjectTree(files ?? [], folders, treeFullHierarchy),
-    [files, folders, treeFullHierarchy]
+    () => buildProjectTree(files ?? [], folders, treeFullHierarchy, keptFolders),
+    [files, folders, treeFullHierarchy, keptFolders]
   )
 
-  // Validated synchronously on render — a stale selection must not filter the grid
-  // for even a single frame. The folder the selection stands on is remembered, so it
-  // survives both a hierarchy-mode switch and compression absorbing it into a deeper
-  // node; a folder that is really gone falls back to "All projects".
+  const hasEmptyFolders = useMemo(() => {
+    const anyEmpty = (nodes: TreeNode[]): boolean =>
+      nodes.some((node) => node.fileCount === 0 || anyEmpty(node.children))
+    return anyEmpty(tree.nodes)
+  }, [tree])
+
+  // Validated synchronously on render — a stale selection must not filter the grid for
+  // even a single frame. The folder the selection stands on is remembered, so it
+  // survives a hierarchy-mode switch (which renames every key); a folder that is
+  // really gone falls back to "All projects".
   const treeSelectedPathRef = useRef<string | null>(treeSelectedPathSnapshot)
   const effectiveTreeSelected = useMemo(
     () => resolveSelection(tree, treeSelected, treeSelectedPathRef.current),
@@ -593,7 +663,6 @@ export default function ProjectsPage({
   const openFolderDialog = useCallback((mode: 'rename' | 'create', node: TreeNode) => {
     setFolderMenu(null)
     setFolderDialog({ mode, node })
-    // a compressed row shows several segments but acts on the folder it points at
     setFolderDialogValue(mode === 'rename' ? fileNameOf(node.fullPath) : '')
   }, [])
 
@@ -607,16 +676,129 @@ export default function ProjectsPage({
         const renamed = await projectsApi.renameFolder(node.fullPath, trimmed)
         setFolderDialog(null)
         followFolderMove(node.fullPath, renamed)
-        await refreshFiles()
+        patchTree(node.fullPath, renamed)
       } else {
-        // an empty folder stays out of the tree until a project lands in it
-        await projectsApi.createFolder(node.fullPath, trimmed)
+        const created = await projectsApi.createFolder(node.fullPath, trimmed)
         setFolderDialog(null)
+        setKeptFolders((prev) => [...prev, created])
       }
+      void refreshFiles()
     } catch (cause) {
       await alertDialog(cleanErrorMessage(cause))
     }
-  }, [folderDialog, folderDialogValue, projectsApi, followFolderMove, refreshFiles, alertDialog])
+  }, [
+    folderDialog,
+    folderDialogValue,
+    projectsApi,
+    followFolderMove,
+    patchTree,
+    refreshFiles,
+    alertDialog
+  ])
+
+  // In-app drag and drop: a project card or a tree folder onto a tree folder. The
+  // dragged item is kept in state rather than read from dataTransfer, because dragover
+  // may not read the payload — and the drop rules need to know what is being dragged.
+  const [dragItem, setDragItem] = useState<{ kind: 'project' | 'folder'; path: string } | null>(null)
+  const [dropOverKey, setDropOverKey] = useState<string | null>(null)
+
+  const canDropOn = useCallback(
+    (node: TreeNode): boolean => {
+      if (!dragItem) return false
+      const target = pathKeyOf(node.fullPath)
+      const source = pathKeyOf(dragItem.path)
+      if (dragItem.kind === 'folder') {
+        // a folder cannot swallow itself or land inside its own subtree
+        if (target === source) return false
+        if (target.startsWith(source + '\\') || target.startsWith(source + '/')) return false
+      }
+      // dropping something back where it already sits is a no-op, not a move
+      return pathKeyOf(parentPathOf(dragItem.path)) !== target
+    },
+    [dragItem]
+  )
+
+  const dropOnFolder = useCallback(
+    async (node: TreeNode) => {
+      const item = dragItem
+      setDropOverKey(null)
+      setDragItem(null)
+      if (!item) return
+      const source = parentPathOf(item.path)
+      try {
+        if (item.kind === 'folder') {
+          const moved = await projectsApi.moveFolder(item.path, node.fullPath)
+          if (!moved) return
+          followFolderMove(item.path, moved)
+          patchTree(item.path, moved)
+        } else {
+          const moved = await projectsApi.moveProject(item.path, node.fullPath)
+          if (!moved) return
+          patchFiles((prev) =>
+            prev.map((file) =>
+              file.path === item.path ? { ...file, path: moved, name: fileNameOf(moved) } : file
+            )
+          )
+        }
+        // main keeps the emptied source listed; do the same here so it does not blink
+        keepIfEmptied(source, (files ?? []).filter((file) => file.path !== item.path))
+        void refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [
+      dragItem,
+      files,
+      projectsApi,
+      followFolderMove,
+      patchTree,
+      patchFiles,
+      keepIfEmptied,
+      refreshFiles,
+      alertDialog
+    ]
+  )
+
+  const treeDnd = useMemo<TreeDnd>(
+    () => ({
+      overKey: dropOverKey,
+      canDrop: canDropOn,
+      onDragStart: (node) => setDragItem({ kind: 'folder', path: node.fullPath }),
+      onDragEnd: () => {
+        setDragItem(null)
+        setDropOverKey(null)
+      },
+      onDragOver: (node) => setDropOverKey(node.key),
+      onDragLeave: (node) => setDropOverKey((key) => (key === node.key ? null : key)),
+      onDrop: (node) => void dropOnFolder(node)
+    }),
+    [dropOverKey, canDropOn, dropOnFolder]
+  )
+
+  const hideFolder = useCallback(
+    async (node: TreeNode) => {
+      setFolderMenu(null)
+      try {
+        await projectsApi.hideFolder(node.fullPath)
+        setKeptFolders((prev) => prev.filter((path) => pathKeyOf(path) !== pathKeyOf(node.fullPath)))
+        void refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, refreshFiles, alertDialog]
+  )
+
+  const hideEmptyFolders = useCallback(async () => {
+    try {
+      await projectsApi.hideEmptyFolders()
+      setKeptFolders([])
+      void refreshFiles()
+    } catch (cause) {
+      await alertDialog(cleanErrorMessage(cause))
+    }
+  }, [projectsApi, refreshFiles, alertDialog])
 
   const revealFolder = useCallback(
     async (node: TreeNode) => {
@@ -637,12 +819,14 @@ export default function ProjectsPage({
         const moved = await projectsApi.moveFolder(node.fullPath)
         if (!moved) return
         followFolderMove(node.fullPath, moved)
-        await refreshFiles()
+        patchTree(node.fullPath, moved)
+        keepIfEmptied(parentPathOf(node.fullPath), files ?? [])
+        void refreshFiles()
       } catch (cause) {
         await alertDialog(cleanErrorMessage(cause))
       }
     },
-    [projectsApi, followFolderMove, refreshFiles, alertDialog]
+    [projectsApi, files, followFolderMove, patchTree, keepIfEmptied, refreshFiles, alertDialog]
   )
 
   const deleteFolder = useCallback(
@@ -662,12 +846,13 @@ export default function ProjectsPage({
       try {
         await projectsApi.deleteFolder(node.fullPath)
         followFolderMove(node.fullPath, null)
-        await refreshFiles()
+        patchTree(node.fullPath, null)
+        void refreshFiles()
       } catch (cause) {
         await alertDialog(cleanErrorMessage(cause))
       }
     },
-    [projectsApi, followFolderMove, refreshFiles, confirmDialog, alertDialog, t]
+    [projectsApi, followFolderMove, patchTree, refreshFiles, confirmDialog, alertDialog, t]
   )
 
   // unfold roots (and the ladders under them) the first time they show up — including
@@ -823,6 +1008,8 @@ export default function ProjectsPage({
               expanded={treeExpanded ?? new Set()}
               showCounts={treeCounts}
               showGuides={treeGuides}
+              dnd={treeDnd}
+              onHideEmpty={hasEmptyFolders ? hideEmptyFolders : undefined}
               onSelect={selectTreeNode}
               onToggle={toggleTreeNode}
               onContextMenu={(node, point) => setFolderMenu({ node, point })}
@@ -1131,6 +1318,17 @@ export default function ProjectsPage({
                       setCardMenuAt({ x: event.clientX, y: event.clientY })
                       setCardMenuFor(file.path)
                     }}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(TREE_DRAG_TYPE, file.path)
+                      event.dataTransfer.effectAllowed = 'move'
+                      setCompactDragImage(event, 'project')
+                      setDragItem({ kind: 'project', path: file.path })
+                    }}
+                    onDragEnd={() => {
+                      setDragItem(null)
+                      setDropOverKey(null)
+                    }}
                   >
                     {/* the version to open with, over the thumbnail: picking one here is the
                         only version control on the card now that Open is gone */}
@@ -1372,7 +1570,7 @@ export default function ProjectsPage({
             onClick={() => revealFolder(folderMenu.node)}
             className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
           >
-            {t('projects.showInFolder')}
+            {t('projects.folderOpen')}
           </button>
           <button
             onClick={() => openFolderDialog('create', folderMenu.node)}
@@ -1380,6 +1578,14 @@ export default function ProjectsPage({
           >
             {t('projects.folderCreate')}
           </button>
+          {folderMenu.node.fileCount === 0 && (
+            <button
+              onClick={() => hideFolder(folderMenu.node)}
+              className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+            >
+              {t('projects.folderHide')}
+            </button>
+          )}
           <div className="my-1 border-t border-white/5" />
           <button
             onClick={() => openFolderDialog('rename', folderMenu.node)}

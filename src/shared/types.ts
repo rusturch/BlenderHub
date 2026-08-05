@@ -124,7 +124,8 @@ export interface ProjectsApi {
   duplicateFile: (path: string) => Promise<DuplicatedFile>
   setPreview: (path: string) => Promise<boolean>
   clearPreview: (path: string) => Promise<void>
-  moveProject: (path: string) => Promise<string | null>
+  /** destDir skips the picker — used by drag and drop onto a folder in the tree */
+  moveProject: (path: string, destDir?: string) => Promise<string | null>
   findMissing: (path: string) => Promise<string | null>
   removeFromList: (path: string) => Promise<void>
   deleteFile: (path: string) => Promise<void>
@@ -136,8 +137,14 @@ export interface ProjectsApi {
   openFolder: (path: string) => Promise<void>
   /** create a subfolder inside a known folder; returns its path */
   createFolder: (path: string, name: string) => Promise<string>
-  /** move a folder to a picked destination; null when the picker is cancelled */
-  moveFolder: (path: string) => Promise<string | null>
+  /** folders the tree shows while they hold no .blend (existing ones only) */
+  listKeptFolders: () => Promise<string[]>
+  /** stop showing one empty folder */
+  hideFolder: (path: string) => Promise<void>
+  /** stop showing every empty folder at once */
+  hideEmptyFolders: () => Promise<void>
+  /** move a folder; destDir skips the picker (drag and drop), null when cancelled */
+  moveFolder: (path: string, destDir?: string) => Promise<string | null>
   /** send a folder and everything in it to the trash */
   deleteFolder: (path: string) => Promise<void>
   /** re-point a registered folder that moved on disk; null when the picker is cancelled */

@@ -50,6 +50,7 @@ export async function remapProjectPaths(oldRoot: string, newRoot: string): Promi
       projectFolders: [...new Set(config.projectFolders.map(remap))],
       projectFiles: [...new Set(config.projectFiles.map(remap))],
       knownFiles: [...new Set(config.knownFiles.map(remap))],
+      keptFolders: [...new Set(config.keptFolders.map(remap))],
       recentlyOpened
     }
   })
@@ -57,6 +58,37 @@ export async function remapProjectPaths(oldRoot: string, newRoot: string): Promi
 
 /** The registered folder moved on disk: re-point the registration and everything under it. */
 export const relocateProjectFolder = remapProjectPaths
+
+/**
+ * Folders the tree keeps showing while they hold no .blend: created from the tree, or
+ * left empty after their last project moved away. They stay listed (dimmed) until the
+ * user hides them, so work in progress does not vanish mid-gesture.
+ */
+export async function getKeptFolders(): Promise<string[]> {
+  return (await readConfig()).keptFolders
+}
+
+export async function addKeptFolder(folder: string): Promise<void> {
+  const normalized = resolve(folder)
+  await updateConfig((config) =>
+    config.keptFolders.some((known) => resolve(known) === normalized)
+      ? config
+      : { ...config, keptFolders: [...config.keptFolders, normalized] }
+  )
+}
+
+export async function removeKeptFolders(folders: string[]): Promise<void> {
+  if (folders.length === 0) return
+  const keys = new Set(folders.map((folder) => resolve(folder)))
+  await updateConfig((config) => ({
+    ...config,
+    keptFolders: config.keptFolders.filter((known) => !keys.has(resolve(known)))
+  }))
+}
+
+export async function clearKeptFolders(): Promise<void> {
+  await updateConfig((config) => ({ ...config, keptFolders: [] }))
+}
 
 /** A folder is gone (deleted): drop every stored path inside it, tracking included. */
 export async function forgetProjectPathsUnder(root: string): Promise<void> {
@@ -71,6 +103,7 @@ export async function forgetProjectPathsUnder(root: string): Promise<void> {
       projectFolders: config.projectFolders.filter((known) => !isPathUnder(known, rootKey)),
       projectFiles: config.projectFiles.filter((known) => !isPathUnder(known, rootKey)),
       knownFiles: config.knownFiles.filter((known) => !isPathUnder(known, rootKey)),
+      keptFolders: config.keptFolders.filter((known) => !isPathUnder(known, rootKey)),
       recentlyOpened
     }
   })

@@ -130,6 +130,25 @@ export function CheckIcon({ className = 'h-4 w-4' }: { className?: string }) {
   )
 }
 
+export function EyeOffIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10.6 5.2A9.9 9.9 0 0 1 12 5c5.5 0 9 6 9 6a15.4 15.4 0 0 1-3.1 3.9" />
+      <path d="M6.2 6.7A15.5 15.5 0 0 0 3 11s3.5 6 9 6a9.7 9.7 0 0 0 4.2-.9" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <path d="m3 3 18 18" />
+    </svg>
+  )
+}
+
 export function PanelLeftIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg

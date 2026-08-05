@@ -7,7 +7,7 @@ import type { BlendFileInfo, ProjectFolder } from '../../../../shared/types'
 export interface TreeNode {
   /** stable id: "<root path lower>|<relative dir lower, / separated>" */
   key: string
-  /** display name; compressed chains carry several segments joined by " / " */
+  /** the folder's own name — one row is always exactly one folder on disk */
   label: string
   /** dim disambiguation, set only when two top-level nodes share a name */
   suffix?: string
@@ -56,8 +56,8 @@ function dirLabel(path: string): string {
   return segments.length > 1 ? segments[segments.length - 1] : path
 }
 
-/** parent directory for the disambiguation suffix; drive roots have none */
-function parentLabel(path: string): string {
+/** the directory holding this path; a volume root has none (empty string) */
+export function parentPathOf(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, '')
   const index = Math.max(trimmed.lastIndexOf('\\'), trimmed.lastIndexOf('/'))
   return index > 0 ? trimmed.slice(0, index) : ''
@@ -82,26 +82,18 @@ function buildRootNode(
   rootPath: string,
   rootLabel: string,
   rootFiles: BlendFileInfo[],
+  keptFolders: string[],
   keyOfFile: Map<string, string>,
   nodeKeys: Set<string>,
-  keyOfPath: Map<string, string>,
-  compress: boolean
+  keyOfPath: Map<string, string>
 ): TreeNode {
   const rootKey = rootPath.toLowerCase() + '|'
   // tooltips join with the root's own separator style, so POSIX paths stay POSIX
   const sep = rootPath.includes('\\') ? '\\' : '/'
   const top: DirEntry = { name: '', relLower: '', direct: 0, children: new Map() }
-  for (const file of rootFiles) {
-    const segments = relSegments(file.path, rootPath)
-    if (!segments || segments.length === 0) {
-      // attribution mismatch — keep the file reachable through the root itself
-      keyOfFile.set(file.path, rootKey)
-      top.direct++
-      continue
-    }
-    const dirs = segments.slice(0, -1)
+  const ensureDir = (segments: string[]): DirEntry => {
     let entry = top
-    for (const dir of dirs) {
+    for (const dir of segments) {
       const lower = dir.toLowerCase()
       let child = entry.children.get(lower)
       if (!child) {
@@ -115,29 +107,36 @@ function buildRootNode(
       }
       entry = child
     }
+    return entry
+  }
+  // folders with no .blend of their own still get a row: created here, or just emptied
+  for (const kept of keptFolders) {
+    const segments = relSegments(kept, rootPath)
+    if (segments && segments.length > 0) ensureDir(segments)
+  }
+  for (const file of rootFiles) {
+    const segments = relSegments(file.path, rootPath)
+    if (!segments || segments.length === 0) {
+      // attribution mismatch — keep the file reachable through the root itself
+      keyOfFile.set(file.path, rootKey)
+      top.direct++
+      continue
+    }
+    const entry = ensureDir(segments.slice(0, -1))
     entry.direct++
     keyOfFile.set(file.path, entry.relLower ? rootKey + entry.relLower : rootKey)
   }
 
   const toNode = (entry: DirEntry, depth: number, pathSoFar: string): TreeNode => {
-    // compress chains of empty single-child folders ("Work / Blender"), VS Code style
-    let label = entry.name
-    let current = entry
-    let fullPath = `${pathSoFar}${sep}${entry.name}`
-    while (compress && current.direct === 0 && current.children.size === 1) {
-      const only = [...current.children.values()][0]
-      label = `${label} / ${only.name}`
-      fullPath = `${fullPath}${sep}${only.name}`
-      current = only
-    }
-    const key = rootKey + current.relLower
+    const fullPath = `${pathSoFar}${sep}${entry.name}`
+    const key = rootKey + entry.relLower
     nodeKeys.add(key)
     keyOfPath.set(pathKeyOf(fullPath), key)
-    const children = [...current.children.values()]
+    const children = [...entry.children.values()]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((child) => toNode(child, depth + 1, fullPath))
-    const fileCount = current.direct + children.reduce((sum, child) => sum + child.fileCount, 0)
-    return { key, label, fullPath, depth, fileCount, children }
+    const fileCount = entry.direct + children.reduce((sum, child) => sum + child.fileCount, 0)
+    return { key, label: entry.name, fullPath, depth, fileCount, children }
   }
 
   nodeKeys.add(rootKey)
@@ -179,6 +178,13 @@ function liftEmptyVolumeRoot(
   return root.children
 }
 
+/** path is root itself or lives inside it (segment-safe, case-insensitive) */
+function isPathUnderRoot(path: string, root: string): boolean {
+  const p = pathKeyOf(path)
+  const r = pathKeyOf(root)
+  return p === r || p.startsWith(r + '\\') || p.startsWith(r + '/')
+}
+
 /** the volume a path starts from: "E:\", "\\server\share\" or POSIX "/" */
 function anchorOf(path: string): string {
   if (/^[\\/]{2}/.test(path)) {
@@ -190,30 +196,45 @@ function anchorOf(path: string): string {
 }
 
 /**
- * fullHierarchy renders the folder chain exactly as it sits on disk, starting from
- * the drive — every level gets its own row. The default anchors the tree at the
- * tracked folders instead and merges empty single-child chains into one row, so a
- * tracked drive root does not open with a ladder of folders that hold nothing.
+ * One row is always exactly one folder on disk — no merged chains, so what a click,
+ * a drag or a context menu acts on is never in doubt. fullHierarchy starts the tree
+ * from the drive; the default anchors it at the tracked folders and drops a drive row
+ * that holds nothing of its own.
  */
 export function buildProjectTree(
   files: BlendFileInfo[],
   folders: ProjectFolder[],
-  fullHierarchy = false
+  fullHierarchy = false,
+  keptFolders: string[] = []
 ): ProjectTree {
   const live = files.filter((file) => !file.missing)
   // Compact mode groups by the source folder the scan attributed each file to (the
   // registered root, or the parent directory for individually added files). Full
   // mode groups by volume instead, so nested roots merge into the one real disk tree.
-  const groups = new Map<string, { path: string; files: BlendFileInfo[] }>()
-  for (const file of live) {
-    const groupPath = fullHierarchy ? anchorOf(file.path) : file.folder
+  const groups = new Map<string, { path: string; files: BlendFileInfo[]; kept: string[] }>()
+  const groupFor = (groupPath: string): { path: string; files: BlendFileInfo[]; kept: string[] } => {
     const lower = groupPath.toLowerCase()
     let group = groups.get(lower)
     if (!group) {
-      group = { path: groupPath, files: [] }
+      group = { path: groupPath, files: [], kept: [] }
       groups.set(lower, group)
     }
-    group.files.push(file)
+    return group
+  }
+  for (const file of live) {
+    groupFor(fullHierarchy ? anchorOf(file.path) : file.folder).files.push(file)
+  }
+  // an empty kept folder belongs to the root it sits under; without a matching root it
+  // would have nowhere to hang, so the deepest registered root that contains it wins
+  for (const kept of keptFolders) {
+    if (fullHierarchy) {
+      groupFor(anchorOf(kept)).kept.push(kept)
+      continue
+    }
+    const owner = folders
+      .filter((folder) => !folder.missing && isPathUnderRoot(kept, folder.path))
+      .sort((a, b) => b.path.length - a.path.length)[0]
+    if (owner) groupFor(owner.path).kept.push(kept)
   }
 
   const keyOfFile = new Map<string, string>()
@@ -223,7 +244,7 @@ export function buildProjectTree(
   if (fullHierarchy) {
     for (const group of [...groups.values()].sort((a, b) => a.path.localeCompare(b.path))) {
       nodes.push(
-        buildRootNode(group.path, group.path, group.files, keyOfFile, nodeKeys, keyOfPath, false)
+        buildRootNode(group.path, group.path, group.files, group.kept, keyOfFile, nodeKeys, keyOfPath)
       )
     }
     return { nodes, keyOfFile, nodeKeys, keyOfPath, pathOfKey: invert(keyOfPath) }
@@ -237,10 +258,10 @@ export function buildProjectTree(
       group.path,
       folder.name,
       group.files,
+      group.kept,
       keyOfFile,
       nodeKeys,
-      keyOfPath,
-      true
+      keyOfPath
     )
     nodes.push(...liftEmptyVolumeRoot(root, nodeKeys, keyOfPath))
     groups.delete(folder.path.toLowerCase())
@@ -253,10 +274,10 @@ export function buildProjectTree(
       group.path,
       dirLabel(group.path),
       group.files,
+      group.kept,
       keyOfFile,
       nodeKeys,
-      keyOfPath,
-      true
+      keyOfPath
     )
     nodes.push(...liftEmptyVolumeRoot(root, nodeKeys, keyOfPath))
   }
@@ -272,7 +293,7 @@ export function buildProjectTree(
   for (const list of byLabel.values()) {
     if (list.length < 2) continue
     for (const node of list) {
-      const parent = parentLabel(node.fullPath)
+      const parent = parentPathOf(node.fullPath)
       if (parent) node.suffix = parent
     }
   }
@@ -282,8 +303,8 @@ export function buildProjectTree(
 
 /**
  * Rows that should start unfolded: every root, plus chains of folders that hold no
- * files of their own — in full hierarchy those are the path ladders the mode exists
- * to show, and leaving them folded would hide the very thing the user asked for.
+ * files of their own — those are pure pass-through levels on the way to the projects,
+ * and leaving them folded would hide everything behind a row you cannot act on.
  */
 export function defaultExpandedKeys(nodes: TreeNode[]): string[] {
   const keys: string[] = []
@@ -300,9 +321,9 @@ export function defaultExpandedKeys(nodes: TreeNode[]): string[] {
 
 /**
  * Re-point a selection at this tree. The key alone is not enough: switching between
- * compact and full hierarchy moves the whole key space (roots become volumes), and
- * compression can absorb a folder into a deeper chain node. The folder path the
- * selection stood on survives both, so it is tried before giving up.
+ * compact and full hierarchy moves the whole key space (roots become volumes), and a
+ * folder can leave the tree when its last project does. The folder path the selection
+ * stood on survives both, so it is tried before giving up.
  */
 export function resolveSelection(
   tree: ProjectTree,

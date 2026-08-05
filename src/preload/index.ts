@@ -102,7 +102,8 @@ const api: LauncherApi = {
       ipcRenderer.invoke('projects:duplicate-file', path),
     setPreview: (path: string): Promise<boolean> => ipcRenderer.invoke('projects:set-preview', path),
     clearPreview: (path: string): Promise<void> => ipcRenderer.invoke('projects:clear-preview', path),
-    moveProject: (path: string): Promise<string | null> => ipcRenderer.invoke('projects:move', path),
+    moveProject: (path: string, destDir?: string): Promise<string | null> =>
+      ipcRenderer.invoke('projects:move', path, destDir),
     findMissing: (path: string): Promise<string | null> =>
       ipcRenderer.invoke('projects:find-missing', path),
     removeFromList: (path: string): Promise<void> =>
@@ -114,8 +115,11 @@ const api: LauncherApi = {
     openFolder: (path: string): Promise<void> => ipcRenderer.invoke('projects:open-folder', path),
     createFolder: (path: string, name: string): Promise<string> =>
       ipcRenderer.invoke('projects:create-folder', path, name),
-    moveFolder: (path: string): Promise<string | null> =>
-      ipcRenderer.invoke('projects:move-folder', path),
+    listKeptFolders: (): Promise<string[]> => ipcRenderer.invoke('projects:list-kept-folders'),
+    hideFolder: (path: string): Promise<void> => ipcRenderer.invoke('projects:hide-folder', path),
+    hideEmptyFolders: (): Promise<void> => ipcRenderer.invoke('projects:hide-empty-folders'),
+    moveFolder: (path: string, destDir?: string): Promise<string | null> =>
+      ipcRenderer.invoke('projects:move-folder', path, destDir),
     deleteFolder: (path: string): Promise<void> =>
       ipcRenderer.invoke('projects:delete-folder', path),
     relocateFolder: (path: string): Promise<ProjectFolder[] | null> =>
