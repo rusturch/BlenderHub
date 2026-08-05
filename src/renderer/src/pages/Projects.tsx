@@ -8,10 +8,18 @@ import { cleanErrorMessage, formatBytes } from '../lib/format'
 import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
+import { useBackdropClose } from '../lib/use-backdrop-close'
 import type { BlendFileInfo, InstalledBuild, ProjectFolder } from '../../../shared/types'
 import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon } from './projects/icons'
 import { fileNameOf, readFlag } from './projects/projects-utils'
-import { buildProjectTree, defaultExpandedKeys, isUnderKey, resolveSelection } from './projects/tree'
+import {
+  buildProjectTree,
+  defaultExpandedKeys,
+  isUnderKey,
+  pathKeyOf,
+  resolveSelection
+} from './projects/tree'
+import type { TreeNode } from './projects/tree'
 import FolderTree from './projects/FolderTree'
 import { FilterSelect } from '../components/FilterSelect'
 import type { ProjectsPageProps } from './projects/types'
@@ -78,6 +86,16 @@ export default function ProjectsPage({
   // single click marks a card; double click is what opens it
   const [selectedCard, setSelectedCard] = useState<string | null>(null)
   const [missingOpen, setMissingOpen] = useState(false)
+  const [folderMenu, setFolderMenu] = useState<{
+    node: TreeNode
+    point: { x: number; y: number }
+  } | null>(null)
+  // one dialog serves both folder actions that need a name
+  const [folderDialog, setFolderDialog] = useState<{
+    mode: 'rename' | 'create'
+    node: TreeNode
+  } | null>(null)
+  const [folderDialogValue, setFolderDialogValue] = useState('')
   const [renameFor, setRenameFor] = useState<BlendFileInfo | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [selectedInstall, setSelectedInstall] = useState<Record<string, string>>({})
@@ -208,7 +226,8 @@ export default function ProjectsPage({
 
   const openNewProject = useCallback(() => {
     setNpName('')
-    setNpFolder('')
+    // start from where the last project was created — the usual case is the same folder
+    setNpFolder(uiGet('projects.lastProjectFolder') ?? '')
     setNpError(null)
     setNpInstallId(installedSorted[0]?.id ?? '')
     setNewProjectOpen(true)
@@ -216,12 +235,12 @@ export default function ProjectsPage({
 
   const pickLocation = useCallback(async () => {
     try {
-      const picked = await projectsApi.pickFolder()
+      const picked = await projectsApi.pickFolder(npFolder || undefined)
       if (picked) setNpFolder(picked)
     } catch (cause) {
       await alertDialog(cleanErrorMessage(cause))
     }
-  }, [projectsApi, alertDialog])
+  }, [projectsApi, npFolder, alertDialog])
 
   const submitNewProject = useCallback(async () => {
     if (!npName.trim() || !npFolder || !npInstallId) return
@@ -234,6 +253,7 @@ export default function ProjectsPage({
         folder: npFolder
       })
       setNewProjectOpen(false)
+      uiSet('projects.lastProjectFolder', npFolder)
       // the fresh project may live outside the currently selected tree node
       setTreeSelected(null)
       await refreshFiles()
@@ -551,6 +571,105 @@ export default function ProjectsPage({
     }
   }, [files, effectiveTreeSelected, treeSelected])
 
+  // A folder operation renames the paths the selection is expressed in. Carrying the
+  // remembered path along means the filter follows the folder instead of dropping;
+  // for a deleted folder there is nothing to follow, so the filter is cleared.
+  const followFolderMove = useCallback((oldPath: string, newPath: string | null) => {
+    const current = treeSelectedPathRef.current
+    if (!current) return
+    const from = pathKeyOf(oldPath)
+    if (current !== from && !current.startsWith(from + '\\') && !current.startsWith(from + '/')) return
+    if (newPath === null) {
+      treeSelectedPathRef.current = null
+      treeSelectedPathSnapshot = null
+      setTreeSelected(null)
+      return
+    }
+    const next = pathKeyOf(newPath) + current.slice(from.length)
+    treeSelectedPathRef.current = next
+    treeSelectedPathSnapshot = next
+  }, [])
+
+  const openFolderDialog = useCallback((mode: 'rename' | 'create', node: TreeNode) => {
+    setFolderMenu(null)
+    setFolderDialog({ mode, node })
+    // a compressed row shows several segments but acts on the folder it points at
+    setFolderDialogValue(mode === 'rename' ? fileNameOf(node.fullPath) : '')
+  }, [])
+
+  const submitFolderDialog = useCallback(async () => {
+    if (!folderDialog) return
+    const trimmed = folderDialogValue.trim()
+    if (!trimmed) return
+    const { mode, node } = folderDialog
+    try {
+      if (mode === 'rename') {
+        const renamed = await projectsApi.renameFolder(node.fullPath, trimmed)
+        setFolderDialog(null)
+        followFolderMove(node.fullPath, renamed)
+        await refreshFiles()
+      } else {
+        // an empty folder stays out of the tree until a project lands in it
+        await projectsApi.createFolder(node.fullPath, trimmed)
+        setFolderDialog(null)
+      }
+    } catch (cause) {
+      await alertDialog(cleanErrorMessage(cause))
+    }
+  }, [folderDialog, folderDialogValue, projectsApi, followFolderMove, refreshFiles, alertDialog])
+
+  const revealFolder = useCallback(
+    async (node: TreeNode) => {
+      setFolderMenu(null)
+      try {
+        await projectsApi.openFolder(node.fullPath)
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, alertDialog]
+  )
+
+  const moveFolder = useCallback(
+    async (node: TreeNode) => {
+      setFolderMenu(null)
+      try {
+        const moved = await projectsApi.moveFolder(node.fullPath)
+        if (!moved) return
+        followFolderMove(node.fullPath, moved)
+        await refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, followFolderMove, refreshFiles, alertDialog]
+  )
+
+  const deleteFolder = useCallback(
+    async (node: TreeNode) => {
+      setFolderMenu(null)
+      const ok = await confirmDialog({
+        title: t('projects.folderDeleteTitle'),
+        message: t('projects.folderDeleteMessage', {
+          path: node.fullPath,
+          count: node.fileCount
+        }),
+        variant: 'danger',
+        tone: 'danger',
+        confirmLabel: t('common.delete')
+      })
+      if (!ok) return
+      try {
+        await projectsApi.deleteFolder(node.fullPath)
+        followFolderMove(node.fullPath, null)
+        await refreshFiles()
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [projectsApi, followFolderMove, refreshFiles, confirmDialog, alertDialog, t]
+  )
+
   // unfold roots (and the ladders under them) the first time they show up — including
   // after a hierarchy-mode switch, which gives every row a brand new key
   const offeredExpandRef = useRef(treeOfferedSnapshot)
@@ -616,6 +735,12 @@ export default function ProjectsPage({
 
   const hasProjects = folders.length > 0 || (files?.length ?? 0) > 0
   const noInstalls = installedSorted.length === 0
+
+  const newProjectBackdrop = useBackdropClose(() => {
+    if (!creating) setNewProjectOpen(false)
+  })
+  const renameBackdrop = useBackdropClose(() => setRenameFor(null))
+  const folderDialogBackdrop = useBackdropClose(() => setFolderDialog(null))
 
   return (
     <PageLayout
@@ -700,6 +825,7 @@ export default function ProjectsPage({
               showGuides={treeGuides}
               onSelect={selectTreeNode}
               onToggle={toggleTreeNode}
+              onContextMenu={(node, point) => setFolderMenu({ node, point })}
             />
           )}
           <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -1226,10 +1352,107 @@ export default function ProjectsPage({
         </div>
       )}
 
+      {folderMenu && (
+        <Dropdown
+          open
+          onClose={() => setFolderMenu(null)}
+          at={folderMenu.point}
+          align="left"
+          menuClassName="min-w-48 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 text-sm shadow-xl"
+          trigger={<span />}
+        >
+          <p
+            className="truncate px-3 py-1 text-[11px] font-medium text-zinc-400"
+            title={folderMenu.node.fullPath}
+          >
+            {fileNameOf(folderMenu.node.fullPath)}
+          </p>
+          <div className="my-1 border-t border-white/5" />
+          <button
+            onClick={() => revealFolder(folderMenu.node)}
+            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+          >
+            {t('projects.showInFolder')}
+          </button>
+          <button
+            onClick={() => openFolderDialog('create', folderMenu.node)}
+            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+          >
+            {t('projects.folderCreate')}
+          </button>
+          <div className="my-1 border-t border-white/5" />
+          <button
+            onClick={() => openFolderDialog('rename', folderMenu.node)}
+            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+          >
+            {t('projects.renameFile')}
+          </button>
+          <button
+            onClick={() => moveFolder(folderMenu.node)}
+            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+          >
+            {t('projects.folderMove')}
+          </button>
+          <div className="my-1 border-t border-white/5" />
+          <button
+            onClick={() => deleteFolder(folderMenu.node)}
+            className="block w-full px-3 py-1.5 text-left text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            {t('projects.folderDelete')}
+          </button>
+        </Dropdown>
+      )}
+
+      {folderDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          {...folderDialogBackdrop}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-zinc-100">
+              {t(folderDialog.mode === 'rename' ? 'projects.folderRenameTitle' : 'projects.folderCreateTitle')}
+            </h2>
+            <p className="mt-1 truncate text-xs text-zinc-500" title={folderDialog.node.fullPath}>
+              {folderDialog.node.fullPath}
+            </p>
+            <input
+              value={folderDialogValue}
+              onChange={(event) => setFolderDialogValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submitFolderDialog()
+              }}
+              autoFocus
+              className="mt-3 w-full rounded-lg border border-white/10 bg-surface-input px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none"
+            />
+            <p className="mt-2 text-[11px] text-zinc-500">
+              {t(folderDialog.mode === 'rename' ? 'projects.folderRenameHint' : 'projects.folderCreateHint')}
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setFolderDialog(null)}
+                className="rounded-lg border border-white/10 px-4 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={submitFolderDialog}
+                disabled={!folderDialogValue.trim()}
+                className="rounded-lg bg-accent-button px-4 py-1.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t(folderDialog.mode === 'rename' ? 'projects.save' : 'projects.create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {newProjectOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => !creating && setNewProjectOpen(false)}
+          {...newProjectBackdrop}
         >
           <div
             className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
@@ -1306,7 +1529,7 @@ export default function ProjectsPage({
       {renameFor && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setRenameFor(null)}
+          {...renameBackdrop}
         >
           <div
             className="w-full max-w-sm rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../lib/i18n'
+import { useBackdropClose } from '../lib/use-backdrop-close'
 
 type DialogVariant = 'none' | 'warning' | 'danger'
 type DialogTone = 'default' | 'danger'
@@ -105,6 +106,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(() => ({ confirm, alert: alertFn, choose }), [confirm, alertFn, choose])
+  const backdrop = useBackdropClose(() => close(false))
 
   const variant = pending?.options.variant ?? 'none'
   const tone: DialogTone = (pending?.kind === 'confirm' && pending.options.tone) || 'default'
@@ -119,7 +121,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       {pending && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => close(false)}
+          {...backdrop}
         >
           <div
             className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"

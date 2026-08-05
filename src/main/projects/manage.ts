@@ -1,8 +1,16 @@
-import { constants, copyFile, mkdir, readdir, rename, rm, stat } from 'fs/promises'
+import { constants, copyFile, cp, mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { shell } from 'electron'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'path'
-import { addProjectFile, forgetProjectPath, getProjectFiles, migrateProjectPath } from './store'
+import {
+  addProjectFile,
+  forgetProjectPath,
+  forgetProjectPathsUnder,
+  getProjectFiles,
+  isPathUnder,
+  migrateProjectPath,
+  remapProjectPaths
+} from './store'
 import { isSkippedScanDir } from '../scan-skip'
 
 export const PREVIEW_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
@@ -124,6 +132,56 @@ export async function duplicateProject(
   }
   const copyStat = await stat(targetPath)
   return { path: targetPath, mtimeMs: copyStat.mtimeMs, size: copyStat.size }
+}
+
+// Folder operations behind the Projects tree's context menu. Every one of them ends
+// by rewriting the stored paths, so projects inside keep their list entry, their
+// recents and their tracking instead of turning up missing on the next scan.
+
+export async function renameFolderOnDisk(folderPath: string, newName: string): Promise<string> {
+  const targetPath = join(dirname(folderPath), newName)
+  if (resolve(targetPath) === resolve(folderPath)) return resolve(folderPath)
+  // NTFS is case-insensitive: a case-only rename is legal even though the target "exists"
+  const caseOnly = resolve(targetPath).toLowerCase() === resolve(folderPath).toLowerCase()
+  if (!caseOnly && existsSync(targetPath)) {
+    throw new Error('A folder with this name already exists here')
+  }
+  await rename(folderPath, targetPath)
+  await remapProjectPaths(folderPath, targetPath)
+  return targetPath
+}
+
+export async function moveFolderOnDisk(folderPath: string, destDir: string): Promise<string> {
+  const dir = resolve(destDir)
+  const targetPath = join(dir, basename(folderPath))
+  if (resolve(targetPath) === resolve(folderPath)) return resolve(folderPath)
+  // moving a folder inside itself would eat it
+  if (isPathUnder(dir, folderPath)) throw new Error('Cannot move a folder into itself')
+  if (existsSync(targetPath)) {
+    throw new Error('A folder with this name already exists in the destination')
+  }
+  await mkdir(dir, { recursive: true })
+  try {
+    await rename(folderPath, targetPath)
+  } catch {
+    // rename fails across volumes — copy, then drop the source only once the copy is whole
+    try {
+      await cp(folderPath, targetPath, { recursive: true, errorOnExist: true, force: false })
+    } catch (cause) {
+      await rm(targetPath, { recursive: true, force: true }).catch(() => undefined)
+      throw cause
+    }
+    await rm(folderPath, { recursive: true, force: true })
+  }
+  await remapProjectPaths(folderPath, targetPath)
+  return targetPath
+}
+
+export async function deleteFolderToTrash(folderPath: string): Promise<void> {
+  // Application Security Requirement: user-initiated deletion goes through the OS trash
+  // rather than an unrecoverable unlink — a folder holds far more than its .blend files.
+  if (existsSync(folderPath)) await shell.trashItem(resolve(folderPath))
+  await forgetProjectPathsUnder(folderPath)
 }
 
 export async function deleteProject(blendPath: string): Promise<void> {

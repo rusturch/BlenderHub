@@ -1,19 +1,24 @@
 import { execFile, spawn } from 'child_process'
 import { existsSync } from 'fs'
+import { mkdir } from 'fs/promises'
 import { dialog, ipcMain, shell } from 'electron'
-import { basename, isAbsolute, join, relative, resolve } from 'path'
+import { basename, dirname, isAbsolute, join, parse, relative, resolve } from 'path'
+import { getDataRoot } from '../paths'
 import { findInstalled } from '../blender/installs'
 import { requireString } from '../ipc-util'
 import { refreshTrayMenu } from '../tray'
 import { listUnavailableFolders, scanProjectFiles } from './service'
 import {
   clearPreviewSidecar,
+  deleteFolderToTrash,
   deleteProject,
   duplicateProject,
   findMissingFile,
+  moveFolderOnDisk,
   moveProject,
   PREVIEW_EXTENSIONS,
   relinkMissingFiles,
+  renameFolderOnDisk,
   renameProject,
   setPreviewSidecar
 } from './manage'
@@ -35,6 +40,39 @@ import type { ProjectFolder } from '../../shared/types'
 // after verifying they belong to a user-registered project folder or file, and Blender
 // is spawned with an argument array (no shell) — no path or command injection from the
 // page. New-project files are written only inside a folder the user picked in a dialog.
+
+/**
+ * Folder operations (rename / move / delete) are only allowed on folders the launcher
+ * already knows: a registered project folder, something inside one, or the folder an
+ * individually added file lives in. Anything else — including a path the page could
+ * make up — is refused before a single byte moves.
+ */
+async function assertAllowedFolder(folderPath: string): Promise<string> {
+  const target = resolve(folderPath)
+  const [folders, files] = await Promise.all([getProjectFolders(), getProjectFiles()])
+  const inRegistered = folders.some((folder) => {
+    const rel = relative(resolve(folder), target)
+    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+  })
+  const holdsTrackedFile = files.some((file) => {
+    const rel = relative(target, resolve(file))
+    return !rel.startsWith('..') && !isAbsolute(rel)
+  })
+  if (!inRegistered && !holdsTrackedFile) throw new Error('Folder is outside of the registered projects')
+  return target
+}
+
+/** Guards that hold no matter how the folder became reachable. */
+function assertSafeFolderTarget(target: string): void {
+  // a volume root is not a folder you can rename, move or bin
+  if (target === parse(target).root) throw new Error('This is a drive root, not a folder')
+  const dataRoot = resolve(getDataRoot())
+  const rel = relative(target, dataRoot)
+  // the launcher's own data folder must not travel or vanish with a project folder
+  if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) {
+    throw new Error("This folder holds the launcher's data folder")
+  }
+}
 
 async function assertAllowed(filePath: string): Promise<string> {
   const target = resolve(filePath)
@@ -120,9 +158,12 @@ export function registerProjectsIpc(): void {
     return picked.filePaths[0]
   })
 
-  ipcMain.handle('projects:pick-folder', async () => {
+  ipcMain.handle('projects:pick-folder', async (_event, rawStartIn: unknown) => {
+    // only a hint for where the dialog opens — the user still picks the folder itself
+    const startIn = typeof rawStartIn === 'string' && rawStartIn ? rawStartIn : undefined
     const picked = await dialog.showOpenDialog({
       title: 'Choose project location',
+      defaultPath: startIn,
       properties: ['openDirectory']
     })
     return picked.canceled ? null : (picked.filePaths[0] ?? null)
@@ -147,6 +188,63 @@ export function registerProjectsIpc(): void {
     await relocateProjectFolder(oldRoot, picked.filePaths[0])
     refreshTrayMenu()
     return listFoldersWithStatus()
+  })
+
+  ipcMain.handle('projects:rename-folder', async (_event, rawPath: unknown, rawName: unknown) => {
+    const path = await assertAllowedFolder(requireString(rawPath, 'folder path'))
+    assertSafeFolderTarget(path)
+    // same character policy as projects:create — the renderer sends a bare name, not a path
+    const safeName = requireString(rawName, 'folder name')
+      .slice(0, 120)
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+      .trim()
+      .replace(/\.+$/, '')
+    if (!safeName) throw new Error('Enter a valid folder name')
+    const renamed = await renameFolderOnDisk(path, safeName)
+    refreshTrayMenu()
+    return renamed
+  })
+
+  ipcMain.handle('projects:open-folder', async (_event, rawPath: unknown) => {
+    const path = await assertAllowedFolder(requireString(rawPath, 'folder path'))
+    const error = await shell.openPath(path)
+    if (error) throw new Error(error)
+  })
+
+  ipcMain.handle('projects:create-folder', async (_event, rawPath: unknown, rawName: unknown) => {
+    const parent = await assertAllowedFolder(requireString(rawPath, 'folder path'))
+    const safeName = requireString(rawName, 'folder name')
+      .slice(0, 120)
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+      .trim()
+      .replace(/\.+$/, '')
+    if (!safeName) throw new Error('Enter a valid folder name')
+    const target = join(parent, safeName)
+    if (existsSync(target)) throw new Error('A folder with this name already exists here')
+    await mkdir(target)
+    return target
+  })
+
+  ipcMain.handle('projects:move-folder', async (_event, rawPath: unknown) => {
+    const path = await assertAllowedFolder(requireString(rawPath, 'folder path'))
+    assertSafeFolderTarget(path)
+    const picked = await dialog.showOpenDialog({
+      title: 'Move folder to…',
+      // start where the folder lives now, not wherever the OS last left the picker
+      defaultPath: dirname(path),
+      properties: ['openDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    const moved = await moveFolderOnDisk(path, picked.filePaths[0])
+    refreshTrayMenu()
+    return moved
+  })
+
+  ipcMain.handle('projects:delete-folder', async (_event, rawPath: unknown) => {
+    const path = await assertAllowedFolder(requireString(rawPath, 'folder path'))
+    assertSafeFolderTarget(path)
+    await deleteFolderToTrash(path)
+    refreshTrayMenu()
   })
 
   ipcMain.handle('projects:remove-missing', async () => {
@@ -221,6 +319,7 @@ export function registerProjectsIpc(): void {
     const path = await assertAllowed(requireString(rawPath, 'file path'))
     const picked = await dialog.showOpenDialog({
       title: 'Move project to…',
+      defaultPath: dirname(path),
       properties: ['openDirectory']
     })
     if (picked.canceled || !picked.filePaths[0]) return null

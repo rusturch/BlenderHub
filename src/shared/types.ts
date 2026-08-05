@@ -113,7 +113,8 @@ export interface ProjectsApi {
   listFolders: () => Promise<ProjectFolder[]>
   addFolder: () => Promise<ProjectFolder[]>
   addFile: () => Promise<string | null>
-  pickFolder: () => Promise<string | null>
+  /** startIn only preselects where the dialog opens */
+  pickFolder: (startIn?: string) => Promise<string | null>
   removeFolder: (path: string) => Promise<ProjectFolder[]>
   listFiles: () => Promise<BlendFileInfo[]>
   createProject: (input: NewProjectInput) => Promise<string>
@@ -129,6 +130,16 @@ export interface ProjectsApi {
   deleteFile: (path: string) => Promise<void>
   /** raw individually-tracked file entries, for the Settings management list */
   listTrackedFiles: () => Promise<string[]>
+  /** rename a folder on disk; stored paths inside it follow along */
+  renameFolder: (path: string, newName: string) => Promise<string>
+  /** open a folder in the system file manager */
+  openFolder: (path: string) => Promise<void>
+  /** create a subfolder inside a known folder; returns its path */
+  createFolder: (path: string, name: string) => Promise<string>
+  /** move a folder to a picked destination; null when the picker is cancelled */
+  moveFolder: (path: string) => Promise<string | null>
+  /** send a folder and everything in it to the trash */
+  deleteFolder: (path: string) => Promise<void>
   /** re-point a registered folder that moved on disk; null when the picker is cancelled */
   relocateFolder: (path: string) => Promise<ProjectFolder[] | null>
   /** drop every missing project from the list in one go */

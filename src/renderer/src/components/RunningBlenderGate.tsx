@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LauncherApi, RunningBlender } from '../../../shared/types'
 import { useTranslation } from '../lib/i18n'
+import { useBackdropClose } from '../lib/use-backdrop-close'
 
 // Shown when an Apply/Uninstall/Restore touches Blender versions that are running
 // right now: a running Blender re-saves its in-memory preferences on any prefs change,
@@ -72,8 +73,10 @@ export default function RunningBlenderGate({
     }
   }
 
+  const backdrop = useBackdropClose(onCancel)
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...backdrop}>
       <div
         className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
         onClick={(event) => event.stopPropagation()}

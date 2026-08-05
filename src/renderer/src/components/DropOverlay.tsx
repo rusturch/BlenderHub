@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
+import { useBackdropClose } from '../lib/use-backdrop-close'
 import type { Page } from './Sidebar'
 import type { DroppedItem, DroppedItemKind, DropHandleResult, InstallPhase } from '../../../shared/types'
 
@@ -356,6 +357,8 @@ export default function DropOverlay({
 
   const selectedCount = items?.filter((item) => isActionable(item.kind) && item.selected).length ?? 0
   const anySupported = items?.some((item) => isActionable(item.kind)) ?? false
+  const desktopOnlyBackdrop = useBackdropClose(() => setDesktopOnly(false))
+  const itemsBackdrop = useBackdropClose(close)
 
   return (
     <>
@@ -381,7 +384,7 @@ export default function DropOverlay({
       {desktopOnly && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setDesktopOnly(false)}
+          {...desktopOnlyBackdrop}
         >
           <div
             className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
@@ -401,7 +404,7 @@ export default function DropOverlay({
         </div>
       )}
       {items && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={close}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...itemsBackdrop}>
           <div
             className="w-full max-w-lg rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}

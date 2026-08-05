@@ -5,6 +5,7 @@ import { groupAddons } from '../../../shared/addon-identity'
 import { compareVersionsDesc } from '../../../shared/blender-builds'
 import { cleanErrorMessage } from '../lib/format'
 import { useTranslation } from '../lib/i18n'
+import { useBackdropClose } from '../lib/use-backdrop-close'
 
 type RunState = 'idle' | 'running' | 'done' | 'error'
 
@@ -117,8 +118,10 @@ export default function SyncOfferDialog({
     }
   }
 
+  const backdrop = useBackdropClose(onClose)
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...backdrop}>
       <div
         className="w-full max-w-md rounded-xl border border-white/10 bg-surface-dialog p-5 shadow-2xl"
         onClick={(event) => event.stopPropagation()}

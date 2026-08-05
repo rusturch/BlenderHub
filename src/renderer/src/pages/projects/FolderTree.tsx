@@ -14,6 +14,7 @@ interface FolderTreeProps {
   showGuides: boolean
   onSelect: (key: string | null) => void
   onToggle: (key: string) => void
+  onContextMenu: (node: TreeNode, point: { x: number; y: number }) => void
 }
 
 const INDENT = 12
@@ -27,7 +28,8 @@ function TreeRow({
   showCounts,
   showGuides,
   onSelect,
-  onToggle
+  onToggle,
+  onContextMenu
 }: { node: TreeNode } & Omit<FolderTreeProps, 'nodes'>) {
   const isSelected = selected === node.key
   const isExpanded = expanded.has(node.key)
@@ -36,6 +38,10 @@ function TreeRow({
     <>
       <button
         onClick={() => onSelect(isSelected ? null : node.key)}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          onContextMenu(node, { x: event.clientX, y: event.clientY })
+        }}
         title={node.fullPath}
         style={{ paddingLeft: `${8 + node.depth * INDENT}px` }}
         className={`relative flex w-full items-center gap-1 rounded-lg py-1 pr-2 text-left text-sm transition-colors ${
@@ -99,6 +105,7 @@ function TreeRow({
             showGuides={showGuides}
             onSelect={onSelect}
             onToggle={onToggle}
+            onContextMenu={onContextMenu}
           />
         ))}
     </>
@@ -112,7 +119,8 @@ export default function FolderTree({
   showCounts,
   showGuides,
   onSelect,
-  onToggle
+  onToggle,
+  onContextMenu
 }: FolderTreeProps) {
   const { t } = useTranslation()
   return (
@@ -136,6 +144,7 @@ export default function FolderTree({
           showGuides={showGuides}
           onSelect={onSelect}
           onToggle={onToggle}
+          onContextMenu={onContextMenu}
         />
       ))}
     </div>

@@ -22,17 +22,23 @@ export async function removeProjectFolder(folder: string): Promise<void> {
   }))
 }
 
-// The registered folder moved on disk: point the registration at the new location and
-// rewrite the old prefix in every stored path, so all its projects re-link in one step.
-export async function relocateProjectFolder(oldRoot: string, newRoot: string): Promise<void> {
+/** true when `path` is `root` itself or lives inside it */
+export function isPathUnder(path: string, root: string): boolean {
+  const rel = relative(resolve(root), resolve(path))
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+}
+
+/**
+ * A folder changed place on disk (relocated, renamed or moved): rewrite the old prefix
+ * in every stored path. Registered roots are remapped by prefix too, so a tracked
+ * folder nested inside the one that moved follows along instead of going missing.
+ */
+export async function remapProjectPaths(oldRoot: string, newRoot: string): Promise<void> {
   const oldKey = resolve(oldRoot)
   const newKey = resolve(newRoot)
   if (oldKey === newKey) return
-  const isUnder = (p: string): boolean => {
-    const rel = relative(oldKey, resolve(p))
-    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
-  }
-  const remap = (p: string): string => (isUnder(p) ? join(newKey, relative(oldKey, resolve(p))) : p)
+  const remap = (p: string): string =>
+    isPathUnder(p, oldKey) ? join(newKey, relative(oldKey, resolve(p))) : p
   await updateConfig((config) => {
     const recentlyOpened: Record<string, number> = {}
     for (const [path, openedAt] of Object.entries(config.recentlyOpened)) {
@@ -41,11 +47,30 @@ export async function relocateProjectFolder(oldRoot: string, newRoot: string): P
     }
     return {
       ...config,
-      projectFolders: [
-        ...new Set(config.projectFolders.map((known) => (resolve(known) === oldKey ? newKey : known)))
-      ],
+      projectFolders: [...new Set(config.projectFolders.map(remap))],
       projectFiles: [...new Set(config.projectFiles.map(remap))],
       knownFiles: [...new Set(config.knownFiles.map(remap))],
+      recentlyOpened
+    }
+  })
+}
+
+/** The registered folder moved on disk: re-point the registration and everything under it. */
+export const relocateProjectFolder = remapProjectPaths
+
+/** A folder is gone (deleted): drop every stored path inside it, tracking included. */
+export async function forgetProjectPathsUnder(root: string): Promise<void> {
+  const rootKey = resolve(root)
+  await updateConfig((config) => {
+    const recentlyOpened: Record<string, number> = {}
+    for (const [path, openedAt] of Object.entries(config.recentlyOpened)) {
+      if (!isPathUnder(path, rootKey)) recentlyOpened[path] = openedAt
+    }
+    return {
+      ...config,
+      projectFolders: config.projectFolders.filter((known) => !isPathUnder(known, rootKey)),
+      projectFiles: config.projectFiles.filter((known) => !isPathUnder(known, rootKey)),
+      knownFiles: config.knownFiles.filter((known) => !isPathUnder(known, rootKey)),
       recentlyOpened
     }
   })
