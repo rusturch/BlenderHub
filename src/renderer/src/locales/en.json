@@ -356,6 +356,8 @@
   "projects.treeFileCounts": "File counts",
   "projects.treeGuides": "Hierarchy lines",
   "projects.treeFullHierarchy": "Full hierarchy",
+  "projects.treeDirectOnly": "Exclude subfolders",
+  "projects.noProjectsInFolder": "No projects in this folder.",
   "projects.folderMove": "Move…",
   "projects.folderOpen": "Open folder",
   "projects.folderCreate": "New folder…",

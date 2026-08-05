@@ -112,7 +112,9 @@ export async function moveProject(blendPath: string, destDir: string): Promise<s
   if (existsSync(targetPath)) throw new Error('A file with this name already exists in the destination')
 
   const sidecar = await findPreviewSidecar(blendPath)
-  await mkdir(dir, { recursive: true })
+  // never mkdir a destination that is already there: on Windows a drive root answers
+  // EPERM rather than EEXIST, so dropping onto "D:\" would fail outright
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true })
   await moveFile(blendPath, targetPath)
   if (sidecar) {
     await moveFile(sidecar, join(dir, basename(sidecar))).catch(() => undefined)
@@ -206,7 +208,8 @@ export async function moveFolderOnDisk(folderPath: string, destDir: string): Pro
   if (existsSync(targetPath)) {
     throw new Error('A folder with this name already exists in the destination')
   }
-  await mkdir(dir, { recursive: true })
+  // see moveProject: mkdir on an existing drive root throws EPERM on Windows
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true })
   try {
     await rename(folderPath, targetPath)
   } catch {

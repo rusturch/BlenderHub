@@ -350,6 +350,8 @@
   "projects.treeFileCounts": "Счётчики файлов",
   "projects.treeGuides": "Полосы иерархии",
   "projects.treeFullHierarchy": "Полная иерархия",
+  "projects.treeDirectOnly": "Без вложенных папок",
+  "projects.noProjectsInFolder": "В этой папке нет проектов.",
   "projects.folderMove": "Переместить…",
   "projects.folderOpen": "Открыть папку",
   "projects.folderCreate": "Создать папку…",

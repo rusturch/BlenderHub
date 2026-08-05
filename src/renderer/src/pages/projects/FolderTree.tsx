@@ -24,6 +24,8 @@ interface FolderTreeProps {
   selected: string | null
   expanded: Set<string>
   showCounts: boolean
+  /** counts and the selection filter both ignore subfolders */
+  directOnly: boolean
   showGuides: boolean
   dnd: TreeDnd
   /** shown next to "All projects" while the tree holds folders with no projects */
@@ -45,6 +47,7 @@ function TreeRow({
   selected,
   expanded,
   showCounts,
+  directOnly,
   showGuides,
   dnd,
   onSelect,
@@ -131,7 +134,7 @@ function TreeRow({
               isSelected ? 'text-selection-text/70' : 'text-zinc-500'
             }`}
           >
-            {node.fileCount}
+            {directOnly ? node.directCount : node.fileCount}
           </span>
         )}
       </button>
@@ -143,6 +146,7 @@ function TreeRow({
             selected={selected}
             expanded={expanded}
             showCounts={showCounts}
+            directOnly={directOnly}
             showGuides={showGuides}
             dnd={dnd}
             onSelect={onSelect}
@@ -159,6 +163,7 @@ export default function FolderTree({
   selected,
   expanded,
   showCounts,
+  directOnly,
   showGuides,
   dnd,
   onHideEmpty,
@@ -196,6 +201,7 @@ export default function FolderTree({
           selected={selected}
           expanded={expanded}
           showCounts={showCounts}
+          directOnly={directOnly}
           showGuides={showGuides}
           dnd={dnd}
           onSelect={onSelect}

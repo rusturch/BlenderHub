@@ -16,6 +16,8 @@ export interface TreeNode {
   depth: number
   /** live files in this subtree */
   fileCount: number
+  /** live files sitting in this folder itself, subfolders excluded */
+  directCount: number
   children: TreeNode[]
 }
 
@@ -136,7 +138,15 @@ function buildRootNode(
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((child) => toNode(child, depth + 1, fullPath))
     const fileCount = entry.direct + children.reduce((sum, child) => sum + child.fileCount, 0)
-    return { key, label: entry.name, fullPath, depth, fileCount, children }
+    return {
+      key,
+      label: entry.name,
+      fullPath,
+      depth,
+      fileCount,
+      directCount: entry.direct,
+      children
+    }
   }
 
   nodeKeys.add(rootKey)
@@ -150,6 +160,7 @@ function buildRootNode(
     fullPath: rootPath,
     depth: 0,
     fileCount: top.direct + children.reduce((sum, child) => sum + child.fileCount, 0),
+    directCount: top.direct,
     children
   }
 }
@@ -170,7 +181,7 @@ function liftEmptyVolumeRoot(
   keyOfPath: Map<string, string>
 ): TreeNode[] {
   const isVolume = pathKeyOf(root.fullPath) === pathKeyOf(anchorOf(root.fullPath))
-  const directFiles = root.fileCount - root.children.reduce((sum, child) => sum + child.fileCount, 0)
+  const directFiles = root.directCount
   if (!isVolume || directFiles > 0 || root.children.length === 0) return [root]
   nodeKeys.delete(root.key)
   keyOfPath.delete(pathKeyOf(root.fullPath))

@@ -121,6 +121,9 @@ export default function ProjectsPage({
   const [treeFullHierarchy, setTreeFullHierarchy] = useState(() =>
     readFlag('projects.treeFullHierarchy', false)
   )
+  const [treeDirectOnly, setTreeDirectOnly] = useState(() =>
+    readFlag('projects.treeDirectOnly', false)
+  )
   const [treeSelected, setTreeSelected] = useState<string | null>(treeSelectedSnapshot)
   const [treeExpanded, setTreeExpanded] = useState<Set<string> | null>(treeExpandedSnapshot)
 
@@ -134,6 +137,7 @@ export default function ProjectsPage({
     uiSet('projects.treeCounts', treeCounts ? '1' : '0')
     uiSet('projects.treeGuides', treeGuides ? '1' : '0')
     uiSet('projects.treeFullHierarchy', treeFullHierarchy ? '1' : '0')
+    uiSet('projects.treeDirectOnly', treeDirectOnly ? '1' : '0')
   }, [
     showDate,
     showSize,
@@ -143,7 +147,8 @@ export default function ProjectsPage({
     treeVisible,
     treeCounts,
     treeGuides,
-    treeFullHierarchy
+    treeFullHierarchy,
+    treeDirectOnly
   ])
 
   useEffect(() => {
@@ -889,13 +894,17 @@ export default function ProjectsPage({
       if (file.missing) return false
       if (effectiveTreeSelected) {
         const key = tree.keyOfFile.get(file.path)
-        if (!key || !isUnderKey(key, effectiveTreeSelected)) return false
+        // "exclude subfolders" narrows the filter to the picked folder itself
+        if (!key) return false
+        if (treeDirectOnly ? key !== effectiveTreeSelected : !isUnderKey(key, effectiveTreeSelected)) {
+          return false
+        }
       }
       if (versionFilter !== 'all' && file.blenderVersion !== versionFilter) return false
       if (q && !file.name.toLowerCase().includes(q)) return false
       return true
     })
-  }, [files, tree, effectiveTreeSelected, versionFilter, query])
+  }, [files, tree, effectiveTreeSelected, treeDirectOnly, versionFilter, query])
 
   const sortedFiles = useMemo(() => {
     const factor = sortDir === 'asc' ? -1 : 1
@@ -1007,6 +1016,7 @@ export default function ProjectsPage({
               selected={effectiveTreeSelected}
               expanded={treeExpanded ?? new Set()}
               showCounts={treeCounts}
+              directOnly={treeDirectOnly}
               showGuides={treeGuides}
               dnd={treeDnd}
               onHideEmpty={hasEmptyFolders ? hideEmptyFolders : undefined}
@@ -1249,6 +1259,15 @@ export default function ProjectsPage({
                   />
                   {t('projects.treeFullHierarchy')}
                 </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
+                  <input
+                    type="checkbox"
+                    checked={treeDirectOnly}
+                    onChange={(event) => setTreeDirectOnly(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('projects.treeDirectOnly')}
+                </label>
                 <div className="my-1 border-t border-white/5" />
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                   {t('projects.size')}
@@ -1283,7 +1302,9 @@ export default function ProjectsPage({
             <p className="text-sm text-zinc-500">
               {query.trim()
                 ? t('projects.noSearchMatches')
-                : t('projects.noProjectsInVersion', { version: versionFilter })}
+                : versionFilter !== 'all'
+                  ? t('projects.noProjectsInVersion', { version: versionFilter })
+                  : t('projects.noProjectsInFolder')}
             </p>
           ) : (
             <div
