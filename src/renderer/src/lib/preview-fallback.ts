@@ -203,6 +203,10 @@ function createPreviewFallbackApi(): LauncherApi {
     hideEmptyFolders: async () => {
       throw new Error(DESKTOP_ONLY)
     },
+    listFavorites: async () => [],
+    setFavorite: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
     moveFolder: async () => {
       throw new Error(DESKTOP_ONLY)
     },

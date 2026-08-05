@@ -20,6 +20,8 @@ export interface LauncherConfig {
   knownFiles: string[]
   /** folders shown in the tree while they hold no .blend — created here, or just emptied */
   keptFolders: string[]
+  /** starred folders, offered as quick filters above the project grid */
+  favoriteFolders: string[]
   locatedInstalls: LocatedInstall[]
   /** override for where Blender versions get installed; unset — a data-root default is used */
   installsDir?: string
@@ -42,6 +44,7 @@ const emptyConfig = (): LauncherConfig => ({
   projectFiles: [],
   knownFiles: [],
   keptFolders: [],
+  favoriteFolders: [],
   locatedInstalls: [],
   addonLibrary: [],
   recentlyOpened: {}
@@ -74,6 +77,7 @@ export async function readConfig(): Promise<LauncherConfig> {
     projectFiles: Array.isArray(parsed.projectFiles) ? parsed.projectFiles : [],
     knownFiles: Array.isArray(parsed.knownFiles) ? parsed.knownFiles : [],
     keptFolders: Array.isArray(parsed.keptFolders) ? parsed.keptFolders : [],
+    favoriteFolders: Array.isArray(parsed.favoriteFolders) ? parsed.favoriteFolders : [],
     locatedInstalls: Array.isArray(parsed.locatedInstalls) ? parsed.locatedInstalls : [],
     installsDir: typeof parsed.installsDir === 'string' ? parsed.installsDir : undefined,
     downloadsDir: typeof parsed.downloadsDir === 'string' ? parsed.downloadsDir : undefined,

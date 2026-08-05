@@ -118,6 +118,9 @@ const api: LauncherApi = {
     listKeptFolders: (): Promise<string[]> => ipcRenderer.invoke('projects:list-kept-folders'),
     hideFolder: (path: string): Promise<void> => ipcRenderer.invoke('projects:hide-folder', path),
     hideEmptyFolders: (): Promise<void> => ipcRenderer.invoke('projects:hide-empty-folders'),
+    listFavorites: (): Promise<string[]> => ipcRenderer.invoke('projects:list-favorites'),
+    setFavorite: (path: string, favorite: boolean): Promise<void> =>
+      ipcRenderer.invoke('projects:set-favorite', path, favorite),
     moveFolder: (path: string, destDir?: string): Promise<string | null> =>
       ipcRenderer.invoke('projects:move-folder', path, destDir),
     deleteFolder: (path: string): Promise<void> =>

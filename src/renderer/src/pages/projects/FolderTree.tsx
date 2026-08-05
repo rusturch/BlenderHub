@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import { setCompactDragImage } from '../../lib/drag-image'
-import { ChevronDownIcon, EyeOffIcon } from './icons'
+import { ChevronDownIcon, EyeOffIcon, StarIcon } from './icons'
+import { pathKeyOf } from './tree'
 import type { TreeNode } from './tree'
 
 // Presentational folder tree: names, indents and chevrons only. Clicking a name
@@ -26,6 +28,10 @@ interface FolderTreeProps {
   showCounts: boolean
   /** counts and the selection filter both ignore subfolders */
   directOnly: boolean
+  /** normalized paths of starred folders */
+  favorites: Set<string>
+  /** shared width of the count column, sized to the largest count in the tree */
+  countWidth: string
   showGuides: boolean
   dnd: TreeDnd
   /** shown next to "All projects" while the tree holds folders with no projects */
@@ -48,6 +54,8 @@ function TreeRow({
   expanded,
   showCounts,
   directOnly,
+  favorites,
+  countWidth,
   showGuides,
   dnd,
   onSelect,
@@ -57,6 +65,8 @@ function TreeRow({
   const isSelected = selected === node.key
   const isExpanded = expanded.has(node.key)
   const isDropTarget = dnd.overKey === node.key
+  const isFavorite = favorites.has(pathKeyOf(node.fullPath))
+  const count = directOnly ? node.directCount : node.fileCount
   return (
     <>
       <button
@@ -128,13 +138,25 @@ function TreeRow({
             </span>
           )}
         </span>
+        {isFavorite && (
+          <StarIcon
+            filled
+            className={`h-3.5 w-3.5 shrink-0 ${
+              isSelected ? 'text-selection-text/80' : 'text-zinc-500'
+            }`}
+          />
+        )}
         {showCounts && (
+          // one column width for every row — an empty folder shows no zero but keeps
+          // its slot, so the stars line up; the width is just wide enough for the
+          // largest count in the tree, so nothing sits further from its number
           <span
-            className={`shrink-0 text-[11px] tabular-nums ${
+            style={{ width: countWidth }}
+            className={`shrink-0 text-right text-[11px] tabular-nums ${
               isSelected ? 'text-selection-text/70' : 'text-zinc-500'
             }`}
           >
-            {directOnly ? node.directCount : node.fileCount}
+            {count > 0 ? count : ''}
           </span>
         )}
       </button>
@@ -147,6 +169,8 @@ function TreeRow({
             expanded={expanded}
             showCounts={showCounts}
             directOnly={directOnly}
+            favorites={favorites}
+            countWidth={countWidth}
             showGuides={showGuides}
             dnd={dnd}
             onSelect={onSelect}
@@ -164,14 +188,28 @@ export default function FolderTree({
   expanded,
   showCounts,
   directOnly,
+  favorites,
   showGuides,
   dnd,
   onHideEmpty,
   onSelect,
   onToggle,
   onContextMenu
-}: FolderTreeProps) {
+}: Omit<FolderTreeProps, 'countWidth'>) {
   const { t } = useTranslation()
+  // digits of the largest count decide the column width: wide enough to keep every
+  // star on the same line, narrow enough that no star drifts away from its number
+  const countWidth = useMemo(() => {
+    let largest = 0
+    const walk = (list: TreeNode[]): void => {
+      for (const node of list) {
+        largest = Math.max(largest, directOnly ? node.directCount : node.fileCount)
+        walk(node.children)
+      }
+    }
+    walk(nodes)
+    return `${String(Math.max(largest, 1)).length}ch`
+  }, [nodes, directOnly])
   return (
     <div className="w-56 shrink-0 border-r border-white/10 pr-3">
       <div className="flex items-center gap-1">
@@ -202,6 +240,8 @@ export default function FolderTree({
           expanded={expanded}
           showCounts={showCounts}
           directOnly={directOnly}
+          favorites={favorites}
+          countWidth={countWidth}
           showGuides={showGuides}
           dnd={dnd}
           onSelect={onSelect}

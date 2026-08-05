@@ -51,6 +51,7 @@ export async function remapProjectPaths(oldRoot: string, newRoot: string): Promi
       projectFiles: [...new Set(config.projectFiles.map(remap))],
       knownFiles: [...new Set(config.knownFiles.map(remap))],
       keptFolders: [...new Set(config.keptFolders.map(remap))],
+      favoriteFolders: [...new Set(config.favoriteFolders.map(remap))],
       recentlyOpened
     }
   })
@@ -90,6 +91,28 @@ export async function clearKeptFolders(): Promise<void> {
   await updateConfig((config) => ({ ...config, keptFolders: [] }))
 }
 
+/** Starred folders: quick filters above the grid, marked with a star in the tree. */
+export async function getFavoriteFolders(): Promise<string[]> {
+  return (await readConfig()).favoriteFolders
+}
+
+export async function setFavoriteFolder(folder: string, favorite: boolean): Promise<void> {
+  const normalized = resolve(folder)
+  await updateConfig((config) => {
+    const without = config.favoriteFolders.filter((known) => resolve(known) !== normalized)
+    return { ...config, favoriteFolders: favorite ? [...without, normalized] : without }
+  })
+}
+
+export async function removeFavoriteFolders(folders: string[]): Promise<void> {
+  if (folders.length === 0) return
+  const keys = new Set(folders.map((folder) => resolve(folder)))
+  await updateConfig((config) => ({
+    ...config,
+    favoriteFolders: config.favoriteFolders.filter((known) => !keys.has(resolve(known)))
+  }))
+}
+
 /** A folder is gone (deleted): drop every stored path inside it, tracking included. */
 export async function forgetProjectPathsUnder(root: string): Promise<void> {
   const rootKey = resolve(root)
@@ -104,6 +127,7 @@ export async function forgetProjectPathsUnder(root: string): Promise<void> {
       projectFiles: config.projectFiles.filter((known) => !isPathUnder(known, rootKey)),
       knownFiles: config.knownFiles.filter((known) => !isPathUnder(known, rootKey)),
       keptFolders: config.keptFolders.filter((known) => !isPathUnder(known, rootKey)),
+      favoriteFolders: config.favoriteFolders.filter((known) => !isPathUnder(known, rootKey)),
       recentlyOpened
     }
   })

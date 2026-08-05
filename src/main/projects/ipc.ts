@@ -27,14 +27,17 @@ import {
   addProjectFile,
   addProjectFolder,
   clearKeptFolders,
+  getFavoriteFolders,
   getKeptFolders,
   getKnownFiles,
   getProjectFiles,
   getProjectFolders,
   recordProjectOpened,
   relocateProjectFolder,
+  removeFavoriteFolders,
   removeKeptFolders,
   removeProjectFolder,
+  setFavoriteFolder,
   setKnownFiles,
   untrackProjectPaths
 } from './store'
@@ -226,6 +229,24 @@ export function registerProjectsIpc(): void {
     // a folder deleted outside the launcher must not linger as a ghost row
     if (dead.length > 0) await removeKeptFolders(dead)
     return alive
+  })
+
+  ipcMain.handle('projects:list-favorites', async () => {
+    const favorites = await getFavoriteFolders()
+    const alive: string[] = []
+    const dead: string[] = []
+    for (const folder of favorites) {
+      if (existsSync(folder)) alive.push(folder)
+      else dead.push(folder)
+    }
+    // a folder deleted outside the launcher must not leave a chip behind
+    if (dead.length > 0) await removeFavoriteFolders(dead)
+    return alive
+  })
+
+  ipcMain.handle('projects:set-favorite', async (_event, rawPath: unknown, rawOn: unknown) => {
+    const path = await assertAllowedFolder(requireString(rawPath, 'folder path'))
+    await setFavoriteFolder(path, rawOn === true)
   })
 
   ipcMain.handle('projects:hide-folder', async (_event, rawPath: unknown) => {

@@ -130,6 +130,29 @@ export function CheckIcon({ className = 'h-4 w-4' }: { className?: string }) {
   )
 }
 
+// Wider inner radius than the usual star outline: at 12px the thin-spiked version
+// reads as a smudge, these points stay legible.
+export function StarIcon({
+  className = 'h-4 w-4',
+  filled = false
+}: {
+  className?: string
+  filled?: boolean
+}) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3.2 14.7 8.4 20.4 9.3 16.3 13.4 17.2 19 12 16.4 6.8 19 7.7 13.4 3.6 9.3 9.3 8.4Z" />
+    </svg>
+  )
+}
+
 export function EyeOffIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg

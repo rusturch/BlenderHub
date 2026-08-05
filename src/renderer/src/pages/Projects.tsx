@@ -35,6 +35,7 @@ let lastLoaded: {
   files: BlendFileInfo[]
   installed: InstalledBuild[]
   kept: string[]
+  favorites: string[]
 } | null = null
 
 // Tree selection and fold state survive tab switches the same way, but deliberately
@@ -70,6 +71,7 @@ export default function ProjectsPage({
   const [installed, setInstalled] = useState<InstalledBuild[]>(() => lastLoaded?.installed ?? [])
   // folders shown while they hold no projects — created here, or emptied by a move
   const [keptFolders, setKeptFolders] = useState<string[]>(() => lastLoaded?.kept ?? [])
+  const [favorites, setFavorites] = useState<string[]>(() => lastLoaded?.favorites ?? [])
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -168,15 +170,17 @@ export default function ProjectsPage({
     try {
       // folder availability is re-checked along with the files, so the
       // unavailable-folder banner reacts to a drive coming back or a rescan
-      const [freshFolders, fresh, kept] = await Promise.all([
+      const [freshFolders, fresh, kept, starred] = await Promise.all([
         projectsApi.listFolders(),
         projectsApi.listFiles(),
-        projectsApi.listKeptFolders()
+        projectsApi.listKeptFolders(),
+        projectsApi.listFavorites()
       ])
       if (seq === refreshSeqRef.current) {
         setFolders(freshFolders)
         setFiles(fresh)
         setKeptFolders(kept)
+        setFavorites(starred)
       }
     } catch (cause) {
       if (seq === refreshSeqRef.current) setError(cleanErrorMessage(cause))
@@ -260,8 +264,8 @@ export default function ProjectsPage({
   }, [buildsApi, refreshFiles])
 
   useEffect(() => {
-    if (files !== null) lastLoaded = { folders, files, installed, kept: keptFolders }
-  }, [folders, files, installed, keptFolders])
+    if (files !== null) lastLoaded = { folders, files, installed, kept: keptFolders, favorites }
+  }, [folders, files, installed, keptFolders, favorites])
 
   const addFolder = useCallback(async () => {
     try {
@@ -795,6 +799,43 @@ export default function ProjectsPage({
     [projectsApi, refreshFiles, alertDialog]
   )
 
+  const favoriteKeys = useMemo(() => new Set(favorites.map(pathKeyOf)), [favorites])
+
+  const toggleFavorite = useCallback(
+    async (node: TreeNode) => {
+      setFolderMenu(null)
+      const starred = favoriteKeys.has(pathKeyOf(node.fullPath))
+      try {
+        await projectsApi.setFavorite(node.fullPath, !starred)
+        setFavorites((prev) =>
+          starred
+            ? prev.filter((path) => pathKeyOf(path) !== pathKeyOf(node.fullPath))
+            : [...prev, node.fullPath]
+        )
+        // un-starring the folder the grid is filtered by removes its chip; with the
+        // panel hidden that would leave a filter with nothing pointing at it
+        if (starred && !treeVisible && treeSelected === node.key) setTreeSelected(null)
+      } catch (cause) {
+        await alertDialog(cleanErrorMessage(cause))
+      }
+    },
+    [favoriteKeys, projectsApi, treeVisible, treeSelected, alertDialog]
+  )
+
+  // a starred folder doubles as a quick filter chip above the grid; the chip acts on
+  // the same selection the tree uses, so both stay in step
+  const favoriteChips = useMemo(
+    () =>
+      favorites
+        .map((path) => ({
+          path,
+          label: fileNameOf(path),
+          key: tree.keyOfPath.get(pathKeyOf(path)) ?? null
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [favorites, tree]
+  )
+
   const hideEmptyFolders = useCallback(async () => {
     try {
       await projectsApi.hideEmptyFolders()
@@ -880,12 +921,18 @@ export default function ProjectsPage({
     })
   }, [])
 
-  // hiding the panel clears the filter — an invisible active filter is exactly
-  // the kind of forgotten state this page tries hard not to have
+  // hiding the panel clears the filter — an invisible active filter is exactly the kind
+  // of forgotten state this page tries hard not to have. A starred folder is the
+  // exception: its chip stays on screen, so the filter is still visible and honest.
   const toggleTreePanel = useCallback(() => {
-    if (treeVisible) setTreeSelected(null)
+    if (treeVisible) {
+      const shownAsChip =
+        treeSelected !== null &&
+        favorites.some((path) => tree.keyOfPath.get(pathKeyOf(path)) === treeSelected)
+      if (!shownAsChip) setTreeSelected(null)
+    }
     setTreeVisible(!treeVisible)
-  }, [treeVisible])
+  }, [treeVisible, treeSelected, favorites, tree])
 
   const visibleFiles = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -1017,6 +1064,7 @@ export default function ProjectsPage({
               expanded={treeExpanded ?? new Set()}
               showCounts={treeCounts}
               directOnly={treeDirectOnly}
+              favorites={favoriteKeys}
               showGuides={treeGuides}
               dnd={treeDnd}
               onHideEmpty={hasEmptyFolders ? hideEmptyFolders : undefined}
@@ -1129,8 +1177,10 @@ export default function ProjectsPage({
             <button
               title={t('projects.treeToggle')}
               onClick={toggleTreePanel}
-              className={`self-end rounded-lg border border-white/10 p-1.5 transition-colors hover:bg-white/10 ${
-                treeVisible ? 'bg-white/10 text-icon-selected' : 'text-icon hover:text-icon-hover'
+              // same surface as the filter controls next to it; the open state shows in
+              // the glyph alone — a plain on/off toggle, not an accent-worthy selection
+              className={`self-end rounded-lg border border-white/10 bg-surface-panel p-1.5 transition-colors hover:bg-white/10 ${
+                treeVisible ? 'text-foreground' : 'text-icon hover:text-icon-hover'
               }`}
             >
               <PanelLeftIcon className="h-4 w-4" />
@@ -1289,6 +1339,36 @@ export default function ProjectsPage({
               </Dropdown>
             </div>
           </div>
+
+          {favoriteChips.length > 0 && (
+            <div className="-mt-1 flex flex-wrap items-center gap-1">
+              <button
+                onClick={() => selectTreeNode(null)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  effectiveTreeSelected === null
+                    ? 'bg-selection text-selection-text'
+                    : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
+                }`}
+              >
+                {t('projects.all')}
+              </button>
+              {favoriteChips.map((chip) => (
+                <button
+                  key={chip.path}
+                  onClick={() => chip.key && selectTreeNode(chip.key)}
+                  disabled={!chip.key}
+                  title={chip.key ? chip.path : t('projects.favoriteEmpty', { path: chip.path })}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                    chip.key && effectiveTreeSelected === chip.key
+                      ? 'bg-selection text-selection-text'
+                      : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
@@ -1598,6 +1678,16 @@ export default function ProjectsPage({
             className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
           >
             {t('projects.folderCreate')}
+          </button>
+          <button
+            onClick={() => toggleFavorite(folderMenu.node)}
+            className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
+          >
+            {t(
+              favoriteKeys.has(pathKeyOf(folderMenu.node.fullPath))
+                ? 'projects.favoriteRemove'
+                : 'projects.favoriteAdd'
+            )}
           </button>
           {folderMenu.node.fileCount === 0 && (
             <button

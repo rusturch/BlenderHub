@@ -143,6 +143,9 @@ export interface ProjectsApi {
   hideFolder: (path: string) => Promise<void>
   /** stop showing every empty folder at once */
   hideEmptyFolders: () => Promise<void>
+  /** starred folders, offered as quick filters above the grid (existing ones only) */
+  listFavorites: () => Promise<string[]>
+  setFavorite: (path: string, favorite: boolean) => Promise<void>
   /** move a folder; destDir skips the picker (drag and drop), null when cancelled */
   moveFolder: (path: string, destDir?: string) => Promise<string | null>
   /** send a folder and everything in it to the trash */
