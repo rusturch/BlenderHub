@@ -63,6 +63,22 @@ interface RunOptions {
   failMessage?: string
 }
 
+const CRASH_HINT =
+  'Blender crashed while running. This usually means one of the add-ons installed in that ' +
+  'version is not compatible with it (native libraries built for a different Python often ' +
+  'crash on exit). Launch that version normally to find the culprit, or remove it there.'
+
+/**
+ * Did the process die rather than exit with a status? Windows reports structured exceptions as
+ * huge exit codes (0xC0000005 = access violation), POSIX delivers a signal; Blender also prints
+ * its own crash banner. Any of the three means a crash, not a script-level failure.
+ */
+function isHardCrash(error: { code?: number | string; signal?: string | null }, stderr: string): boolean {
+  if (typeof error.signal === 'string' && error.signal) return true
+  if (typeof error.code === 'number' && error.code >= 0xc0000000) return true
+  return /EXCEPTION_ACCESS_VIOLATION|Segmentation fault/i.test(stderr)
+}
+
 export function runBlenderScript(
   executable: string,
   args: string[],
@@ -81,10 +97,28 @@ export function runBlenderScript(
       (error, stdout, stderr) => {
         if (error) {
           const framed = /<<<BHUB_ERROR>>>([\s\S]*?)<<<BHUB_END>>>/.exec(stderr)?.[1]?.trim()
+          // A complete framed payload means our script ran to its end and printed its verified
+          // result — Blender only died afterwards, on the way out. That happens for real: an
+          // add-on with native wheels built for another Python can crash the interpreter during
+          // teardown (seen on 5.3 alpha: EXCEPTION_ACCESS_VIOLATION after a clean run, while
+          // --factory-startup exits 0). Trusting the exit code there would report every operation
+          // as failed although all of them succeeded, so the printed result wins — same reasoning
+          // as the scripts already verifying registry state instead of operator return codes.
+          if (!framed && stdout.includes(MARK_START) && stdout.includes(MARK_END)) {
+            resolve(stdout)
+            return
+          }
           const stderrLine = stderr
             .split('\n')
             .map((line) => line.trim())
             .find((line) => line.length > 0)
+          // Distinguish "Blender ran and reported a problem" from "the process died on us".
+          // A hard crash is not our operation failing — it is this Blender being unable to run
+          // the add-ons it already has, so say that instead of a generic apply failure.
+          if (!framed && isHardCrash(error, stderr)) {
+            reject(new Error(`${options.failMessage ?? 'Blender failed'} — ${CRASH_HINT}`))
+            return
+          }
           reject(new Error(framed || options.failMessage || stderrLine || error.message))
           return
         }

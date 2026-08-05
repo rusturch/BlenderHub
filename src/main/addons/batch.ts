@@ -5,7 +5,11 @@ import { downloadRelease, findCompatibleRelease } from './extensions-api'
 import { findLibraryEntry, installBlocker, verifiedLibraryFile } from './library'
 import { representativesByMinor } from './scan'
 import { downloadSuperhiveArchive } from './superhive'
+import { guardPrefs } from './prefs-guard'
 import { BLENDER_POOL, ensureScript, extractMarked, mapPool, runBlenderScript, writeDataFile } from './runner'
+
+/** appended to a failure line when the crash damaged preferences and the guard put them back */
+const PREFS_RESTORED_NOTE = '(its preferences were damaged by the crash and have been restored)'
 import { minorOf } from '../../shared/blender-archive'
 import { compareVersionsDesc } from '../../shared/blender-builds'
 import { groupAddons } from '../../shared/addon-identity'
@@ -455,6 +459,9 @@ async function runBatches(
 
   await mapPool(work, BLENDER_POOL, async (batch, index) => {
     onApply?.({ minor: batch.minor, index, total, phase: 'applying' })
+    // restore point for this version's preferences: a crash inside save_userpref would
+    // otherwise leave them truncated (see prefs-guard.ts)
+    const guard = await guardPrefs(batch.build.executable, batch.minor)
     try {
       const payloadPath = await writeDataFile(
         `.addon-batch-${batch.minor}.json`,
@@ -487,8 +494,10 @@ async function runBatches(
       foldBatchResults(cache, batch, raw, results)
       onApply?.({ minor: batch.minor, index, total, phase: 'done' })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const failure = error instanceof Error ? error.message : String(error)
       // the run failed as a whole — nothing was reliably written for this version
+      const restored = (await guard.finish()) === 'restored'
+      const message = restored ? `${failure} ${PREFS_RESTORED_NOTE}` : failure
       for (const op of batch.uninstalls) {
         results.push({ op: 'uninstall', minor: batch.minor, id: op.module, status: 'error', detail: message })
       }
@@ -502,7 +511,9 @@ async function runBatches(
         results.push({ op: 'disable', minor: batch.minor, id: module, status: 'error', detail: message })
       }
       onApply?.({ minor: batch.minor, index, total, phase: 'error', error: message })
+      return
     }
+    await guard.finish()
   })
 
   return { results, data: cache, libraryChanged: libraryChangedRef.value }

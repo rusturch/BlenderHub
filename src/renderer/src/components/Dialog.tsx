@@ -130,12 +130,20 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             <h2 className="text-base font-semibold text-zinc-100">
               {pending.kind === 'confirm' ? pending.options.title : (pending.options.title ?? t('common.error'))}
             </h2>
+            {/* whitespace-pre-line: callers build multi-line bodies (bulleted failure lists,
+                "\n\n" notes appended to a confirm). Without it every newline collapses into a
+                space and the whole thing reads as one run-on paragraph. max-h + scroll keeps a
+                long list (one line per add-on × version) from growing past the window. */}
             {variant === 'none' ? (
-              <p className="mt-3 text-sm leading-relaxed text-zinc-300">{pending.options.message}</p>
+              <p className="mt-3 max-h-[50vh] overflow-y-auto whitespace-pre-line text-sm leading-relaxed text-zinc-300">
+                {pending.options.message}
+              </p>
             ) : (
               <div className={`mt-3 flex gap-3 rounded-lg border p-3 ${VARIANT_BOX[variant]}`}>
                 <WarningIcon className="mt-0.5 h-5 w-5 shrink-0" />
-                <p className="text-sm leading-relaxed text-zinc-300">{pending.options.message}</p>
+                <p className="max-h-[50vh] overflow-y-auto whitespace-pre-line text-sm leading-relaxed text-zinc-300">
+                  {pending.options.message}
+                </p>
               </div>
             )}
             <div className="mt-4 flex justify-end gap-2">

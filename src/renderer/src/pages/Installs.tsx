@@ -614,9 +614,13 @@ export default function InstallsPage({
     // "Other versions" drawer with the rest of the series, not the top list —
     // only a concrete x.y.z search surfaces them as top rows
     for (const build of remote ?? []) {
-      if (!matchesTabFor(build)) continue
       const copies = copiesForRemote(build)
       if (copies.length === 0) continue
+      // A copy on disk is never hidden by the tab filter on All. Keeping PR builds out of
+      // All is about the catalog's ~120 patch entries drowning the list — but a build the
+      // user actually installed must stay findable there, or it cannot be uninstalled and
+      // its Add-ons/Sync column looks like it comes from nowhere.
+      if (!matchesTabFor(build) && filter !== 'all') continue
       const seriesRep = seriesRepFor(minorOf(build.version), filter)
       const drawerBound =
         STABLE_CYCLES.has(build.releaseCycle) &&
