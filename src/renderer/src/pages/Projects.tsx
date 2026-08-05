@@ -11,7 +11,7 @@ import { uiGet, uiSet } from '../lib/ui-store'
 import type { BlendFileInfo, InstalledBuild, ProjectFolder } from '../../../shared/types'
 import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon } from './projects/icons'
 import { fileNameOf, readFlag } from './projects/projects-utils'
-import { buildProjectTree, isUnderKey } from './projects/tree'
+import { buildProjectTree, defaultExpandedKeys, isUnderKey, resolveSelection } from './projects/tree'
 import FolderTree from './projects/FolderTree'
 import { FilterSelect } from '../components/FilterSelect'
 import type { ProjectsPageProps } from './projects/types'
@@ -28,12 +28,18 @@ let lastLoaded: {
 // Tree selection and fold state survive tab switches the same way, but deliberately
 // not a launcher restart — no stale paths ever land in ui-state.json.
 let treeSelectedSnapshot: string | null = null
+// the folder path behind that selection — the key alone does not survive a switch
+// between compact and full hierarchy, the path does
+let treeSelectedPathSnapshot: string | null = null
 let treeExpandedSnapshot: Set<string> | null = null
+// rows already unfolded once on their own; re-offering them would undo a fold
+let treeOfferedSnapshot: Set<string> = new Set()
 
 // Drop flows land on a freshly remounted page; a restored tree filter could hide
 // the just-added file, so App clears the snapshot before remounting.
 export function clearProjectsTreeSelection(): void {
   treeSelectedSnapshot = null
+  treeSelectedPathSnapshot = null
 }
 
 export default function ProjectsPage({
@@ -88,6 +94,9 @@ export default function ProjectsPage({
   const [treeVisible, setTreeVisible] = useState(() => readFlag('projects.treeVisible', false))
   const [treeCounts, setTreeCounts] = useState(() => readFlag('projects.treeCounts', false))
   const [treeGuides, setTreeGuides] = useState(() => readFlag('projects.treeGuides', true))
+  const [treeFullHierarchy, setTreeFullHierarchy] = useState(() =>
+    readFlag('projects.treeFullHierarchy', false)
+  )
   const [treeSelected, setTreeSelected] = useState<string | null>(treeSelectedSnapshot)
   const [treeExpanded, setTreeExpanded] = useState<Set<string> | null>(treeExpandedSnapshot)
 
@@ -100,11 +109,23 @@ export default function ProjectsPage({
     uiSet('projects.treeVisible', treeVisible ? '1' : '0')
     uiSet('projects.treeCounts', treeCounts ? '1' : '0')
     uiSet('projects.treeGuides', treeGuides ? '1' : '0')
-  }, [showDate, showSize, showPath, showVersion, cardSize, treeVisible, treeCounts, treeGuides])
+    uiSet('projects.treeFullHierarchy', treeFullHierarchy ? '1' : '0')
+  }, [
+    showDate,
+    showSize,
+    showPath,
+    showVersion,
+    cardSize,
+    treeVisible,
+    treeCounts,
+    treeGuides,
+    treeFullHierarchy
+  ])
 
   useEffect(() => {
     treeSelectedSnapshot = treeSelected
     treeExpandedSnapshot = treeExpanded
+    if (treeSelected === null) treeSelectedPathSnapshot = null
   }, [treeSelected, treeExpanded])
 
   // Guarded by a sequence number: optimistic patches (rename/duplicate/delete) kick a
@@ -499,18 +520,29 @@ export default function ProjectsPage({
 
   // built from the full live list, not the filtered one — the panel must not
   // reshuffle while a search is being typed
-  const tree = useMemo(() => buildProjectTree(files ?? [], folders), [files, folders])
+  const tree = useMemo(
+    () => buildProjectTree(files ?? [], folders, treeFullHierarchy),
+    [files, folders, treeFullHierarchy]
+  )
 
   // Validated synchronously on render — a stale selection must not filter the grid
-  // for even a single frame. When compression absorbed the selected folder into a
-  // deeper chain node (its last direct file vanished), the selection follows that
-  // heir instead of dropping the filter; a node that is really gone falls back to
-  // "All projects" — never an inexplicably empty grid.
-  const effectiveTreeSelected = useMemo(() => {
-    if (!treeSelected || tree.nodeKeys.has(treeSelected)) return treeSelected
-    const heirs = [...tree.nodeKeys].filter((key) => isUnderKey(key, treeSelected))
-    return heirs.sort((a, b) => a.length - b.length)[0] ?? null
-  }, [tree, treeSelected])
+  // for even a single frame. The folder the selection stands on is remembered, so it
+  // survives both a hierarchy-mode switch and compression absorbing it into a deeper
+  // node; a folder that is really gone falls back to "All projects".
+  const treeSelectedPathRef = useRef<string | null>(treeSelectedPathSnapshot)
+  const effectiveTreeSelected = useMemo(
+    () => resolveSelection(tree, treeSelected, treeSelectedPathRef.current),
+    [tree, treeSelected]
+  )
+
+  const selectTreeNode = useCallback(
+    (key: string | null) => {
+      treeSelectedPathRef.current = key ? (tree.pathOfKey.get(key) ?? null) : null
+      treeSelectedPathSnapshot = treeSelectedPathRef.current
+      setTreeSelected(key)
+    },
+    [tree]
+  )
 
   // reconcile the stored value so the module snapshot and future renders agree
   useEffect(() => {
@@ -519,12 +551,16 @@ export default function ProjectsPage({
     }
   }, [files, effectiveTreeSelected, treeSelected])
 
-  // first tree after a fresh start: roots expanded, deeper levels folded
+  // unfold roots (and the ladders under them) the first time they show up — including
+  // after a hierarchy-mode switch, which gives every row a brand new key
+  const offeredExpandRef = useRef(treeOfferedSnapshot)
   useEffect(() => {
-    if (treeExpanded === null && tree.nodes.length > 0) {
-      setTreeExpanded(new Set(tree.nodes.map((node) => node.key)))
-    }
-  }, [tree, treeExpanded])
+    const fresh = defaultExpandedKeys(tree.nodes).filter((key) => !offeredExpandRef.current.has(key))
+    if (fresh.length === 0) return
+    for (const key of fresh) offeredExpandRef.current.add(key)
+    treeOfferedSnapshot = offeredExpandRef.current
+    setTreeExpanded((prev) => new Set([...(prev ?? []), ...fresh]))
+  }, [tree])
 
   const toggleTreeNode = useCallback((key: string) => {
     setTreeExpanded((prev) => {
@@ -662,7 +698,7 @@ export default function ProjectsPage({
               expanded={treeExpanded ?? new Set()}
               showCounts={treeCounts}
               showGuides={treeGuides}
-              onSelect={setTreeSelected}
+              onSelect={selectTreeNode}
               onToggle={toggleTreeNode}
             />
           )}
@@ -890,6 +926,15 @@ export default function ProjectsPage({
                     className="accent-blender"
                   />
                   {t('projects.treeGuides')}
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
+                  <input
+                    type="checkbox"
+                    checked={treeFullHierarchy}
+                    onChange={(event) => setTreeFullHierarchy(event.target.checked)}
+                    className="accent-blender"
+                  />
+                  {t('projects.treeFullHierarchy')}
                 </label>
                 <div className="my-1 border-t border-white/5" />
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">

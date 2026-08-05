@@ -40,6 +40,7 @@ export function FilterSelect<T extends string>({
   onChange,
   width = 'w-28'
 }: {
+  /** what this filter is — shown on hover rather than as a caption above the control */
   label: string
   value: T
   options: { value: T; label: string }[]
@@ -49,39 +50,37 @@ export function FilterSelect<T extends string>({
   const [open, setOpen] = useState(false)
   const current = options.find((option) => option.value === value)
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-zinc-500">{label}</span>
-      <Dropdown
-        open={open}
-        onClose={() => setOpen(false)}
-        align="left"
-        menuClassName={`${width} overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl`}
-        trigger={
-          <button
-            type="button"
-            onClick={() => setOpen((prev) => !prev)}
-            className={`flex ${width} items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-surface-panel px-2.5 py-1 text-sm text-zinc-200 transition-colors hover:bg-white/10`}
-          >
-            <span className="truncate">{current?.label ?? value}</span>
-            <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-          </button>
-        }
-      >
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => {
-              onChange(option.value)
-              setOpen(false)
-            }}
-            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
-          >
-            <span className="truncate">{option.label}</span>
-            {option.value === value && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-blender" />}
-          </button>
-        ))}
-      </Dropdown>
-    </div>
+    <Dropdown
+      open={open}
+      onClose={() => setOpen(false)}
+      align="left"
+      menuClassName={`${width} overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl`}
+      trigger={
+        <button
+          type="button"
+          title={label}
+          onClick={() => setOpen((prev) => !prev)}
+          className={`flex ${width} items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-surface-panel px-2.5 py-1 text-sm text-zinc-200 transition-colors hover:bg-white/10`}
+        >
+          <span className="truncate">{current?.label ?? value}</span>
+          <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+        </button>
+      }
+    >
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => {
+            onChange(option.value)
+            setOpen(false)
+          }}
+          className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
+        >
+          <span className="truncate">{option.label}</span>
+          {option.value === value && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-blender" />}
+        </button>
+      ))}
+    </Dropdown>
   )
 }

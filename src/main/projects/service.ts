@@ -176,7 +176,9 @@ export async function scanProjectFiles(
       const fileStat = await stat(file)
       const sidecar = await findPreviewSidecar(file)
       const sidecarStat = sidecar ? await stat(sidecar).catch(() => null) : null
-      const cacheKey = `${fileStat.mtimeMs}:${fileStat.size}|${sidecar ?? ''}:${sidecarStat?.mtimeMs ?? ''}|${tracked}`
+      // the attributed root is part of the cached info: leaving it out of the key
+      // kept files pinned to a folder the user had already stopped tracking
+      const cacheKey = `${fileStat.mtimeMs}:${fileStat.size}|${sidecar ?? ''}:${sidecarStat?.mtimeMs ?? ''}|${tracked}|${root}`
       const cached = cache.get(file)
       if (cached && cached.key === cacheKey) {
         result.push(cached.info)

@@ -197,8 +197,11 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
 
   // the icon is the button's only svg child — coloring it from here keeps the
   // three states in one place instead of on every icon element
+  // px-3.5 leaves exactly the icon's 20px between the paddings of a collapsed 48px button,
+  // so the icon lands dead centre without justify-center — which would have centred it in
+  // the button's *current* width and dragged it sideways for the whole width transition
   const navButtonClass = (active: boolean): string =>
-    `flex items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+    `flex items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
       active
         ? 'bg-selection text-selection-text [&>svg]:text-icon-selected'
         : 'text-zinc-400 hover:bg-white/10 hover:text-zinc-100 [&>svg]:text-icon hover:[&>svg]:text-icon-hover'
@@ -244,7 +247,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
           <button
             title={collapsed ? t('nav.updateAvailable') : undefined}
             onClick={onUpdateClick}
-            className="flex items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg bg-blender/10 px-3 py-2 text-sm font-medium text-blender transition-colors hover:bg-blender/15"
+            className="flex items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg bg-blender/10 px-3.5 py-2 text-sm font-medium text-blender transition-colors hover:bg-blender/15"
           >
             <DownloadIcon className="h-5 w-5 shrink-0" />
             {!collapsed && t('nav.updateAvailable')}
@@ -275,7 +278,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
               <button
                 title={t('nav.comingSoon')}
                 disabled
-                className="flex cursor-not-allowed items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 opacity-60"
+                className="flex cursor-not-allowed items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium text-zinc-600 opacity-60"
               >
                 <ChatIcon className="h-5 w-5 shrink-0" />
                 {!collapsed && t('nav.joinDiscord')}
@@ -294,7 +297,7 @@ export default function Sidebar({ current, onNavigate, onUpdateClick, collapsed 
               <button
                 title={t('nav.comingSoon')}
                 disabled
-                className="flex cursor-not-allowed items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 opacity-60"
+                className="flex cursor-not-allowed items-center gap-3 overflow-hidden whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium text-zinc-600 opacity-60"
               >
                 <HeartIcon className="h-5 w-5 shrink-0" />
                 {!collapsed && t('nav.supportUs')}

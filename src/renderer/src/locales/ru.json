@@ -349,6 +349,7 @@
   "projects.treeAll": "Все проекты",
   "projects.treeFileCounts": "Счётчики файлов",
   "projects.treeGuides": "Полосы иерархии",
+  "projects.treeFullHierarchy": "Полная иерархия",
   "projects.showOnCards": "Показывать на карточках",
   "projects.fileSize": "Размер файла",
   "projects.path": "Путь",

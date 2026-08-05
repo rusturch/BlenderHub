@@ -355,6 +355,7 @@
   "projects.treeAll": "All projects",
   "projects.treeFileCounts": "File counts",
   "projects.treeGuides": "Hierarchy lines",
+  "projects.treeFullHierarchy": "Full hierarchy",
   "projects.showOnCards": "Show on cards",
   "projects.fileSize": "File size",
   "projects.path": "Path",
