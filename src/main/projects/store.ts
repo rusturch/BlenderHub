@@ -1,5 +1,6 @@
 import { isAbsolute, join, relative, resolve } from 'path'
 import { readConfig, updateConfig } from '../config'
+import type { FileIdentity } from '../config'
 
 export async function getProjectFolders(): Promise<string[]> {
   return (await readConfig()).projectFolders
@@ -164,8 +165,42 @@ export async function getKnownFiles(): Promise<string[]> {
   return (await readConfig()).knownFiles
 }
 
-export async function setKnownFiles(files: string[]): Promise<void> {
-  await updateConfig((config) => ({ ...config, knownFiles: files }))
+export async function getFileIdentities(): Promise<Record<string, FileIdentity>> {
+  return (await readConfig()).fileIdentities
+}
+
+function sameIdentities(
+  a: Record<string, FileIdentity>,
+  b: Record<string, FileIdentity>
+): boolean {
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  return keys.every((key) => {
+    const left = a[key]
+    const right = b[key]
+    return (
+      right !== undefined &&
+      left.size === right.size &&
+      left.mtimeMs === right.mtimeMs &&
+      left.ino === right.ino &&
+      left.dev === right.dev
+    )
+  })
+}
+
+/** What the next scan needs to remember: the file list and how those files looked. */
+export async function setScanMemory(
+  files: string[],
+  identities: Record<string, FileIdentity>
+): Promise<void> {
+  await updateConfig((config) => {
+    const sameKnown =
+      config.knownFiles.length === files.length &&
+      config.knownFiles.every((path, index) => path === files[index])
+    // an unchanged scan must not rewrite the config file — that is every idle refresh
+    if (sameKnown && sameIdentities(config.fileIdentities, identities)) return config
+    return { ...config, knownFiles: files, fileIdentities: identities }
+  })
 }
 
 // After moving a file: carry its list membership and recents over to the new path.

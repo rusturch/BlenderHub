@@ -7,7 +7,7 @@ import { getDataRoot } from '../paths'
 import { findInstalled } from '../blender/installs'
 import { requireString } from '../ipc-util'
 import { refreshTrayMenu } from '../tray'
-import { listUnavailableFolders, scanProjectFiles } from './service'
+import { listProjectFiles, listUnavailableFolders, scanProjectFiles } from './service'
 import {
   clearPreviewSidecar,
   deleteFolderToTrash,
@@ -38,7 +38,6 @@ import {
   removeKeptFolders,
   removeProjectFolder,
   setFavoriteFolder,
-  setKnownFiles,
   untrackProjectPaths
 } from './store'
 import type { ProjectFolder } from '../../shared/types'
@@ -319,14 +318,10 @@ export function registerProjectsIpc(): void {
   })
 
   ipcMain.handle('projects:list-files', async () => {
-    const [folders, files, known] = await Promise.all([
-      getProjectFolders(),
-      getProjectFiles(),
-      getKnownFiles()
-    ])
-    const scan = await scanProjectFiles(folders, files, known)
-    await setKnownFiles(scan.known)
-    return scan.files
+    const { files, moved } = await listProjectFiles()
+    // recent-project paths followed the files that moved
+    if (moved.length > 0) refreshTrayMenu()
+    return files
   })
 
   ipcMain.handle('projects:list-tracked-files', async () => getProjectFiles())

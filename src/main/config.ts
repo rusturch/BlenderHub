@@ -13,11 +13,23 @@ export interface LocatedInstall {
   addedAt: string
 }
 
+/** Enough of a file's stat to recognise it again after it moves elsewhere on disk. */
+export interface FileIdentity {
+  size: number
+  mtimeMs: number
+  /** filesystem file index and volume; a move inside one volume keeps both (0 if unknown) */
+  ino: number
+  dev: number
+}
+
 export interface LauncherConfig {
   projectFolders: string[]
   projectFiles: string[]
   /** folder-scanned .blend files seen in a previous scan — used to detect vanished files */
   knownFiles: string[]
+  /** resolved path → what that file looked like, so a file moved outside the launcher
+   *  is recognised at its new place instead of counting as missing plus a newcomer */
+  fileIdentities: Record<string, FileIdentity>
   /** folders shown in the tree while they hold no .blend — created here, or just emptied */
   keptFolders: string[]
   /** starred folders, offered as quick filters above the project grid */
@@ -39,10 +51,28 @@ export interface LauncherConfig {
 
 const configPath = (): string => join(getDataRoot(), 'config.json')
 
+function sanitizeIdentities(raw: unknown): Record<string, FileIdentity> {
+  if (!raw || typeof raw !== 'object') return {}
+  const result: Record<string, FileIdentity> = {}
+  for (const [path, value] of Object.entries(raw as Record<string, unknown>)) {
+    const entry = value as Partial<FileIdentity> | null
+    if (!entry || typeof entry !== 'object') continue
+    if (typeof entry.size !== 'number' || typeof entry.mtimeMs !== 'number') continue
+    result[path] = {
+      size: entry.size,
+      mtimeMs: entry.mtimeMs,
+      ino: typeof entry.ino === 'number' ? entry.ino : 0,
+      dev: typeof entry.dev === 'number' ? entry.dev : 0
+    }
+  }
+  return result
+}
+
 const emptyConfig = (): LauncherConfig => ({
   projectFolders: [],
   projectFiles: [],
   knownFiles: [],
+  fileIdentities: {},
   keptFolders: [],
   favoriteFolders: [],
   locatedInstalls: [],
@@ -76,6 +106,7 @@ export async function readConfig(): Promise<LauncherConfig> {
     projectFolders: Array.isArray(parsed.projectFolders) ? parsed.projectFolders : [],
     projectFiles: Array.isArray(parsed.projectFiles) ? parsed.projectFiles : [],
     knownFiles: Array.isArray(parsed.knownFiles) ? parsed.knownFiles : [],
+    fileIdentities: sanitizeIdentities(parsed.fileIdentities),
     keptFolders: Array.isArray(parsed.keptFolders) ? parsed.keptFolders : [],
     favoriteFolders: Array.isArray(parsed.favoriteFolders) ? parsed.favoriteFolders : [],
     locatedInstalls: Array.isArray(parsed.locatedInstalls) ? parsed.locatedInstalls : [],
@@ -98,7 +129,11 @@ export function updateConfig(
   patch: (config: LauncherConfig) => LauncherConfig
 ): Promise<LauncherConfig> {
   const run = writeQueue.then(async () => {
-    const next = patch(await readConfig())
+    const current = await readConfig()
+    const next = patch(current)
+    // a patch that changed nothing returns the config it was handed; every scan does
+    // that, and rewriting the file each time is churn for nothing
+    if (next === current) return next
     await mkdir(getDataRoot(), { recursive: true })
     const target = configPath()
     await writeFile(`${target}.tmp`, JSON.stringify(next, null, 2))

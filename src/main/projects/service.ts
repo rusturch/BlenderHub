@@ -4,7 +4,19 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import { readBlendInfo } from '../blender/blend-parser'
 import { findPreviewSidecar } from './manage'
 import { isSkippedScanDir } from '../scan-skip'
+import { identityOf, matchMovedFiles } from './identity'
+import {
+  getFileIdentities,
+  getKnownFiles,
+  getProjectFiles,
+  getProjectFolders,
+  isPathUnder,
+  migrateProjectPath,
+  setScanMemory
+} from './store'
 import type { BlendThumbnail } from '../blender/blend-parser'
+import type { FileIdentity } from '../config'
+import type { MovedFile } from './identity'
 import type { BlendFileInfo } from '../../shared/types'
 
 const MAX_FILES = 400
@@ -130,11 +142,41 @@ export async function listUnavailableFolders(folders: string[]): Promise<string[
   return result
 }
 
+/**
+ * The project list as the page sees it. A file that moved on disk outside the launcher
+ * is the same project at a new address, not a loss plus a newcomer: its history moves
+ * with it before the scan memory is rewritten.
+ */
+export async function listProjectFiles(): Promise<{ files: BlendFileInfo[]; moved: MovedFile[] }> {
+  const [folders, individualFiles, knownFiles, identities] = await Promise.all([
+    getProjectFolders(),
+    getProjectFiles(),
+    getKnownFiles(),
+    getFileIdentities()
+  ])
+  const scan = await scanProjectFiles(folders, individualFiles, knownFiles, identities)
+  for (const move of scan.moved) {
+    // same rule as moving a project from inside the launcher: only a file that ends up
+    // outside every tracked folder needs an individual entry to stay listed
+    const insideTracked = folders.some((root) => isPathUnder(move.to, root))
+    await migrateProjectPath(move.from, move.to, !insideTracked)
+  }
+  await setScanMemory(scan.known, scan.identities)
+  return { files: scan.files, moved: scan.moved }
+}
+
 export async function scanProjectFiles(
   folders: string[],
   individualFiles: string[] = [],
-  knownFiles: string[] = []
-): Promise<{ files: BlendFileInfo[]; known: string[] }> {
+  knownFiles: string[] = [],
+  identities: Record<string, FileIdentity> = {}
+): Promise<{
+  files: BlendFileInfo[]
+  known: string[]
+  identities: Record<string, FileIdentity>
+  /** files recognised at a new place on disk — the caller carries their state over */
+  moved: MovedFile[]
+}> {
   const individualSet = new Set(individualFiles.map((path) => resolve(path)))
   const known = new Set(knownFiles.map((path) => resolve(path)))
   const folderRoots = folders.map((folder) => resolve(folder))
@@ -169,11 +211,18 @@ export async function scanProjectFiles(
   }
 
   const result: BlendFileInfo[] = []
+  // how every file found right now looks to the filesystem — the raw material for
+  // recognising a file that shows up somewhere else in a later scan
+  const seenIdentities = new Map<string, FileIdentity>()
+  // vanished files are held back rather than reported straight away: one of the files
+  // found in this same scan may turn out to be one of them, moved elsewhere on disk
+  const vanished: { path: string; folder: string; tracked: boolean }[] = []
   for (const [file, root] of found) {
     // listed because of its individual entry: not among the folder-scanned files
     const tracked = individualSet.has(resolve(file)) && !currentFolderPaths.has(resolve(file))
     try {
       const fileStat = await stat(file)
+      seenIdentities.set(resolve(file), identityOf(fileStat))
       const sidecar = await findPreviewSidecar(file)
       const sidecarStat = sidecar ? await stat(sidecar).catch(() => null) : null
       // the attributed root is part of the cached info: leaving it out of the key
@@ -203,18 +252,7 @@ export async function scanProjectFiles(
     } catch {
       // an individually-tracked file that vanished — surface it as missing so it can be relocated
       if (individualSet.has(resolve(file)) && !underUnavailable(resolve(file))) {
-        result.push({
-          path: file,
-          name: basename(file),
-          folder: root,
-          size: 0,
-          mtimeMs: 0,
-          blenderVersion: null,
-          thumbnail: null,
-          hasCustomPreview: false,
-          missing: true,
-          tracked: true
-        })
+        vanished.push({ path: file, folder: root, tracked: true })
       }
       // folder-scanned files that fail to read are just skipped
     }
@@ -224,17 +262,35 @@ export async function scanProjectFiles(
   for (const kp of known) {
     if (currentFolderPaths.has(kp) || individualSet.has(kp)) continue
     if (!insideFolders(kp) || underUnavailable(kp)) continue
+    vanished.push({ path: kp, folder: dirname(kp), tracked: false })
+  }
+
+  // a file this scan met for the first time is a possible new home for a vanished one
+  const appeared: { path: string; identity: FileIdentity }[] = []
+  for (const [path, identity] of seenIdentities) {
+    if (!known.has(path) && !individualSet.has(path)) appeared.push({ path, identity })
+  }
+  const moved = matchMovedFiles(
+    vanished
+      .map((entry) => ({ path: resolve(entry.path), identity: identities[resolve(entry.path)] }))
+      .filter((entry): entry is { path: string; identity: FileIdentity } => entry.identity !== undefined),
+    appeared
+  )
+  const movedFrom = new Set(moved.map((move) => move.from))
+
+  for (const entry of vanished) {
+    if (movedFrom.has(resolve(entry.path))) continue
     result.push({
-      path: kp,
-      name: basename(kp),
-      folder: dirname(kp),
+      path: entry.path,
+      name: basename(entry.path),
+      folder: entry.folder,
       size: 0,
       mtimeMs: 0,
       blenderVersion: null,
       thumbnail: null,
       hasCustomPreview: false,
       missing: true,
-      tracked: false
+      tracked: entry.tracked
     })
   }
 
@@ -242,7 +298,30 @@ export async function scanProjectFiles(
   const newKnown = new Set<string>()
   for (const p of currentFolderPaths) if (insideFolders(p)) newKnown.add(p)
   for (const kp of known)
-    if (!currentFolderPaths.has(kp) && !individualSet.has(kp) && insideFolders(kp)) newKnown.add(kp)
+    if (
+      !currentFolderPaths.has(kp) &&
+      !individualSet.has(kp) &&
+      insideFolders(kp) &&
+      !movedFrom.has(kp)
+    )
+      newKnown.add(kp)
 
-  return { files: result.sort((a, b) => b.mtimeMs - a.mtimeMs), known: [...newKnown] }
+  // identities worth carrying to the next scan: what is on disk now, plus the last known
+  // look of files still remembered as missing — those are the ones we may yet recognise
+  const nextIdentities: Record<string, FileIdentity> = {}
+  for (const [path, identity] of seenIdentities) nextIdentities[path] = identity
+  for (const path of [...newKnown, ...individualSet]) {
+    // a path that was just recognised elsewhere is dead: keeping its old look around
+    // would make the very next scan rewrite the config for nothing
+    if (movedFrom.has(path)) continue
+    const remembered = identities[path]
+    if (!nextIdentities[path] && remembered) nextIdentities[path] = remembered
+  }
+
+  return {
+    files: result.sort((a, b) => b.mtimeMs - a.mtimeMs),
+    known: [...newKnown],
+    identities: nextIdentities,
+    moved
+  }
 }
