@@ -513,6 +513,24 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
       setPendingLinks(new Map())
       setStatuses(new Map()) // stale — the rescan below brings the new source's history
       setForcePush(new Set()) // staged overwrites were decisions relative to the old source
+      // Cells that were in sync under the old source and stay so for the new one are
+      // already in sync with IT too (same origin snapshot, no drift on either side) —
+      // main verifies that and carries their sync points over, so an unchanged setup
+      // does not turn into a wall of amber offering to recopy everything.
+      if (source) {
+        // it shares the op-lock with scans, so a scan still running from opening the
+        // tab would reject it outright — retry briefly, since silently losing the
+        // inheritance means an unnecessary wall of amber
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await syncApi.inheritBaselines(source, next)
+            break
+          } catch (err) {
+            if (!opLockBusy(cleanErrorMessage(err))) break // a real failure: give up quietly
+            await new Promise((resolve) => setTimeout(resolve, 400))
+          }
+        }
+      }
       try {
         await persistLinks(next, rebuilt)
       } catch {
@@ -520,7 +538,7 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
       }
       void runScan(true)
     },
-    [columns, source, serverLinks, linked, rowEligible, persistLinks, runScan]
+    [columns, source, serverLinks, linked, rowEligible, persistLinks, runScan, syncApi]
   )
 
   const applyChanges = useCallback(async () => {

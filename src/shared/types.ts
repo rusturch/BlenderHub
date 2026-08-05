@@ -540,6 +540,11 @@ export interface SettingsSyncApi {
   onApplyProgress: (callback: (progress: SyncApplyProgress) => void) => () => void
   /** persist the sync marks (called on every toggle; marks survive Apply and restarts) */
   setLinks: (links: SyncLinks) => Promise<void>
+  /**
+   * Carry sync points to a newly picked source where the old source's history proves
+   * they already hold — bookkeeping only, no files are touched.
+   */
+  inheritBaselines: (fromSource: string, toSource: string) => Promise<void>
   /** Record the current state of a cell as its new sync point (used after "Copy into source…"). */
   recordSyncPoint: (minor: string, component: SyncComponentId) => Promise<SyncScanResult>
   listBackups: () => Promise<SettingsBackupInfo[]>

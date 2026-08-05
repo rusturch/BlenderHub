@@ -6,7 +6,7 @@ import { scheduleAssetLibraryReconcile } from '../asset-library/service'
 import { HIDDEN_SYNC_COMPONENT_IDS, SYNC_COMPONENT_IDS } from '../../shared/types'
 import type { SettingsSyncRequest, SyncComponentId, SyncLinks, SyncScanResult } from '../../shared/types'
 import { scanSettings } from './scan'
-import { applySettingsSync, recordSyncPoint, restoreSettingsBackup } from './apply'
+import { applySettingsSync, inheritBaselines, recordSyncPoint, restoreSettingsBackup } from './apply'
 import { deleteBackup, listBackups, revealBackup } from './backups'
 import { updateSyncState } from './state'
 
@@ -130,6 +130,11 @@ export function registerSettingsSyncIpc(): void {
       cache = fresh
       return fresh
     })
+  )
+
+  // bookkeeping only — carries provably-valid sync points to a newly picked source
+  ipcMain.handle('sync:inherit-baselines', (_event, rawFrom: unknown, rawTo: unknown) =>
+    withExclusiveOp('settings sync', () => inheritBaselines(requireMinor(rawFrom), requireMinor(rawTo)))
   )
 
   ipcMain.handle('sync:list-backups', () => listBackups())

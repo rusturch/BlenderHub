@@ -276,6 +276,7 @@ function createPreviewFallbackApi(): LauncherApi {
     },
     onApplyProgress: () => () => {},
     setLinks: async () => {},
+    inheritBaselines: async () => {},
     recordSyncPoint: async () => {
       throw new Error(DESKTOP_ONLY)
     },

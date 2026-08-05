@@ -10,6 +10,7 @@ import {
   runBlenderScript,
   writeDataFile
 } from '../addons/runner'
+import { HIDDEN_SYNC_COMPONENT_IDS, SYNC_COMPONENT_IDS } from '../../shared/types'
 import type {
   SettingsSyncOutcome,
   SettingsSyncRequest,
@@ -18,7 +19,7 @@ import type {
   SyncOpResult
 } from '../../shared/types'
 import { getAssetLibraryFixupExtra } from '../asset-library/service'
-import { copyComponentItems, expandEntries, fingerprintComponent } from './components'
+import { copyComponentItems, expandEntries, fingerprintComponent, fingerprintMatches } from './components'
 import type { ComponentFingerprint, ResolvedItem } from './components'
 import { createSnapshot, findBackup } from './backups'
 import { resolveColumns, scanSettings } from './scan'
@@ -406,6 +407,95 @@ export async function recordSyncPoint(
     }
   }))
   return scanSettings()
+}
+
+/**
+ * Carry sync points over to a new source wherever that is provably valid.
+ *
+ * A source switch would otherwise leave every cell amber ("never synced from this
+ * source") even when there is nothing to copy. But when, under the OLD source, both
+ * the new source and version X are still in sync, then X's files came from the very
+ * same old-source snapshot the new source's files came from and neither side has
+ * drifted since — so (new source → X) is already a valid sync point and an Apply
+ * would rewrite files for nothing.
+ *
+ * This is inference from two recorded facts, not a guess that the contents match:
+ * cross-version fingerprints are never comparable directly (a target's prefs are
+ * re-saved by its own Blender, dir manifests carry copy-fresh mtimes). Both facts are
+ * re-verified against fresh fingerprints here, so anything that did drift keeps its
+ * honest amber cell.
+ */
+export async function inheritBaselines(fromSource: string, toSource: string): Promise<void> {
+  if (fromSource === toSource) return
+  const state = await readSyncState()
+  const previous = state.baselines[fromSource]
+  if (!previous) return
+  const resolved = await resolveColumns()
+  const byMinor = new Map(resolved.map((entry) => [entry.column.minor, entry]))
+  if (!byMinor.has(fromSource) || !byMinor.has(toSource)) return
+
+  // one fingerprint per (version, component), reused across every check below
+  const cache = new Map<string, ComponentFingerprint | null>()
+  const fingerprintOf = async (
+    minor: string,
+    component: SyncComponentId
+  ): Promise<ComponentFingerprint | null> => {
+    const key = baselineKey(minor, component)
+    const cached = cache.get(key)
+    if (cached !== undefined) return cached
+    const base = byMinor.get(minor)?.base
+    const fresh = base ? await fingerprintComponent(base, component) : null
+    cache.set(key, fresh)
+    return fresh
+  }
+
+  /** the recorded pair (old source → minor) still holds: neither side moved since */
+  const stillInSync = async (minor: string, component: SyncComponentId): Promise<boolean> => {
+    const entry = previous[baselineKey(minor, component)]
+    if (!entry) return false
+    const src = await fingerprintOf(fromSource, component)
+    const tgt = await fingerprintOf(minor, component)
+    if (src?.hash == null || tgt?.hash == null) return false
+    return fingerprintMatches(entry.source, src) && fingerprintMatches(entry.target, tgt)
+  }
+
+  const entries: Record<string, BaselineEntry> = {}
+  for (const { column } of resolved) {
+    const minor = column.minor
+    if (minor === toSource) continue
+    if (!column.installed) continue // only installed versions are ever sync targets
+    for (const component of SYNC_COMPONENT_IDS) {
+      if (HIDDEN_SYNC_COMPONENT_IDS.includes(component)) continue
+      if (!(await stillInSync(toSource, component))) continue
+      // the old source becomes a target now: the check above already proves the pair —
+      // the new source's files came from these very files and neither side moved
+      if (minor !== fromSource && !(await stillInSync(minor, component))) continue
+      const src = await fingerprintOf(toSource, component)
+      const tgt = await fingerprintOf(minor, component)
+      if (src?.hash == null || tgt?.hash == null) continue
+      entries[baselineKey(minor, component)] = {
+        source: src.hash,
+        target: tgt.hash,
+        syncedAt: new Date().toISOString(),
+        sourceFiles: src.files,
+        targetFiles: tgt.files,
+        ...(src.prefs ? { sourcePrefs: src.prefs } : {}),
+        ...(tgt.prefs ? { targetPrefs: tgt.prefs } : {}),
+        ...(src.lines ? { sourceLines: src.lines } : {}),
+        ...(tgt.lines ? { targetLines: tgt.lines } : {})
+      }
+    }
+  }
+  if (Object.keys(entries).length === 0) return
+  // inferred entries win over anything stale already stored for this source: they were
+  // just verified against the files on disk
+  await updateSyncState((current) => ({
+    ...current,
+    baselines: {
+      ...current.baselines,
+      [toSource]: { ...(current.baselines[toSource] ?? {}), ...entries }
+    }
+  }))
 }
 
 export async function restoreSettingsBackup(
