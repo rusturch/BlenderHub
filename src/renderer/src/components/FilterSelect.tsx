@@ -38,7 +38,8 @@ export function FilterSelect<T extends string>({
   value,
   options,
   onChange,
-  width = 'w-28'
+  width = 'w-28',
+  fit = false
 }: {
   /** what this filter is — shown on hover rather than as a caption above the control */
   label: string
@@ -46,6 +47,13 @@ export function FilterSelect<T extends string>({
   options: { value: T; label: string }[]
   onChange: (value: T) => void
   width?: string
+  /**
+   * size the control by its longest option instead of `width`: every label is stacked in
+   * one grid cell with all but the current one invisible, so the button is exactly as wide
+   * as it must be in the active locale — no padding guesswork, and no width jitter when the
+   * value changes. Same invisible-measure trick as the Install/Launch labels on Installs.
+   */
+  fit?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const current = options.find((option) => option.value === value)
@@ -54,15 +62,31 @@ export function FilterSelect<T extends string>({
       open={open}
       onClose={() => setOpen(false)}
       align="left"
-      menuClassName={`${width} overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl`}
+      menuClassName={`${fit ? 'w-max' : width} overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl`}
       trigger={
         <button
           type="button"
           title={label}
           onClick={() => setOpen((prev) => !prev)}
-          className={`flex ${width} items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-surface-panel px-2.5 py-1 text-sm text-zinc-200 transition-colors hover:bg-white/10`}
+          className={`flex ${fit ? '' : width} items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-surface-panel px-2.5 py-1 text-sm text-zinc-200 transition-colors hover:bg-white/10`}
         >
-          <span className="truncate">{current?.label ?? value}</span>
+          {fit ? (
+            <span className="grid">
+              {options.map((option) => (
+                <span
+                  key={option.value}
+                  aria-hidden={option.value !== value}
+                  className={`col-start-1 row-start-1 whitespace-nowrap text-left ${
+                    option.value === value ? '' : 'invisible'
+                  }`}
+                >
+                  {option.label}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="truncate">{current?.label ?? value}</span>
+          )}
           <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
         </button>
       }

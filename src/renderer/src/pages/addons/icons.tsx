@@ -1,22 +1,3 @@
-// a downward arrow into a tray — filled when a copy is saved, hollow when it isn't
-export function LibraryStatusIcon({ saved, className = 'h-3 w-3' }: { saved: boolean; className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill={saved ? 'currentColor' : 'none'}
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 3v10" />
-      <path d="m7 9 5 5 5-5" />
-      <path d="M4 19h16" />
-    </svg>
-  )
-}
-
 export function RefreshIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg

@@ -1,4 +1,4 @@
-import type { AddonGroupRow, AddonSource } from '../../../../shared/addon-identity'
+import type { AddonSource } from '../../../../shared/addon-identity'
 
 // A sample that rides invisibly in the header cells so the version columns come out even
 // whatever the gear menu has switched on — each cell is only as wide as its own content,
@@ -18,9 +18,3 @@ export const SOURCE_TABS: { key: AddonTab; labelKey: string }[] = [
   { key: 'blender_org', labelKey: 'addons.tabBlenderOrg' },
   { key: 'builtin', labelKey: 'addons.tabBuiltin' }
 ]
-
-// i18n keys per match tier
-export const TIER_HINT: Partial<Record<AddonGroupRow['matchTier'], string>> = {
-  heuristic: 'addons.tierHeuristic',
-  suggested: 'addons.tierSuggested'
-}

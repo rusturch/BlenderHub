@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import PageLayout from '../components/PageLayout'
 import Dropdown from '../components/Dropdown'
+import { FilterSelect } from '../components/FilterSelect'
 import StickyHScrollbar from '../components/StickyHScrollbar'
 import MirrorVScrollbar from '../components/MirrorVScrollbar'
 import HScrollEdgeShadows from '../components/HScrollEdgeShadows'
@@ -23,7 +24,7 @@ import type {
   RunningBlender,
   VersionAddons
 } from '../../../shared/types'
-import { SOURCE_TABS, TIER_HINT, WIDEST_MINOR } from './addons/constants'
+import { SOURCE_TABS, WIDEST_MINOR } from './addons/constants'
 import type { AddonTab } from './addons/constants'
 import { Badge, BadgeSlot, CYCLE_STYLES, LONGEST_CYCLE } from '../components/Badge'
 import {
@@ -40,7 +41,6 @@ import {
   PENDING_SEP
 } from './addons/matrix'
 import {
-  LibraryStatusIcon,
   GearIcon,
   FolderOpenIcon,
   TrashIcon,
@@ -113,19 +113,27 @@ export default function AddonsPage({
   // a drop-initiated visit starts on All: the added add-on's row may fold into any
   // source tab (and can even move once a catalog loads), All shows it regardless
   const [tab, setTab] = useState<AddonTab>(initialSearch ? 'all' : 'user')
+  // Sort/filter selects mirroring the Installs toolbar. Persisted like the Projects ones:
+  // the page unmounts on every tab switch, so plain state would reset on each visit.
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() =>
+    uiGet('addons.sortDir') === 'desc' ? 'desc' : 'asc'
+  )
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>(() => {
+    const stored = uiGet('addons.enabledFilter')
+    return stored === 'enabled' || stored === 'disabled' ? stored : 'all'
+  })
+  useEffect(() => {
+    uiSet('addons.sortDir', sortDir)
+  }, [sortDir])
+  useEffect(() => {
+    uiSet('addons.enabledFilter', enabledFilter)
+  }, [enabledFilter])
   // Blender-style "Show Tags" filter: a category is visible unless it's in this set
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => new Set())
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [showLibraryStatus, setShowLibraryStatus] = useState(
-    () => uiGet('addons.showLibraryStatus') === '1'
-  )
-  const [showCanonicalId, setShowCanonicalId] = useState(
-    () => uiGet('addons.showCanonicalId') === '1'
-  )
-  const [showCategory, setShowCategory] = useState(
-    () => uiGet('addons.showCategory') === '1'
-  )
+  const [showTabCounts, setShowTabCounts] = useState(() => uiGet('addons.showTabCounts') === '1')
+  const [showLegend, setShowLegend] = useState(() => uiGet('addons.showLegend') !== '0')
   const [showVersionCount, setShowVersionCount] = useState(
     () => uiGet('addons.showVersionCount') === '1'
   )
@@ -136,14 +144,11 @@ export default function AddonsPage({
     () => uiGet('addons.showVersionBadge') !== '0'
   )
   useEffect(() => {
-    uiSet('addons.showLibraryStatus', showLibraryStatus ? '1' : '0')
-  }, [showLibraryStatus])
+    uiSet('addons.showTabCounts', showTabCounts ? '1' : '0')
+  }, [showTabCounts])
   useEffect(() => {
-    uiSet('addons.showCanonicalId', showCanonicalId ? '1' : '0')
-  }, [showCanonicalId])
-  useEffect(() => {
-    uiSet('addons.showCategory', showCategory ? '1' : '0')
-  }, [showCategory])
+    uiSet('addons.showLegend', showLegend ? '1' : '0')
+  }, [showLegend])
   useEffect(() => {
     uiSet('addons.showVersionCount', showVersionCount ? '1' : '0')
   }, [showVersionCount])
@@ -319,12 +324,24 @@ export default function AddonsPage({
 
   const visibleRows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return rows.filter((row) => {
+    const filtered = rows.filter((row) => {
       if (tab !== 'all' && !row.sources.has(tab)) return false
       if (row.category && hiddenCategories.has(row.category)) return false
+      if (enabledFilter !== 'all') {
+        // same three states the cell legend uses: a row is enabled when a real copy is
+        // on in some version, disabled when copies exist but all are off. Rows with no
+        // copy at all (catalog/library-only) are neither — they show under All only.
+        const installed = [...row.perMinor.values()].filter((addon) => !addon.missing)
+        const enabled = installed.some((addon) => addon.enabled)
+        if (enabledFilter === 'enabled' ? !enabled : enabled || installed.length === 0) return false
+      }
       return !q || rowMatchesQuery(row, q)
     })
-  }, [rows, tab, query, hiddenCategories])
+    // the select drives a plain alphabetical order — buildMatrix's own
+    // enabled-first grouping would read as "why isn't this sorted?" next to it
+    const factor = sortDir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name) * factor)
+  }, [rows, tab, query, hiddenCategories, enabledFilter, sortDir])
 
   const okMinors = useMemo(
     () => new Set((data ?? []).filter((version) => !version.error).map((version) => version.minor)),
@@ -783,49 +800,33 @@ export default function AddonsPage({
         )}
 
         <section>
+          {/* same toolbar shape as Installs: sort/filter selects on the left, search and
+              display settings on the right, source tabs on their own row underneath */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             {data && data.length > 0 ? (
               <>
-                <div className="flex flex-wrap gap-1">
-                  {SOURCE_TABS.map(({ key, labelKey }) => {
-                    const dotOn = key === 'superhive' ? superhiveConnected : key === 'blender_org' ? blenderOrgConnected : null
-                    const dotTitle =
-                      key === 'superhive'
-                        ? superhiveConnected
-                          ? t('addons.superhiveDotConnected')
-                          : t('addons.superhiveDotDisconnected')
-                        : key === 'blender_org'
-                          ? (blenderOrgConnected ? t('addons.blenderOrgDotConnected') : (blenderOrgError ?? t('addons.blenderOrgDotUnreachable')))
-                          : undefined
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => setTab(key)}
-                        className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                          tab === key ? 'bg-selection text-selection-text' : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
-                        }`}
-                      >
-                        {dotOn !== null && (
-                          <span
-                            role={key === 'superhive' && !superhiveConnected ? 'button' : undefined}
-                            onClick={
-                              key === 'superhive' && !superhiveConnected
-                                ? (event) => {
-                                    event.stopPropagation()
-                                    onOpenSettings?.('superhive')
-                                  }
-                                : undefined
-                            }
-                            title={dotTitle}
-                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotOn ? 'bg-emerald-400' : 'bg-red-400'} ${
-                              key === 'superhive' && !superhiveConnected ? 'cursor-pointer' : ''
-                            }`}
-                          />
-                        )}
-                        {t(labelKey)} ({countBySource[key]})
-                      </button>
-                    )
-                  })}
+                <div className="flex flex-wrap items-end gap-2">
+                  <FilterSelect
+                    label={t('addons.order')}
+                    value={sortDir}
+                    onChange={setSortDir}
+                    options={[
+                      { value: 'asc', label: t('addons.ascending') },
+                      { value: 'desc', label: t('addons.descending') }
+                    ]}
+                    fit
+                  />
+                  <FilterSelect
+                    label={t('addons.stateFilterLabel')}
+                    value={enabledFilter}
+                    onChange={setEnabledFilter}
+                    options={[
+                      { value: 'all', label: t('addons.stateAll') },
+                      { value: 'enabled', label: t('addons.stateEnabled') },
+                      { value: 'disabled', label: t('addons.stateDisabled') }
+                    ]}
+                    fit
+                  />
                 </div>
                 <div className="flex items-center gap-2">
                   {categories.length > 0 && (
@@ -918,29 +919,20 @@ export default function AddonsPage({
                     <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
-                        checked={showLibraryStatus}
-                        onChange={(event) => setShowLibraryStatus(event.target.checked)}
+                        checked={showTabCounts}
+                        onChange={(event) => setShowTabCounts(event.target.checked)}
                         className="accent-blender"
                       />
-                      {t('addons.showLibraryStatus')}
+                      {t('addons.showTabCounts')}
                     </label>
                     <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
                         type="checkbox"
-                        checked={showCanonicalId}
-                        onChange={(event) => setShowCanonicalId(event.target.checked)}
+                        checked={showLegend}
+                        onChange={(event) => setShowLegend(event.target.checked)}
                         className="accent-blender"
                       />
-                      {t('addons.showTechnicalId')}
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
-                      <input
-                        type="checkbox"
-                        checked={showCategory}
-                        onChange={(event) => setShowCategory(event.target.checked)}
-                        className="accent-blender"
-                      />
-                      {t('addons.showCategories')}
+                      {t('addons.showLegend')}
                     </label>
                     <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/10">
                       <input
@@ -976,6 +968,50 @@ export default function AddonsPage({
               <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('addons.title')}</h2>
             )}
           </div>
+          {data && data.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1">
+              {SOURCE_TABS.map(({ key, labelKey }) => {
+                const dotOn = key === 'superhive' ? superhiveConnected : key === 'blender_org' ? blenderOrgConnected : null
+                const dotTitle =
+                  key === 'superhive'
+                    ? superhiveConnected
+                      ? t('addons.superhiveDotConnected')
+                      : t('addons.superhiveDotDisconnected')
+                    : key === 'blender_org'
+                      ? (blenderOrgConnected ? t('addons.blenderOrgDotConnected') : (blenderOrgError ?? t('addons.blenderOrgDotUnreachable')))
+                      : undefined
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setTab(key)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      tab === key ? 'bg-selection text-selection-text' : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
+                    }`}
+                  >
+                    {dotOn !== null && (
+                      <span
+                        role={key === 'superhive' && !superhiveConnected ? 'button' : undefined}
+                        onClick={
+                          key === 'superhive' && !superhiveConnected
+                            ? (event) => {
+                                event.stopPropagation()
+                                onOpenSettings?.('superhive')
+                              }
+                            : undefined
+                        }
+                        title={dotTitle}
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotOn ? 'bg-emerald-400' : 'bg-red-400'} ${
+                          key === 'superhive' && !superhiveConnected ? 'cursor-pointer' : ''
+                        }`}
+                      />
+                    )}
+                    {t(labelKey)}
+                    {showTabCounts && ` (${countBySource[key]})`}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {(scanning || applying) && applyProgressActive && (
             <div className="mb-4 rounded-xl border border-white/10 bg-surface-card px-4 py-3">
@@ -1016,23 +1052,25 @@ export default function AddonsPage({
             <p className="text-sm text-zinc-500">{t('addons.noVersionsInstalled')}</p>
           ) : (
             <>
-              <div className="mb-3 flex flex-wrap items-center gap-4 text-[11px] text-zinc-500">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--blender-brand)]" /> {t('addons.legendEnabled')}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-full border border-zinc-600" /> {t('addons.legendDisabled')}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-zinc-600" /> {t('addons.legendNotInstalled')}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" /> {t('addons.legendPendingToggle')}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-400" /> {t('addons.legendPendingInstall')}
-                </span>
-              </div>
+              {showLegend && (
+                <div className="mb-3 flex flex-wrap items-center gap-4 text-[11px] text-zinc-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--blender-brand)]" /> {t('addons.legendEnabled')}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full border border-zinc-600" /> {t('addons.legendDisabled')}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-zinc-600" /> {t('addons.legendNotInstalled')}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" /> {t('addons.legendPendingToggle')}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-400" /> {t('addons.legendPendingInstall')}
+                  </span>
+                </div>
+              )}
 
               <div className="relative">
                 {/* bottomInset 0: this card hides its native horizontal bar (see below),
@@ -1164,8 +1202,6 @@ export default function AddonsPage({
                       </tr>
                     ) : (
                       visibleRows.map((row) => {
-                        const tierHintKey = TIER_HINT[row.matchTier]
-                        const tierHint = tierHintKey ? t(tierHintKey) : undefined
                         const cells = [...row.perMinor.entries()].filter(([minor]) => okMinors.has(minor))
                         // every column where the add-on CAN be active: an installed toggleable copy
                         // (non-core, files present, valid module) OR an empty cell the row has a source for.
@@ -1190,15 +1226,6 @@ export default function AddonsPage({
                         const rowOn = activatable.length > 0 && activatableOnCount === activatable.length
                         const rowSome = activatableOnCount > 0 && activatableOnCount < activatable.length
                         const libraryFiles = row.libraryFiles ?? []
-                        // whether a physical copy exists — built-in/core ship with Blender and never need one
-                        // everything non-built-in except blender.org is worth storing (matches capture) —
-                        // blender.org is trivially re-downloadable, so a "not saved" flag there would mislead
-                        const canBeBackedUp = cells.some(
-                          ([, addon]) =>
-                            !addon.missing &&
-                            (addon.origin === 'user' || (addon.origin === 'extension' && addon.repoModule !== 'blender_org'))
-                        )
-                        const inLibrary = libraryFiles.length > 0
                         // one sub-row per add-on VERSION (installed and/or stored). Each can install that
                         // version into any compatible Blender the user picks — so the choice is theirs.
                         const units = new Map<string, MatrixUnit>()
@@ -1307,30 +1334,7 @@ export default function AddonsPage({
                                     {t('addons.removedBadge')}
                                   </span>
                                 )}
-                                {showLibraryStatus && canBeBackedUp && (
-                                  <span
-                                    className={`shrink-0 ${inLibrary ? 'text-emerald-400' : 'text-zinc-600'}`}
-                                    title={
-                                      inLibrary
-                                        ? t(
-                                            libraryFiles.length > 1
-                                              ? 'addons.savedToLibraryMany'
-                                              : 'addons.savedToLibraryOne',
-                                            { count: libraryFiles.length }
-                                          )
-                                        : t('addons.notSavedToLibrary')
-                                    }
-                                  >
-                                    <LibraryStatusIcon saved={inLibrary} />
-                                  </span>
-                                )}
                               </div>
-                              {(showCanonicalId || (showCategory && row.category)) && (
-                                <p className="truncate text-[11px] text-zinc-600" title={tierHint}>
-                                  {showCanonicalId && <span className="font-mono text-zinc-600">{row.canonicalId}</span>}
-                                  {showCategory && row.category ? `${showCanonicalId ? ' · ' : ''}${row.category}` : ''}
-                                </p>
-                              )}
                             </td>
                             {data.map((version) => {
                               const addon = row.perMinor.get(version.minor)
