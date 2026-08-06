@@ -95,3 +95,22 @@ export function ChevronDownIcon({ className = 'h-3 w-3' }: { className?: string 
     </svg>
   )
 }
+
+// circled "i" — opens the add-on's own page
+export function InfoIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 8h.01" />
+    </svg>
+  )
+}

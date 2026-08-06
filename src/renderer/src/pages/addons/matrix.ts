@@ -154,7 +154,9 @@ function virtualRow(
   canonicalId: string,
   name: string,
   sources: Set<AddonSource>,
-  installVia: InstallSource
+  installVia: InstallSource,
+  /** catalog rows are not installed, so nothing was scanned — pass the repo page when known */
+  website: string | null = null
 ): MatrixRow {
   return {
     groupId: canonicalId,
@@ -162,6 +164,7 @@ function virtualRow(
     name,
     category: '',
     description: null,
+    website,
     origins: new Set(),
     manual: true,
     sources,
@@ -257,8 +260,11 @@ export function buildMatrix(
     if (existing) {
       existing.installVia = src
       existing.sources.add('superhive')
+      // the store page describes the add-on the user actually got from there; the
+      // manifest's own `website` may point anywhere (a personal site, a git repo)
+      if (item.website) existing.website = item.website
     } else {
-      const row = virtualRow(`ext:${item.pkgId}`, item.name, new Set(['superhive']), src)
+      const row = virtualRow(`ext:${item.pkgId}`, item.name, new Set(['superhive']), src, item.website)
       rows.push(row)
       byPkgId.set(item.pkgId, row)
     }
@@ -278,8 +284,9 @@ export function buildMatrix(
     if (existing) {
       if (existing.installVia?.kind !== 'superhive') existing.installVia = src
       existing.sources.add('blender_org')
+      if (item.website && existing.installVia?.kind !== 'superhive') existing.website = item.website
     } else {
-      const row = virtualRow(`ext:${item.pkgId}`, item.name, new Set(['blender_org']), src)
+      const row = virtualRow(`ext:${item.pkgId}`, item.name, new Set(['blender_org']), src, item.website)
       rows.push(row)
       byPkgId.set(item.pkgId, row)
     }

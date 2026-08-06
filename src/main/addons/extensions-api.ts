@@ -29,6 +29,8 @@ export interface RemoteRelease {
   pkgId: string
   name: string
   version: string
+  /** the repo's product/detail page — extensions.blender.org and Superhive both report it */
+  website: string | null
   archiveUrl: string
   /** hex sha256 (prefix stripped) */
   sha256: string
@@ -47,6 +49,7 @@ interface RawListingEntry {
   archive_size?: unknown
   blender_version_min?: unknown
   blender_version_max?: unknown
+  website?: unknown
   type?: unknown
 }
 
@@ -107,6 +110,9 @@ export async function fetchRepoListing(
       pkgId: id,
       name: typeof raw.name === 'string' && raw.name ? raw.name : id,
       version,
+      // only http(s): the value is repo-supplied and ends up in window.open
+      website:
+        typeof raw.website === 'string' && /^https?:\/\//i.test(raw.website) ? raw.website : null,
       archiveUrl,
       sha256,
       archiveSize: typeof raw.archive_size === 'number' ? raw.archive_size : 0,

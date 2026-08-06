@@ -30,7 +30,13 @@ export interface BlInfoMeta {
   author: string | null
   minBlender: string | null
   description: string | null
+  /** where to read more: bl_info's doc_url, falling back to the older wiki_url / tracker_url */
+  website: string | null
 }
+
+/** only http(s) — bl_info/manifest values are author-supplied and end up in window.open */
+const webUrl = (value: string | null): string | null =>
+  value && /^https?:\/\//i.test(value) ? value : null
 
 export function parseBlInfo(text: string): BlInfoMeta {
   return {
@@ -39,7 +45,11 @@ export function parseBlInfo(text: string): BlInfoMeta {
     category: blInfoString(text, 'category'),
     author: blInfoString(text, 'author'),
     minBlender: blInfoTuple(text, 'blender'),
-    description: blInfoString(text, 'description')
+    description: blInfoString(text, 'description'),
+    website:
+      webUrl(blInfoString(text, 'doc_url')) ??
+      webUrl(blInfoString(text, 'wiki_url')) ??
+      webUrl(blInfoString(text, 'tracker_url'))
   }
 }
 
@@ -53,6 +63,8 @@ export interface ManifestMeta {
   maxBlender: string | null
   /** the manifest's one-line 'tagline' — Blender's own UI shows it where bl_info has 'description' */
   description: string | null
+  /** the extension's own homepage, as declared by `website` in the manifest */
+  website: string | null
 }
 
 export function parseManifest(text: string): ManifestMeta {
@@ -63,6 +75,7 @@ export function parseManifest(text: string): ManifestMeta {
     maintainer: tomlString(text, 'maintainer'),
     minBlender: tomlString(text, 'blender_version_min'),
     maxBlender: tomlString(text, 'blender_version_max'),
-    description: tomlString(text, 'tagline')
+    description: tomlString(text, 'tagline'),
+    website: webUrl(tomlString(text, 'website'))
   }
 }

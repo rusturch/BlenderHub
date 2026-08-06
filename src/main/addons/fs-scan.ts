@@ -96,7 +96,8 @@ async function scanLegacyDir(collector: Collector, dir: string, origin: AddonOri
       pkgId: null,
       blInfoId: null,
       author: meta.author,
-      description: meta.description
+      description: meta.description,
+      website: meta.website
     })
   }
   for (const pyFile of listing.pyFiles) {
@@ -115,7 +116,8 @@ async function scanLegacyDir(collector: Collector, dir: string, origin: AddonOri
       pkgId: null,
       blInfoId: null,
       author: meta.author,
-      description: meta.description
+      description: meta.description,
+      website: meta.website
     })
   }
 }
@@ -156,7 +158,8 @@ async function scanExtensionRepoDir(
       pkgId: pkgDir,
       blInfoId: null,
       author: meta.maintainer,
-      description: meta.description
+      description: meta.description,
+      website: meta.website
     })
   }
 }

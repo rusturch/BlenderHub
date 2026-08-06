@@ -43,6 +43,7 @@ import {
 import {
   GearIcon,
   FolderOpenIcon,
+  InfoIcon,
   TrashIcon,
   TagIcon,
   ChevronDownIcon,
@@ -1198,6 +1199,17 @@ export default function AddonsPage({
                                   : tab === 'blender_org'
                                     ? t('addons.emptyBlenderOrg')
                                     : t('addons.emptyBuiltin')}
+                          {tab === 'superhive' &&
+                            !superhiveConnected &&
+                            !query.trim() &&
+                            hiddenCategories.size === 0 && (
+                              <button
+                                onClick={() => onOpenSettings?.('superhive')}
+                                className="ml-1.5 rounded text-selection underline-offset-2 transition-colors hover:underline"
+                              >
+                                {t('addons.emptySuperhiveOpenSettings')}
+                              </button>
+                            )}
                         </td>
                       </tr>
                     ) : (
@@ -1333,6 +1345,20 @@ export default function AddonsPage({
                                   >
                                     {t('addons.removedBadge')}
                                   </span>
+                                )}
+                                {/* the add-on's own page, when it declares one. stopPropagation:
+                                    the whole name cell is the expand toggle */}
+                                {row.website && (
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      window.open(row.website!, '_blank', 'noopener')
+                                    }}
+                                    title={t('addons.openWebsite', { url: row.website })}
+                                    className="shrink-0 rounded p-0.5 text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
+                                  >
+                                    <InfoIcon className="h-3.5 w-3.5" />
+                                  </button>
                                 )}
                               </div>
                             </td>

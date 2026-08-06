@@ -31,6 +31,7 @@ export async function listBlenderOrgCatalog(): Promise<ExtensionCatalogItem[]> {
       pkgId: release.pkgId,
       name: release.name,
       version: release.version,
+      website: release.website,
       minBlender: release.blenderVersionMin,
       maxBlender: release.blenderVersionMax
     }))

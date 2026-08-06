@@ -67,6 +67,11 @@ def collect():
         bl_id = info.get("id")
         author = info.get("author")
         description = info.get("description")
+        # doc_url is bl_info's own field; extensions surface their manifest 'website' there too.
+        # wiki_url/tracker_url are the pre-2.8 spellings still found in older add-ons.
+        website = info.get("doc_url") or info.get("wiki_url") or info.get("tracker_url")
+        if not (isinstance(website, str) and website.startswith(("http://", "https://"))):
+            website = None
         items.append({
             "module": module,
             "name": info.get("name") or module,
@@ -79,6 +84,7 @@ def collect():
             "blInfoId": bl_id if isinstance(bl_id, str) else None,
             "author": author if isinstance(author, str) else None,
             "description": description if isinstance(description, str) else None,
+            "website": website,
         })
     return items
 
@@ -118,6 +124,7 @@ interface RawAddon {
   blInfoId: unknown
   author: unknown
   description: unknown
+  website: unknown
 }
 
 function parseAddons(stdout: string): AddonInfo[] {
@@ -137,7 +144,8 @@ function parseAddons(stdout: string): AddonInfo[] {
       pkgId: str(entry.pkgId),
       blInfoId: str(entry.blInfoId),
       author: str(entry.author),
-      description: str(entry.description)
+      description: str(entry.description),
+      website: str(entry.website)
     } satisfies AddonInfo
   })
 }

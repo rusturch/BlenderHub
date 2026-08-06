@@ -50,6 +50,8 @@ export interface AddonGroupRow {
   /** what Blender itself shows for this add-on (bl_info 'description' / manifest 'tagline'),
    *  taken from the newest cell that has one; null when no scanned cell carries it */
   description: string | null
+  /** the add-on's own page, from whichever scanned version declares one (http(s) only) */
+  website: string | null
   origins: Set<AddonOrigin>
   /** the user installed this themselves somewhere (user or extension origin) */
   manual: boolean
@@ -294,12 +296,14 @@ function makeRow(groupId: string, tier: MatchTier, cells: Cell[]): AddonGroupRow
   const newest = sortedByVersion[0]
   const category = cells.map((c) => c.addon.category).find((value) => value) ?? ''
   const description = sortedByVersion.map((c) => c.addon.description ?? null).find((value) => value) ?? null
+  const website = sortedByVersion.map((c) => c.addon.website ?? null).find((value) => value) ?? null
   return {
     groupId,
     canonicalId: cells[0].canonicalId,
     name: newest.addon.name || newest.addon.module,
     category,
     description,
+    website,
     origins,
     manual: origins.has('user') || origins.has('extension'),
     sources: new Set(), // assigned in groupAddons once the Superhive catalog is known

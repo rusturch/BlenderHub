@@ -188,6 +188,8 @@ export interface AddonInfo {
   author?: string | null
   /** bl_info 'description', or an extension's manifest 'tagline' — what Blender itself shows */
   description?: string | null
+  /** the add-on's own page: manifest 'website' / bl_info doc_url; http(s) only, may be absent */
+  website?: string | null
   /** enabled in preferences but its files are gone from disk (direct scan only) */
   missing?: boolean
 }
@@ -351,6 +353,8 @@ export interface ExtensionCatalogItem {
   pkgId: string
   name: string
   version: string
+  /** the repo's own page for this extension, as the listing reports it */
+  website: string | null
   minBlender: string | null
   /** exclusive upper bound — supports strictly below it; null when open-ended */
   maxBlender: string | null
