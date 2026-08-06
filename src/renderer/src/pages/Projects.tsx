@@ -1695,7 +1695,10 @@ export default function ProjectsPage({
                   : t('projects.noProjectsInFolder')}
             </p>
           ) : viewMode === 'list' ? (
-            <div className="overflow-hidden rounded-xl border border-white/5">
+            // keyed apart from the grid: without it React reuses the very same nodes for
+            // both views and merely swaps their classes, so a card morphs into a row and
+            // the border it is losing fades out instead of simply not being there
+            <div key="list" className="overflow-hidden rounded-xl border border-white/5">
               {sortedFiles.map((file, index) => {
                 const { native, selected, mismatch } = buildOf(file)
                 return (
@@ -1754,6 +1757,7 @@ export default function ProjectsPage({
             </div>
           ) : (
             <div
+              key="cards"
               className="grid gap-3"
               style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }}
             >
@@ -1763,7 +1767,11 @@ export default function ProjectsPage({
                   <div
                     key={file.path}
                     {...itemHandlers(file, selected)}
-                    className={`group relative flex cursor-pointer flex-col rounded-xl border transition-all duration-150 ${
+                    // only what hover and selection actually change is animated: with
+                    // transition-all the card also animated its own width, so every
+                    // grid re-layout (switching views, a scrollbar appearing) made the
+                    // cards visibly grow into place
+                    className={`group relative flex cursor-pointer flex-col rounded-xl border transition-[background-color,border-color,box-shadow] duration-150 ${
                       selectedCard === file.path
                         ? 'border-card-outline bg-card-hover shadow-lg shadow-black/40 ring-1 ring-card-outline/40'
                         : 'border-white/5 bg-surface-panel hover:border-card-outline/40 hover:bg-card-hover hover:shadow-lg hover:shadow-black/40'

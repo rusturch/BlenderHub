@@ -1101,14 +1101,14 @@ export default function AddonsPage({
                           The corner is z-30 — strictly above the version cells: at an equal z
                           the later-DOM version headers would paint over it while sliding past
                           on horizontal scroll (the shadow band never overlaps the corner). */}
-                      {/* w-full soaks the table's free width into the name column: without it
-                          auto layout splits the slack between the version columns, so a couple of
-                          installed versions each get a few hundred px of empty cell. With the slack
-                          parked here every version column shrinks to its own content instead, which
-                          is why the label and badge below each carry their widest sample invisibly.
-                          Once enough versions are installed that those columns stop fitting, the
-                          table overflows into its horizontal scroll, as it already did. */}
-                      <th ref={stickyColRef} className="sticky left-0 top-0 z-30 w-full bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 header-hairline">
+                      {/* w-full soaks the table's free width into the name column: without it auto
+                          layout splits the slack between the version columns, so a couple of
+                          installed versions each get a few hundred px of empty cell (which is why
+                          the label and badge below each carry their widest sample invisibly). Once
+                          the version columns stop fitting there is no slack left and min-w holds
+                          the floor: the column stops at 400 and the table scrolls horizontally
+                          instead of letting long names drag it wider. */}
+                      <th ref={stickyColRef} className="sticky left-0 top-0 z-30 w-full min-w-100 bg-surface-card px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 header-hairline">
                         {t('addons.colAddon')}
                       </th>
                       {/* p-0 + w-full trigger: the WHOLE header cell is the click target,
@@ -1304,7 +1304,12 @@ export default function AddonsPage({
                                 expandable ? 'cursor-pointer hover:bg-surface-hover' : ''
                               }`}
                             >
-                              <div className="flex items-center gap-2">
+                              {/* w-0 + min-w-full: the box renders at the cell's full width but
+                                  contributes nothing to the column's intrinsic width, so the name
+                                  fills whatever the column has and truncates instead of widening
+                                  it. A plain w-full box would carry the whole name into the
+                                  column's max-content and drag it past the min-w floor. */}
+                              <div className="flex w-0 min-w-full items-center gap-2">
                                 {/* plain indicator, Installs-style — the whole name cell is the
                                     toggle; rows with nothing to unfold keep an invisible one so
                                     the names line up. Collapsed it points right (-rotate-90),
@@ -1327,7 +1332,7 @@ export default function AddonsPage({
                                     title={rowOn ? t('addons.rowOnEverywhere') : t('addons.rowTurnOnEverywhere')}
                                   />
                                 )}
-                                <span className="truncate text-sm text-zinc-200" title={row.name}>
+                                <span className="min-w-0 truncate text-sm text-zinc-200" title={row.name}>
                                   {row.name}
                                 </span>
                                 {showVersionCount && subCount > 1 && (
@@ -1485,7 +1490,7 @@ export default function AddonsPage({
                               return (
                                 <tr key={`${row.groupId}#${unit.key}`} className="bg-surface-inset">
                                   <td className="sticky left-0 z-10 bg-surface-inset py-2 pl-12 pr-4">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex w-0 min-w-full items-center gap-2">
                                       <span className="text-xs text-zinc-400">{unit.label}</span>
                                       <span className="text-[10px] text-zinc-600">{tag}</span>
                                       {isDesktop && unit.libEntry && (
