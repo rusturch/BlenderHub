@@ -15,6 +15,8 @@ import type { ThemeColors } from '../../../shared/theme'
 import { isReleasedCycle } from '../../../shared/blender-builds'
 import type { HubNotification } from '../../../shared/types'
 import Dropdown from './Dropdown'
+// category icons mirror the sidebar tabs each notification navigates to
+import { BlocksIcon, DownloadIcon, SyncIcon } from './Sidebar'
 
 // Both platforms let the OS draw its window buttons on top of this bar, just in
 // opposite corners, so the side they land on has to stay empty. Windows puts the
@@ -38,6 +40,42 @@ function BellIcon({ className = 'h-5 w-5' }: { className?: string }) {
     >
       <path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" />
       <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+    </svg>
+  )
+}
+
+function UpdateIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 4-4 4 4" />
+      <path d="M12 16V8" />
+    </svg>
+  )
+}
+
+function AlertIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10.3 3.9 1.8 18.1a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
     </svg>
   )
 }
@@ -350,6 +388,26 @@ export default function TitleBar({ onNotificationClick, onOpenNotificationSettin
           <>
             {items.map((item) => {
               const { title, detail } = notificationTexts(item, t)
+              // the icon doubles as the unread indicator (accent), except where a
+              // semantic tone matters more: a failed install, a settings conflict
+              const Icon =
+                item.category === 'launcher-update'
+                  ? UpdateIcon
+                  : item.category === 'addon-update'
+                    ? BlocksIcon
+                    : item.category === 'sync-changes'
+                      ? SyncIcon
+                      : item.category === 'superhive-auth'
+                        ? AlertIcon
+                        : DownloadIcon // blender-update and install operations — the Installs tab
+              const tone =
+                item.category === 'operation' && item.payload.result === 'error'
+                  ? 'text-red-400'
+                  : item.category === 'sync-changes' && item.payload.conflicts > 0
+                    ? 'text-amber-400'
+                    : item.read
+                      ? 'text-zinc-500'
+                      : 'text-blender'
               return (
                 <div key={item.id} className="group relative">
                   <button
@@ -357,22 +415,24 @@ export default function TitleBar({ onNotificationClick, onOpenNotificationSettin
                       closeMenu()
                       onNotificationClick(item)
                     }}
-                    className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 pr-8 text-left transition-colors hover:bg-white/10"
+                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 pr-8 text-left transition-colors hover:bg-white/10"
                   >
-                    <span className="flex w-full min-w-0 items-center gap-2">
-                      {!item.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blender" />}
-                      <span
-                        className={`min-w-0 truncate text-sm ${
-                          item.read ? 'text-zinc-300' : 'font-medium text-zinc-100'
-                        }`}
-                      >
-                        {title}
+                    <Icon className={`h-4 w-4 shrink-0 ${tone}`} />
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex w-full min-w-0 items-center gap-2">
+                        <span
+                          className={`min-w-0 truncate text-sm ${
+                            item.read ? 'text-zinc-300' : 'font-medium text-zinc-100'
+                          }`}
+                        >
+                          {title}
+                        </span>
+                        <span className="ml-auto shrink-0 text-[10px] text-zinc-600">
+                          {notificationWhen(item.createdAt, language)}
+                        </span>
                       </span>
-                      <span className="ml-auto shrink-0 text-[10px] text-zinc-600">
-                        {notificationWhen(item.createdAt, language)}
-                      </span>
+                      {detail && <span className="w-full truncate text-xs text-zinc-500">{detail}</span>}
                     </span>
-                    {detail && <span className="w-full truncate text-xs text-zinc-500">{detail}</span>}
                   </button>
                   <button
                     onClick={() => {
