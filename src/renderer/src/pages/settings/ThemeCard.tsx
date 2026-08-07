@@ -219,7 +219,15 @@ function ColorRow({
   )
 }
 
-export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
+export function ThemeCard({
+  standalone = false,
+  anchorId,
+  highlighted = false
+}: {
+  standalone?: boolean
+  anchorId?: string
+  highlighted?: boolean
+}) {
   const { api, isDesktop } = getLauncherApi()
   const themesApi = api.themes
   const { t } = useTranslation()
@@ -552,6 +560,8 @@ export function ThemeCard({ standalone = false }: { standalone?: boolean }) {
     <SectionCard
       title={t('settings.themes')}
       hint={t('settings.themesHint')}
+      anchorId={anchorId}
+      highlighted={highlighted}
       control={
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <Dropdown

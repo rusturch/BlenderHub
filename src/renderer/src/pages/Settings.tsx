@@ -200,7 +200,12 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
   }, [refreshStorage])
 
   useEffect(() => {
-    if (highlight === 'superhive' || highlight === 'updates' || highlight === 'notifications') {
+    if (
+      highlight === 'superhive' ||
+      highlight === 'updates' ||
+      highlight === 'notifications' ||
+      highlight === 'theme'
+    ) {
       document
         .getElementById(`${highlight}-card`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -630,7 +635,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
           }
         />
 
-        <ThemeCard />
+        <ThemeCard anchorId="theme-card" highlighted={highlight === 'theme'} />
 
         <SectionCard title={t('settings.startup')} hint={t('settings.startupHint')}>
           <div

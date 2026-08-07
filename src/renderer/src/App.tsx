@@ -112,6 +112,7 @@ export default function App() {
           <TitleBar
             onNotificationClick={handleNotificationClick}
             onOpenNotificationSettings={() => openSettings('notifications')}
+            onOpenThemeSettings={() => openSettings('theme')}
           />
           <div className="flex min-h-0 flex-1">
             <Sidebar

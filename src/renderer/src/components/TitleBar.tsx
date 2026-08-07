@@ -140,7 +140,7 @@ interface ThemeEntry {
 
 // Quick theme switcher — the same list as the Settings dropdown, applied through
 // the shared helper so both pickers (and other windows) stay in sync
-function ThemeMenu() {
+function ThemeMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [userThemes, setUserThemes] = useState<ThemeEntry[]>([])
@@ -208,6 +208,20 @@ function ThemeMenu() {
         </button>
       }
     >
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+        <span className="text-xs font-semibold text-zinc-400">{t('titlebar.theme')}</span>
+        <button
+          onClick={() => {
+            setOpen(false)
+            onOpenSettings()
+          }}
+          title={t('titlebar.themeSettings')}
+          className="flex h-6 w-6 items-center justify-center rounded text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
+        >
+          <GearIcon className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mb-1 border-t border-white/5" />
       {entries.map((entry) => (
         <button
           key={entry.selectionId}
@@ -304,9 +318,15 @@ interface TitleBarProps {
   onNotificationClick: (notification: HubNotification) => void
   /** the panel's gear — jumps to the notification toggles in Settings */
   onOpenNotificationSettings: () => void
+  /** the theme menu's gear — jumps to the theme editor card in Settings */
+  onOpenThemeSettings: () => void
 }
 
-export default function TitleBar({ onNotificationClick, onOpenNotificationSettings }: TitleBarProps) {
+export default function TitleBar({
+  onNotificationClick,
+  onOpenNotificationSettings,
+  onOpenThemeSettings
+}: TitleBarProps) {
   const { t, language } = useTranslation()
   const mac = isMac()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -347,7 +367,7 @@ export default function TitleBar({ onNotificationClick, onOpenNotificationSettin
         paddingRight: mac ? EDGE_PADDING : WINDOWS_OVERLAY_WIDTH
       }}
     >
-      <ThemeMenu />
+      <ThemeMenu onOpenSettings={onOpenThemeSettings} />
       <Dropdown
         open={menuOpen}
         onClose={closeMenu}
