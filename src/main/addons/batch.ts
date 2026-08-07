@@ -294,13 +294,21 @@ export async function applyPlan(
         // their quarantined `ext:<pkg>@<repo>` id, so they never match an official package.
         const row = cache ? rowsFor().find((candidate) => candidate.canonicalId === `ext:${pkgId}`) : undefined
         const cell = row?.perMinor.get(request.minor)
-        if (cell && !cell.missing) return fail('skipped', 'Already installed here — use its toggle instead')
+        // an uninstall of the sitting copy in this same plan makes it a version
+        // switch (the update path), not a duplicate install
+        const beingReplaced = Boolean(
+          cell && plan.uninstalls.some((u) => u.minor === request.minor && u.module === cell.module)
+        )
+        if (cell && !cell.missing && !beingReplaced) {
+          return fail('skipped', 'Already installed here — use its toggle instead')
+        }
         const fullVersion = /^\d+\.\d+\.\d+/.exec(build.version)?.[0] ?? `${request.minor}.0`
         const release = await findCompatibleRelease(pkgId, fullVersion)
         if (!release) return fail('skipped', `Not available for Blender ${request.minor} on extensions.blender.org`)
         const path = await downloadRelease(release)
-        // a dangling entry from another repo gets retired in the same run
-        const stale = cell?.module ?? null
+        // a dangling entry from another repo gets retired in the same run (a replaced
+        // copy is already handled by its own uninstall op)
+        const stale = beingReplaced ? null : (cell?.module ?? null)
         resolved.push({
           request,
           seq,

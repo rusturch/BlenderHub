@@ -46,6 +46,11 @@ export function invalidateAddonsCache(): void {
   cache = null
 }
 
+/** last scan held in memory — the background add-on update check reads it, never scans */
+export function getAddonsScanCache(): VersionAddons[] | null {
+  return cache
+}
+
 const MINOR_RE = /^\d+\.\d+$/
 
 // A Blender add-on module is a Python module name OR a folder/file name — legacy single-file

@@ -13,6 +13,7 @@ import AddonsPage from './pages/Addons'
 import SyncPage from './pages/Sync'
 import ActivityPage from './pages/Activity'
 import SettingsPage from './pages/Settings'
+import type { HubNotification } from '../../shared/types'
 
 export default function App() {
   const [page, setPage] = useState<Page>('projects')
@@ -20,8 +21,9 @@ export default function App() {
   const [installsSearch, setInstallsSearch] = useState<string>('')
   const [addonsSearch, setAddonsSearch] = useState<string>('')
   const [settingsHighlight, setSettingsHighlight] = useState<string | null>(null)
-  // bumped after a completed drag-and-drop: remounts the page area so the target
-  // tab re-reads its data even when the drop landed on the tab already open
+  // bumped after a completed drag-and-drop or a notification jump: remounts the page
+  // area so the target tab re-reads its data (and picks up a prefilled search) even
+  // when the jump lands on the tab already open
   const [dropEpoch, setDropEpoch] = useState(0)
   // the sidebar renders it, the title bar toggles it — so it lives in their parent
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => uiGet('sidebar.collapsed') === '1')
@@ -56,6 +58,38 @@ export default function App() {
   // the tray's page shortcuts land here regardless of which page is currently open
   useEffect(() => getLauncherApi().api.tray.onNavigate(navigate), [])
 
+  // the bell's entries jump to the page that can act on them, carrying a search
+  // where one helps pin the exact row
+  const handleNotificationClick = (notification: HubNotification): void => {
+    setSettingsHighlight(null)
+    switch (notification.category) {
+      case 'launcher-update':
+        openSettings('updates')
+        return
+      case 'superhive-auth':
+        openSettings('superhive')
+        return
+      case 'sync-changes':
+        setPage('sync')
+        return
+      case 'addon-update':
+        setAddonsSearch(notification.payload.name)
+        setDropEpoch((epoch) => epoch + 1)
+        setPage('addons')
+        return
+      case 'blender-update':
+        setInstallsSearch(notification.payload.targetVersion)
+        setDropEpoch((epoch) => epoch + 1)
+        setPage('installs')
+        return
+      case 'operation':
+        setInstallsSearch(notification.payload.version)
+        setDropEpoch((epoch) => epoch + 1)
+        setPage('installs')
+        return
+    }
+  }
+
   const handleDropComplete = (target: Page | null, addonSearch: string | null): void => {
     if (!target) return
     // not navigate(): it would wipe the add-on search being handed over
@@ -75,7 +109,10 @@ export default function App() {
         {/* panel-colored shell: the only place it shows through is the rounded corner
             where the content area is cut away from it */}
         <div className="flex h-full flex-col bg-surface-panel">
-          <TitleBar onUpdateClick={() => openSettings('updates')} />
+          <TitleBar
+            onNotificationClick={handleNotificationClick}
+            onOpenNotificationSettings={() => openSettings('notifications')}
+          />
           <div className="flex min-h-0 flex-1">
             <Sidebar
               current={page}

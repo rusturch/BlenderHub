@@ -413,6 +413,25 @@ export default function AddonsPage({
     [stageInstall]
   )
 
+  // the name-cell update chip: stage the repo's newer release into every column that
+  // holds an older copy (each lands as an uninstall+install switch on Apply); a second
+  // click cancels the whole staging
+  const stageUpdateEverywhere = useCallback(
+    (row: MatrixRow, targets: [string, AddonInfo][], src: InstallSource) => {
+      setPendingInstall((previous) => {
+        const next = new Map(previous)
+        const keys = targets.map(([minor]) => installKey(minor, row.groupId))
+        const allStaged = keys.every((key) => sameSource(next.get(key), src))
+        for (const key of keys) {
+          if (allStaged) next.delete(key)
+          else next.set(key, src)
+        }
+        return next
+      })
+    },
+    []
+  )
+
   const toggleExpanded = useCallback((groupId: string) => {
     setExpandedRows((previous) => {
       const next = new Set(previous)
@@ -1215,6 +1234,29 @@ export default function AddonsPage({
                     ) : (
                       visibleRows.map((row) => {
                         const cells = [...row.perMinor.entries()].filter(([minor]) => okMinors.has(minor))
+                        // the repo's latest release vs the installed copies — drives the update
+                        // chip and the repo sub-row. The catalog answers for the newest installed
+                        // Blender; older minors are re-resolved on Apply and may receive an older
+                        // (or the very same) build.
+                        const repoSrc =
+                          row.installVia?.kind === 'superhive' || row.installVia?.kind === 'blender_org'
+                            ? row.installVia
+                            : undefined
+                        const repoVersion = repoSrc ? numericVersion(repoSrc.version ?? null) : null
+                        const updatableCells = repoVersion
+                          ? cells.filter(([minor, addon]) => {
+                              if (addon.missing || !moduleOk(addon.module)) return false
+                              if (addon.origin !== 'user' && addon.origin !== 'extension') return false
+                              if (installBlocker(repoSrc!, minor)) return false
+                              const installed = numericVersion(addon.version)
+                              return Boolean(installed && compareVersionsDesc(repoVersion, installed) < 0)
+                            })
+                          : []
+                        const updateStaged =
+                          updatableCells.length > 0 &&
+                          updatableCells.every(([minor]) =>
+                            sameSource(pendingInstall.get(installKey(minor, row.groupId)), repoSrc!)
+                          )
                         // every column where the add-on CAN be active: an installed toggleable copy
                         // (non-core, files present, valid module) OR an empty cell the row has a source for.
                         // The row switch means "active in all of these", so it drives both enable and install.
@@ -1260,6 +1302,19 @@ export default function AddonsPage({
                           unit.cells.push(cell)
                           if ((addon.origin === 'user' || addon.origin === 'extension') && !addon.missing && moduleOk(addon.module))
                             unit.removable.push(cell)
+                        }
+                        // the repo's release, when newer than every local version, gets its own
+                        // sub-row — picking it into a column is the per-cell update (unitSourceFor
+                        // hands the newest unit the repo source)
+                        if (
+                          repoVersion &&
+                          units.size > 0 &&
+                          [...units.values()].every((unit) => {
+                            const local = numericVersion(unit.version)
+                            return !local || compareVersionsDesc(repoVersion, local) < 0
+                          })
+                        ) {
+                          ensureVersionUnit(repoVersion)
                         }
                         const unitRows = [...units.values()].sort((a, b) => {
                           const av = numericVersion(a.version)
@@ -1342,6 +1397,27 @@ export default function AddonsPage({
                                   >
                                     {subCount}
                                   </span>
+                                )}
+                                {updatableCells.length > 0 && (
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      stageUpdateEverywhere(row, updatableCells, repoSrc!)
+                                    }}
+                                    disabled={busy || !isDesktop}
+                                    title={
+                                      updateStaged
+                                        ? t('addons.updateChipStagedHint', { version: repoVersion ?? '' })
+                                        : t('addons.updateChipHint', { version: repoVersion ?? '' })
+                                    }
+                                    className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold tracking-wide transition-colors disabled:opacity-50 ${
+                                      updateStaged
+                                        ? 'bg-blender text-on-accent'
+                                        : 'bg-blender/15 text-blender hover:bg-blender/25'
+                                    }`}
+                                  >
+                                    ↑ {repoVersion}
+                                  </button>
                                 )}
                                 {removed && (
                                   <span
@@ -1484,7 +1560,12 @@ export default function AddonsPage({
                                   ? t('addons.tagInstalledInLibrary')
                                   : hasInstalled
                                     ? t('addons.tagInstalled')
-                                    : t('addons.tagInLibrary')
+                                    : unit.libEntry
+                                      ? t('addons.tagInLibrary')
+                                      : // neither installed nor stored — the repo pseudo-unit
+                                        repoSrc?.kind === 'superhive'
+                                        ? t('addons.tabSuperhive')
+                                        : t('addons.tabBlenderOrg')
                               const canUninstall = unit.removable.length > 0 || Boolean(unit.libEntry)
                               const isNewest = unit.key === newestUnitKey
                               return (

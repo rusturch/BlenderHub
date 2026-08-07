@@ -342,6 +342,14 @@ function createPreviewFallbackApi(): LauncherApi {
     // single browser tab — there is no second window to hear from
     onChanged: () => () => {}
   }
+  const notifications: LauncherApi['notifications'] = {
+    // no background checks in the browser preview — the bell stays empty
+    list: async () => [],
+    markAllRead: async () => {},
+    dismiss: async () => {},
+    dismissAll: async () => {},
+    onChanged: () => () => {}
+  }
   const themes: LauncherApi['themes'] = {
     // no data folder in the browser — built-in presets still work, user themes don't
     list: async () => [],
@@ -393,6 +401,7 @@ function createPreviewFallbackApi(): LauncherApi {
     storage,
     uiState,
     updates,
+    notifications,
     themes,
     tray,
     drop,

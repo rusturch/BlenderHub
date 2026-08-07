@@ -13,6 +13,13 @@ import {
   autostartEnabled,
   autostartHiddenEnabled
 } from '../../../shared/autostart'
+import {
+  NOTIFY_BLENDER_ROLLING_KEY,
+  NOTIFY_CATEGORY_KEYS,
+  notifyCategoryEnabledValue,
+  notifyRollingEnabledValue,
+  type ToggleableNotificationCategory
+} from '../../../shared/notifications'
 import type {
   BlendFileInfo,
   Page,
@@ -63,6 +70,37 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
     uiGet('window.minimizeBehavior') === 'tray' ? 'tray' : 'taskbar'
   )
   const [trayPages, setTrayPages] = useState<Page[]>(() => parseTrayPages(uiGet(TRAY_PAGES_KEY)))
+  // keys are read by the main process (main/notifications) — shared/notifications.ts holds the literals
+  const [notifyCategories, setNotifyCategories] = useState<Record<ToggleableNotificationCategory, boolean>>(() => {
+    const read = (category: ToggleableNotificationCategory): boolean =>
+      notifyCategoryEnabledValue(category, uiGet(NOTIFY_CATEGORY_KEYS[category]))
+    return {
+      'blender-update': read('blender-update'),
+      'addon-update': read('addon-update'),
+      operation: read('operation'),
+      'sync-changes': read('sync-changes'),
+      'superhive-auth': read('superhive-auth')
+    }
+  })
+  const [notifyRolling, setNotifyRolling] = useState(() =>
+    notifyRollingEnabledValue(uiGet(NOTIFY_BLENDER_ROLLING_KEY))
+  )
+
+  const toggleNotifyCategory = useCallback(
+    (category: ToggleableNotificationCategory) => {
+      const next = !notifyCategories[category]
+      setNotifyCategories((prev) => ({ ...prev, [category]: next }))
+      uiSet(NOTIFY_CATEGORY_KEYS[category], next ? 'on' : 'off')
+    },
+    [notifyCategories]
+  )
+
+  const toggleNotifyRolling = useCallback(() => {
+    const next = !notifyRolling
+    setNotifyRolling(next)
+    uiSet(NOTIFY_BLENDER_ROLLING_KEY, next ? 'on' : 'off')
+  }, [notifyRolling])
+
   // keys are read by the main process (main/autostart.ts) — shared/autostart.ts holds the literals
   const [startupEnabled, setStartupEnabled] = useState(() => autostartEnabled(uiGet(AUTOSTART_KEY)))
   const [startupMinimized, setStartupMinimized] = useState(() =>
@@ -162,7 +200,7 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
   }, [refreshStorage])
 
   useEffect(() => {
-    if (highlight === 'superhive' || highlight === 'updates') {
+    if (highlight === 'superhive' || highlight === 'updates' || highlight === 'notifications') {
       document
         .getElementById(`${highlight}-card`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -485,6 +523,73 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
             >
               {t('settings.updatesOpenReleases')}
             </button>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title={t('settings.notifications')}
+          hint={t('settings.notificationsHint')}
+          anchorId="notifications-card"
+          highlighted={highlight === 'notifications'}
+        >
+          <div
+            title={desktopOnlyTitle}
+            className={`flex flex-col gap-2 ${isDesktop ? '' : 'opacity-40'}`}
+          >
+            <label
+              className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
+                isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={notifyCategories['blender-update']}
+                onChange={() => toggleNotifyCategory('blender-update')}
+                disabled={!isDesktop}
+                className="accent-blender disabled:cursor-not-allowed"
+              />
+              {t('settings.notifyBlender')}
+            </label>
+            <label
+              className={`ml-5 flex items-center gap-1.5 self-start text-xs transition-colors ${
+                isDesktop && notifyCategories['blender-update']
+                  ? 'cursor-pointer text-zinc-300 hover:text-zinc-100'
+                  : 'cursor-not-allowed text-zinc-600'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={notifyRolling}
+                onChange={toggleNotifyRolling}
+                disabled={!isDesktop || !notifyCategories['blender-update']}
+                className="accent-blender disabled:cursor-not-allowed"
+              />
+              {t('settings.notifyBlenderRolling')}
+            </label>
+            {(
+              [
+                ['addon-update', 'settings.notifyAddons'],
+                ['operation', 'settings.notifyOperations'],
+                ['sync-changes', 'settings.notifySync'],
+                ['superhive-auth', 'settings.notifySuperhive']
+              ] as [ToggleableNotificationCategory, string][]
+            ).map(([category, labelKey]) => (
+              <label
+                key={category}
+                className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
+                  isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={notifyCategories[category]}
+                  onChange={() => toggleNotifyCategory(category)}
+                  disabled={!isDesktop}
+                  className="accent-blender disabled:cursor-not-allowed"
+                />
+                {t(labelKey)}
+              </label>
+            ))}
           </div>
         </SectionCard>
 

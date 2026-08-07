@@ -6,6 +6,7 @@ import {
   getReleasePageUrl,
   installUpdateAndRestart
 } from './updates'
+import { applyLauncherUpdateState } from '../notifications/service'
 import type { UpdateCheckResult, UpdateDownloadProgress } from '../../shared/types'
 
 // Application Security Requirement: the renderer never passes URLs or paths —
@@ -21,8 +22,12 @@ function broadcast(channel: string, payload: unknown): void {
 export function registerUpdatesIpc(): void {
   cleanupAfterUpdate()
   // every completed check/download pushes the fresh state to all windows, so the
-  // sidebar badge tracks results no matter which page triggered them
-  const emitState = (state: UpdateCheckResult): void => broadcast('updates:state', state)
+  // sidebar badge tracks results no matter which page triggered them — and the
+  // notification bell mirrors the same state
+  const emitState = (state: UpdateCheckResult): void => {
+    broadcast('updates:state', state)
+    applyLauncherUpdateState(state)
+  }
   // warm the check so the sidebar badge shows up shortly after launch
   void checkForUpdate(false).then(emitState)
 

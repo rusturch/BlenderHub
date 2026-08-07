@@ -223,6 +223,11 @@ export const REMOVED_BUNDLED: Record<string, { name: string; note: string }> = {
   }
 }
 
+/** add-on versions come from bl_info and can be arbitrary text — compare only clean x.y.z */
+export function numericVersion(version: string | null | undefined): string | null {
+  return version && /^\d+(\.\d+)*$/.test(version) ? version : null
+}
+
 /** the removed-add-on info for a row's canonical id (mod:<module>), or null */
 export function removedBundledInfo(canonicalId: string): { name: string; note: string } | null {
   if (!canonicalId.startsWith('mod:')) return null

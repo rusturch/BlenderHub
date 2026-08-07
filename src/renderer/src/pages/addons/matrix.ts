@@ -1,8 +1,11 @@
 import {
+  numericVersion,
   removedBundledInfo,
   type AddonGroupRow,
   type AddonSource
 } from '../../../../shared/addon-identity'
+
+export { numericVersion }
 import { compareVersionsDesc } from '../../../../shared/blender-builds'
 import type { AddonInfo, ExtensionCatalogItem, LibraryAddon } from '../../../../shared/types'
 import type { InstallSource, MatrixRow, MatrixUnit } from './types'
@@ -66,18 +69,14 @@ export function librarySource(entry: LibraryAddon): InstallSource {
     id: entry.id,
     minBlender: entry.minBlender,
     maxBlender: entry.maxBlender ?? null,
-    isExtension: entry.format === 'extension'
+    isExtension: entry.format === 'extension',
+    version: entry.version
   }
 }
 
 /** two install sources point at the same thing (for the mutually-exclusive per-column pick) */
 export function sameSource(a: InstallSource | undefined, b: InstallSource): boolean {
   return Boolean(a) && a!.kind === b.kind && a!.id === b.id
-}
-
-/** add-on versions come from bl_info and can be arbitrary text — compare only clean x.y.z */
-export function numericVersion(version: string | null | undefined): string | null {
-  return version && /^\d+(\.\d+)*$/.test(version) ? version : null
 }
 
 /** why this add-on cannot be installed into that minor, or null when it can */
@@ -254,7 +253,8 @@ export function buildMatrix(
       id: item.pkgId,
       minBlender: item.minBlender,
       maxBlender: item.maxBlender,
-      isExtension: true
+      isExtension: true,
+      version: item.version
     }
     const existing = byPkgId.get(item.pkgId)
     if (existing) {
@@ -278,7 +278,8 @@ export function buildMatrix(
       id: item.pkgId,
       minBlender: item.minBlender,
       maxBlender: item.maxBlender,
-      isExtension: true
+      isExtension: true,
+      version: item.version
     }
     const existing = byPkgId.get(item.pkgId)
     if (existing) {

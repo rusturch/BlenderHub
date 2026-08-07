@@ -12,6 +12,8 @@ import {
 import { onUiChanged, uiGet } from '../lib/ui-store'
 import { sanitizeThemeColors, THEME_SELECTED_UI_KEY } from '../../../shared/theme'
 import type { ThemeColors } from '../../../shared/theme'
+import { isReleasedCycle } from '../../../shared/blender-builds'
+import type { HubNotification } from '../../../shared/types'
 import Dropdown from './Dropdown'
 
 // Both platforms let the OS draw its window buttons on top of this bar, just in
@@ -36,6 +38,38 @@ function BellIcon({ className = 'h-5 w-5' }: { className?: string }) {
     >
       <path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" />
       <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+    </svg>
+  )
+}
+
+function GearIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
+  )
+}
+
+function XIcon({ className = 'h-3 w-3' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <path d="m6 6 12 12M18 6 6 18" />
     </svg>
   )
 }
@@ -165,38 +199,105 @@ function ThemeMenu() {
   )
 }
 
-interface TitleBarProps {
-  onUpdateClick: () => void
+/** "4.5.12" for released builds, "5.3.0 alpha" otherwise — cycle words are badges, never translated */
+const buildLabel = (version: string, cycle: string): string =>
+  isReleasedCycle(cycle) || !cycle ? version : `${version} ${cycle}`
+
+/** localized title/detail for one notification — records carry data, text is built here */
+function notificationTexts(
+  notification: HubNotification,
+  t: (key: string, params?: Record<string, string | number>) => string
+): { title: string; detail: string | null } {
+  switch (notification.category) {
+    case 'launcher-update':
+      return {
+        title: t('nav.updateAvailable'),
+        detail: t('settings.updatesAvailable', { version: notification.payload.version })
+      }
+    case 'blender-update': {
+      const { installedVersion, installedCycle, targetVersion, targetCycle } = notification.payload
+      return {
+        title: t('notifications.blenderUpdate'),
+        detail: `${buildLabel(installedVersion, installedCycle)} → ${buildLabel(targetVersion, targetCycle)}`
+      }
+    }
+    case 'addon-update': {
+      const { name, installedVersion, catalogVersion } = notification.payload
+      return {
+        title: t('notifications.addonUpdate'),
+        detail: `${name}: ${installedVersion} → ${catalogVersion}`
+      }
+    }
+    case 'operation': {
+      const { result, version, releaseCycle, error } = notification.payload
+      const label = buildLabel(version, releaseCycle)
+      return result === 'done'
+        ? { title: t('notifications.installDone', { version: label }), detail: null }
+        : { title: t('notifications.installFailed', { version: label }), detail: error ?? null }
+    }
+    case 'sync-changes': {
+      const { minors, conflicts } = notification.payload
+      return {
+        title: conflicts > 0 ? t('notifications.syncConflicts') : t('notifications.syncChanges'),
+        detail: t('notifications.syncChangesDetail', { versions: minors.join(', ') })
+      }
+    }
+    case 'superhive-auth':
+      return {
+        title: t('notifications.superhiveAuth'),
+        detail: t('notifications.superhiveAuthDetail')
+      }
+  }
+  // the store filters unknown categories out, but a record slipping through must
+  // degrade to a label, never crash the render
+  return { title: (notification as unknown as { category: string }).category, detail: null }
 }
 
-export default function TitleBar({ onUpdateClick }: TitleBarProps) {
-  const { t } = useTranslation()
+/** today → time of day, older → short date; plain Intl, no extra locale keys needed */
+function notificationWhen(createdAt: number, language: string): string {
+  const date = new Date(createdAt)
+  const sameDay = new Date().toDateString() === date.toDateString()
+  return sameDay
+    ? date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString(language, { day: 'numeric', month: 'short' })
+}
+
+interface TitleBarProps {
+  onNotificationClick: (notification: HubNotification) => void
+  /** the panel's gear — jumps to the notification toggles in Settings */
+  onOpenNotificationSettings: () => void
+}
+
+export default function TitleBar({ onNotificationClick, onOpenNotificationSettings }: TitleBarProps) {
+  const { t, language } = useTranslation()
   const mac = isMac()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [updateAvailable, setUpdateAvailable] = useState(false)
-  const [latestVersion, setLatestVersion] = useState<string | null>(null)
+  const [items, setItems] = useState<HubNotification[]>([])
 
   useEffect(() => {
     const { api } = getLauncherApi()
     let alive = true
-    api.updates
-      .check()
-      .then((result) => {
-        if (!alive) return
-        setUpdateAvailable(result.updateAvailable)
-        setLatestVersion(result.latestVersion)
+    api.notifications
+      .list()
+      .then((list) => {
+        if (alive) setItems(list)
       })
       .catch(() => {})
-    // Settings' manual re-check / a finished download push their result here too
-    const unsubscribe = api.updates.onStateChanged((state) => {
-      setUpdateAvailable(state.updateAvailable)
-      setLatestVersion(state.latestVersion)
-    })
+    // background detections / read-dismiss actions in any window land here
+    const unsubscribe = api.notifications.onChanged((list) => setItems(list))
     return () => {
       alive = false
       unsubscribe()
     }
   }, [])
+
+  const unread = items.filter((item) => !item.read).length
+
+  // closing the panel means "seen" — the badge clears, the entries stay until dismissed
+  const closeMenu = (): void => {
+    setMenuOpen(false)
+    if (unread > 0) void getLauncherApi().api.notifications.markAllRead().catch(() => {})
+  }
 
   return (
     <div
@@ -211,37 +312,91 @@ export default function TitleBar({ onUpdateClick }: TitleBarProps) {
       <ThemeMenu />
       <Dropdown
         open={menuOpen}
-        onClose={() => setMenuOpen(false)}
+        onClose={closeMenu}
         align="right"
-        menuClassName="w-64 rounded-lg border border-white/10 bg-surface-dialog p-1 shadow-xl"
+        menuClassName="max-h-96 w-80 overflow-auto rounded-lg border border-white/10 bg-surface-dialog p-1 shadow-xl"
         trigger={
           <button
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
             title={t('titlebar.notifications')}
             className="relative flex h-7 w-7 items-center justify-center rounded-md text-icon transition-colors hover:bg-white/10 hover:text-icon-hover [-webkit-app-region:no-drag]"
           >
             <BellIcon className="h-[18px] w-[18px]" />
-            {updateAvailable && (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blender" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blender px-1 text-[9px] font-semibold leading-none text-on-accent">
+                {unread > 9 ? '9+' : unread}
+              </span>
             )}
           </button>
         }
       >
-        {updateAvailable ? (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+          <span className="text-xs font-semibold text-zinc-400">{t('titlebar.notifications')}</span>
           <button
             onClick={() => {
-              setMenuOpen(false)
-              onUpdateClick()
+              closeMenu()
+              onOpenNotificationSettings()
             }}
-            className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-white/10"
+            title={t('notifications.settingsHint')}
+            className="flex h-6 w-6 items-center justify-center rounded text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
           >
-            <span className="text-sm font-medium text-zinc-100">{t('nav.updateAvailable')}</span>
-            <span className="text-xs text-zinc-500">
-              {t('settings.updatesAvailable', { version: latestVersion ?? '' })}
-            </span>
+            <GearIcon className="h-3.5 w-3.5" />
           </button>
-        ) : (
+        </div>
+        <div className="mb-1 border-t border-white/5" />
+        {items.length === 0 ? (
           <p className="px-3 py-2 text-xs text-zinc-500">{t('titlebar.noNotifications')}</p>
+        ) : (
+          <>
+            {items.map((item) => {
+              const { title, detail } = notificationTexts(item, t)
+              return (
+                <div key={item.id} className="group relative">
+                  <button
+                    onClick={() => {
+                      closeMenu()
+                      onNotificationClick(item)
+                    }}
+                    className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 pr-8 text-left transition-colors hover:bg-white/10"
+                  >
+                    <span className="flex w-full min-w-0 items-center gap-2">
+                      {!item.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blender" />}
+                      <span
+                        className={`min-w-0 truncate text-sm ${
+                          item.read ? 'text-zinc-300' : 'font-medium text-zinc-100'
+                        }`}
+                      >
+                        {title}
+                      </span>
+                      <span className="ml-auto shrink-0 text-[10px] text-zinc-600">
+                        {notificationWhen(item.createdAt, language)}
+                      </span>
+                    </span>
+                    {detail && <span className="w-full truncate text-xs text-zinc-500">{detail}</span>}
+                  </button>
+                  <button
+                    onClick={() => {
+                      void getLauncherApi().api.notifications.dismiss(item.id).catch(() => {})
+                    }}
+                    title={t('notifications.dismiss')}
+                    className="absolute right-1.5 top-1.5 hidden h-5 w-5 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-200 group-hover:flex"
+                  >
+                    <XIcon />
+                  </button>
+                </div>
+              )
+            })}
+            <div className="mt-1 border-t border-white/5 pt-1">
+              <button
+                onClick={() => {
+                  void getLauncherApi().api.notifications.dismissAll().catch(() => {})
+                }}
+                className="w-full rounded-md px-3 py-1.5 text-left text-xs text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-300"
+              >
+                {t('notifications.clearAll')}
+              </button>
+            </div>
+          </>
         )}
       </Dropdown>
     </div>

@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { mkdir } from 'fs/promises'
-import { fetchAllBuilds } from './builds-api'
+import { findCachedRemoteBuild, getRemoteBuilds, refreshRemoteBuilds } from './remote-cache'
 import {
   findInstalled,
   getDownloadsDir,
@@ -17,15 +17,14 @@ import {
 import { locateInstalls } from './locate'
 import { listRunningBlenders, requestCloseBlenders } from './running'
 import { scheduleAssetLibraryReconcile } from '../asset-library/service'
+import { notifyBuildInstallResult } from '../notifications/service'
 import { requireString } from '../ipc-util'
-import type { InstallProgress, RemoteBuild } from '../../shared/types'
+import type { InstallProgress } from '../../shared/types'
 
 // Application Security Requirement: the renderer only passes opaque ids over IPC;
 // download URLs and filesystem paths are resolved in the main process against state
 // it fetched itself, so a compromised page cannot target arbitrary URLs or paths.
 
-let remoteCache: { fetchedAt: number; builds: RemoteBuild[] } | null = null
-const REMOTE_CACHE_TTL_MS = 10 * 60 * 1000
 // one controller per install in flight — doubles as the "already running" guard
 // and as the handle builds:cancel-install aborts
 const installsInFlight = new Map<string, AbortController>()
@@ -46,23 +45,13 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-async function refreshRemoteCache(): Promise<RemoteBuild[]> {
-  const builds = await fetchAllBuilds()
-  remoteCache = { fetchedAt: Date.now(), builds }
-  return builds
-}
-
 export function registerBlenderIpc(): void {
   // warm the cache so the Installs page opens instantly
-  void refreshRemoteCache().catch((error) => console.warn('[builds] prefetch failed:', error))
+  void refreshRemoteBuilds().catch((error) => console.warn('[builds] prefetch failed:', error))
 
-  ipcMain.handle('builds:list-remote', async (_event, refresh: unknown) => {
+  ipcMain.handle('builds:list-remote', (_event, refresh: unknown) => {
     console.log('[ipc] builds:list-remote requested by renderer')
-    const cached = remoteCache
-    if (!cached || refresh === true || Date.now() - cached.fetchedAt > REMOTE_CACHE_TTL_MS) {
-      return refreshRemoteCache()
-    }
-    return cached.builds
+    return getRemoteBuilds(refresh === true)
   })
 
   ipcMain.handle('builds:list-installed', () => listInstalled())
@@ -72,7 +61,7 @@ export function registerBlenderIpc(): void {
     if (rawKeepExisting !== undefined && typeof rawKeepExisting !== 'boolean') {
       throw new Error('keepExisting must be a boolean')
     }
-    const build = remoteCache?.builds.find((candidate) => candidate.id === buildId)
+    const build = findCachedRemoteBuild(buildId)
     if (!build) throw new Error('Unknown build — refresh the list and try again')
     if (installsInFlight.has(buildId)) throw new Error('This build is already being installed')
     const controller = new AbortController()
@@ -87,6 +76,7 @@ export function registerBlenderIpc(): void {
       // a new version may need the launcher asset library registered (deferred
       // anyway until the version has run once and owns a userpref.blend)
       scheduleAssetLibraryReconcile()
+      notifyBuildInstallResult(build)
       return installed
     } catch (error) {
       // a cancel is the user's own doing, not a failure to report as one
@@ -97,6 +87,7 @@ export function registerBlenderIpc(): void {
         phase,
         ...(phase === 'error' ? { error: message } : {})
       } satisfies InstallProgress)
+      if (phase === 'error') notifyBuildInstallResult(build, message)
       throw error
     } finally {
       installsInFlight.delete(buildId)

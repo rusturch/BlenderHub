@@ -726,6 +726,66 @@ export interface AssetLibraryApi {
   onProgress: (callback: (progress: AssetLibraryProgress) => void) => () => void
 }
 
+/**
+ * In-app notification center (the bell in the title bar). Records carry DATA only —
+ * the renderer builds the localized text, so stored notifications survive language
+ * switches. State-derived categories are re-detected by background checks and
+ * reconciled against the store; 'operation' entries are one-shot events.
+ */
+export interface NotificationPayloads {
+  /** a newer launcher release is published */
+  'launcher-update': { version: string }
+  /** a catalog build supersedes an installed copy — the Installs Update button, as a ping */
+  'blender-update': {
+    installedVersion: string
+    installedCycle: string
+    targetVersion: string
+    targetCycle: string
+  }
+  /** an installed add-on has a newer release on a connected repo */
+  'addon-update': {
+    name: string
+    pkgId: string
+    installedVersion: string
+    catalogVersion: string
+    host: 'superhive' | 'blender_org'
+  }
+  /** a build install finished or failed (cancelled installs stay quiet) */
+  operation: { result: 'done' | 'error'; version: string; releaseCycle: string; error?: string }
+  /** linked Sync cells drifted since their last sync */
+  'sync-changes': { minors: string[]; conflicts: number; changed: number }
+  /** the stored Superhive token stopped working */
+  'superhive-auth': Record<string, never>
+}
+
+export type NotificationCategory = keyof NotificationPayloads
+
+export type HubNotification = {
+  [C in NotificationCategory]: {
+    /** stable content-derived id, prefixed with the category — the dedup key */
+    id: string
+    category: C
+    createdAt: number
+    read: boolean
+    payload: NotificationPayloads[C]
+  }
+}[NotificationCategory]
+
+/** what detectors produce — the store stamps createdAt/read for genuinely new ids */
+export type NotificationDraft = {
+  [C in NotificationCategory]: { id: string; category: C; payload: NotificationPayloads[C] }
+}[NotificationCategory]
+
+export interface NotificationsApi {
+  /** active notifications, newest first */
+  list: () => Promise<HubNotification[]>
+  markAllRead: () => Promise<void>
+  dismiss: (id: string) => Promise<void>
+  dismissAll: () => Promise<void>
+  /** the active list changed — new detection, or read/dismiss from any window */
+  onChanged: (callback: (items: HubNotification[]) => void) => () => void
+}
+
 /** requests originating from native OS chrome outside the page (currently: the tray menu) */
 export interface TrayApi {
   /** the tray's page shortcuts (Projects/Installs/…) ask the open window to switch tabs */
@@ -780,6 +840,7 @@ export interface LauncherApi {
   storage: StorageApi
   uiState: UiStateApi
   updates: UpdatesApi
+  notifications: NotificationsApi
   themes: ThemesApi
   tray: TrayApi
   drop: DropApi

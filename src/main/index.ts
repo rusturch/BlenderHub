@@ -9,6 +9,8 @@ import { registerDropIpc } from './drop/ipc'
 import { registerSettingsSyncIpc } from './sync/ipc'
 import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
+import { registerNotificationsIpc } from './notifications/ipc'
+import { setupNotifications } from './notifications/service'
 import { registerUiStateIpc, readUiState } from './ui-state'
 import { registerAssetLibraryIpc } from './asset-library/ipc'
 import { setupAssetLibrary } from './asset-library/service'
@@ -140,11 +142,13 @@ if (!app.requestSingleInstanceLock()) {
     registerSettingsSyncIpc()
     registerStorageIpc()
     registerUpdatesIpc()
+    registerNotificationsIpc()
     registerThemesIpc()
     registerAssetLibraryIpc()
     setupTray()
     setupAutostart()
     setupAssetLibrary()
+    setupNotifications()
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

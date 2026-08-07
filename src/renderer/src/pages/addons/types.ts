@@ -9,6 +9,12 @@ export interface InstallSource {
   minBlender: string | null
   maxBlender: string | null
   isExtension: boolean
+  /**
+   * the version this source installs, when known: the catalog's latest release (as served
+   * for the newest installed Blender — older minors may get an older build on Apply) or a
+   * stored file's own version. Drives the update chip and the repo sub-row.
+   */
+  version?: string | null
   /** 'backup' carry: exact module + the version whose installed copy gets packed on Apply */
   module?: string
   sourceMinor?: string

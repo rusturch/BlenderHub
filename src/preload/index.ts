@@ -21,6 +21,7 @@ import type {
   LibraryAddResult,
   LibraryInstallProgress,
   DuplicatedFile,
+  HubNotification,
   NewProjectInput,
   Page,
   ProjectFolder,
@@ -240,6 +241,19 @@ const api: LauncherApi = {
     },
     installAndRestart: (): Promise<void> => ipcRenderer.invoke('updates:install-restart'),
     openReleasePage: (): Promise<void> => ipcRenderer.invoke('updates:open-release-page')
+  },
+  notifications: {
+    list: (): Promise<HubNotification[]> => ipcRenderer.invoke('notifications:list'),
+    markAllRead: (): Promise<void> => ipcRenderer.invoke('notifications:mark-all-read'),
+    dismiss: (id: string): Promise<void> => ipcRenderer.invoke('notifications:dismiss', id),
+    dismissAll: (): Promise<void> => ipcRenderer.invoke('notifications:dismiss-all'),
+    onChanged: (callback: (items: HubNotification[]) => void): (() => void) => {
+      const listener = (_event: unknown, items: HubNotification[]): void => callback(items)
+      ipcRenderer.on('notifications:changed', listener)
+      return () => {
+        ipcRenderer.removeListener('notifications:changed', listener)
+      }
+    }
   },
   themes: {
     list: (): Promise<UserThemeFile[]> => ipcRenderer.invoke('themes:list'),

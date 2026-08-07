@@ -60,6 +60,9 @@ export function apiPlatform(): string {
   return `linux-${cpu}`
 }
 
+/** the repo refused the stored token (401/403) — callers can tell auth from outages */
+export class RepoAuthError extends Error {}
+
 // cache keyed by host|version — a token change is handled by clearing the cache
 const listingCache = new Map<string, { fetchedAt: number; byId: Map<string, RemoteRelease> }>()
 
@@ -90,7 +93,7 @@ export async function fetchRepoListing(
 
   const response = await fetch(url, { headers })
   if (response.status === 401 || response.status === 403) {
-    throw new Error(`${label} rejected the request — check your API token in Settings`)
+    throw new RepoAuthError(`${label} rejected the request — check your API token in Settings`)
   }
   if (!response.ok) throw new Error(`${label} responded with HTTP ${response.status}`)
   const payload = (await response.json()) as { data?: unknown }

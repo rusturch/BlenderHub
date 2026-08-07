@@ -5,6 +5,11 @@
 // minor owns its own config dir).
 let busyLabel: string | null = null
 
+/** peek for background jobs that must never contend for the lock with user actions */
+export function opLockBusy(): boolean {
+  return busyLabel !== null
+}
+
 export async function withExclusiveOp<T>(label: string, task: () => Promise<T>): Promise<T> {
   if (busyLabel) {
     throw new Error(`Another ${busyLabel} operation is already running — wait for it to finish`)
