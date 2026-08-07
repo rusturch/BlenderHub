@@ -259,6 +259,9 @@
   "syncOffer.fromDefault": "Набор по умолчанию",
   "syncOffer.fromVersion": "Blender {minor}",
   "syncOffer.nothingToCopy": "Нет включённых аддонов для копирования.",
+  "syncOffer.preparing": "Подготовка…",
+  "syncOffer.progressLine": "{phase} Blender {minor}…",
+  "syncOffer.packProgress": "Собираю аддоны…",
   "syncOffer.notNow": "Не сейчас",
 
   "runningGate.title": "Blender ещё запущен",

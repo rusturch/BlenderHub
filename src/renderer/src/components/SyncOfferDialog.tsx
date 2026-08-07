@@ -1,16 +1,55 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { HIDDEN_SYNC_COMPONENT_IDS, SYNC_COMPONENT_IDS } from '../../../shared/types'
-import type { LauncherApi, PlanInstallRequest, PlanOpResult, SyncOpResult } from '../../../shared/types'
+import type {
+  AddonApplyProgress,
+  AddonScanProgress,
+  LauncherApi,
+  LibraryInstallProgress,
+  PlanInstallRequest,
+  PlanOpResult,
+  SyncApplyPhase,
+  SyncApplyProgress,
+  SyncOpResult
+} from '../../../shared/types'
 import { groupAddons } from '../../../shared/addon-identity'
 import { compareVersionsDesc } from '../../../shared/blender-builds'
 import { cleanErrorMessage } from '../lib/format'
 import { useTranslation } from '../lib/i18n'
 import { useBackdropClose } from '../lib/use-backdrop-close'
+import { PHASE_LABEL_KEYS } from '../pages/sync/constants'
 
 type RunState = 'idle' | 'running' | 'done' | 'error'
 
+// the offer targets a single minor, so the settings run has index 0/total 1 the whole
+// time — the bar advances by phase instead of by target count
+const SETTINGS_PHASE_FRACTION: Record<SyncApplyPhase, number> = {
+  backup: 0.2,
+  copying: 0.5,
+  fixup: 0.85,
+  done: 1,
+  error: 1
+}
+
+// the add-ons run interleaves three progress streams; keep only the latest event
+type AddonsProgress =
+  | { kind: 'scan'; progress: AddonScanProgress }
+  | { kind: 'pack'; progress: LibraryInstallProgress }
+  | { kind: 'apply'; progress: AddonApplyProgress }
+
 function statusClass(status: string): string {
   return status === 'ok' ? 'text-emerald-400' : status === 'skipped' ? 'text-zinc-500' : 'text-red-400'
+}
+
+// null fraction = indeterminate (before the first event / during a headless Blender run)
+function ProgressBar({ fraction }: { fraction: number | null }) {
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+      <div
+        className={`h-full rounded-full bg-blender transition-[width] duration-200 ${fraction === null ? 'w-full animate-pulse' : ''}`}
+        style={fraction === null ? undefined : { width: `${(fraction * 100).toFixed(1)}%` }}
+      />
+    </div>
+  )
 }
 
 // Offered once, right after the FIRST build of a brand-new major.minor is added
@@ -45,6 +84,29 @@ export default function SyncOfferDialog({
   const [addonsEmpty, setAddonsEmpty] = useState(false)
   // 'default' — the cross-version default set; otherwise a concrete source minor
   const [addonsFrom, setAddonsFrom] = useState('default')
+
+  const [settingsProgress, setSettingsProgress] = useState<SyncApplyProgress | null>(null)
+  const [addonsProgress, setAddonsProgress] = useState<AddonsProgress | null>(null)
+
+  // main broadcasts these to every window; only listen while our own run is active
+  useEffect(() => {
+    if (settingsState !== 'running') return
+    setSettingsProgress(null)
+    return api.settingsSync.onApplyProgress(setSettingsProgress)
+  }, [settingsState, api])
+
+  useEffect(() => {
+    if (addonsState !== 'running') return
+    setAddonsProgress(null)
+    const offScan = api.addons.onScanProgress((progress) => setAddonsProgress({ kind: 'scan', progress }))
+    const offPack = api.addons.onLibraryProgress((progress) => setAddonsProgress({ kind: 'pack', progress }))
+    const offApply = api.addons.onApplyProgress((progress) => setAddonsProgress({ kind: 'apply', progress }))
+    return () => {
+      offScan()
+      offPack()
+      offApply()
+    }
+  }, [addonsState, api])
 
   const syncSettings = async (): Promise<void> => {
     if (!settingsSource) return
@@ -118,6 +180,29 @@ export default function SyncOfferDialog({
     }
   }
 
+  // scan/pack advance across real counts; the apply phase is one headless Blender run
+  // for the single target minor, so its duration is unknown — indeterminate pulse
+  const addonsFraction =
+    addonsProgress === null
+      ? null
+      : addonsProgress.kind === 'apply'
+        ? addonsProgress.progress.phase === 'done' || addonsProgress.progress.phase === 'error'
+          ? 1
+          : null
+        : (addonsProgress.progress.index + 1) / Math.max(1, addonsProgress.progress.total)
+
+  const addonsProgressLine =
+    addonsProgress === null
+      ? t('syncOffer.preparing')
+      : addonsProgress.kind === 'scan'
+        ? t('addons.progressReading', { minor: addonsProgress.progress.minor })
+        : addonsProgress.kind === 'pack'
+          ? `${t('syncOffer.packProgress')} (${Math.min(
+              addonsProgress.progress.index + 1,
+              addonsProgress.progress.total
+            )}/${addonsProgress.progress.total})`
+          : t('addons.progressApplying', { minor })
+
   const backdrop = useBackdropClose(onClose)
 
   return (
@@ -147,6 +232,21 @@ export default function SyncOfferDialog({
               </button>
             </div>
             <p className="mt-1 text-[11px] text-zinc-500">{t('syncOffer.settingsHint', { source: settingsSource })}</p>
+            {settingsState === 'running' && (
+              <div className="mt-2">
+                <ProgressBar
+                  fraction={settingsProgress ? SETTINGS_PHASE_FRACTION[settingsProgress.phase] : null}
+                />
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  {settingsProgress
+                    ? t('syncOffer.progressLine', {
+                        phase: t(PHASE_LABEL_KEYS[settingsProgress.phase]),
+                        minor: settingsProgress.minor
+                      })
+                    : t('syncOffer.preparing')}
+                </p>
+              </div>
+            )}
             {settingsError && <p className="mt-1 text-xs text-red-400">{settingsError}</p>}
             {settingsResults.length > 0 && (
               <ul className="mt-1 space-y-0.5">
@@ -197,6 +297,12 @@ export default function SyncOfferDialog({
                 ? t('syncOffer.addonsHintDefault')
                 : t('syncOffer.addonsHint', { source: addonsFrom })}
             </p>
+            {addonsState === 'running' && (
+              <div className="mt-2">
+                <ProgressBar fraction={addonsFraction} />
+                <p className="mt-1 text-[11px] text-zinc-500">{addonsProgressLine}</p>
+              </div>
+            )}
             {addonsError && <p className="mt-1 text-xs text-red-400">{addonsError}</p>}
             {addonsEmpty && <p className="mt-1 text-[11px] text-zinc-500">{t('syncOffer.nothingToCopy')}</p>}
             {addonsResults.length > 0 && (

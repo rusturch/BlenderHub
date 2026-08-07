@@ -259,6 +259,9 @@
   "syncOffer.fromDefault": "Default set",
   "syncOffer.fromVersion": "Blender {minor}",
   "syncOffer.nothingToCopy": "Nothing enabled to copy.",
+  "syncOffer.preparing": "Preparing…",
+  "syncOffer.progressLine": "{phase} Blender {minor}…",
+  "syncOffer.packProgress": "Packing add-ons…",
   "syncOffer.notNow": "Not now",
 
   "runningGate.title": "Blender is still running",
