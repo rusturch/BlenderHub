@@ -10,7 +10,7 @@ import { getLauncherApi } from '../lib/preview-fallback'
 import { useTranslation } from '../lib/i18n'
 import { uiGet, uiSet } from '../lib/ui-store'
 import { compareVersionsDesc } from '../../../shared/blender-builds'
-import { HIDDEN_SYNC_COMPONENT_IDS } from '../../../shared/types'
+import { HIDDEN_SYNC_COMPONENT_IDS, SYNC_COMPONENT_IDS } from '../../../shared/types'
 import type { RunningBlender, SettingsBackupInfo, SyncApplyProgress, SyncCellStatus, SyncComponentId, SyncScanResult, SyncVersionColumn } from '../../../shared/types'
 import { locateWithDedup } from './installs/installs-utils'
 import { PENDING_SEP, cellKey, labelOf, hasAnySettings } from './sync/sync-utils'
@@ -448,6 +448,32 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
       else await run()
     },
     [api.builds]
+  )
+
+  // leftovers of an uninstalled version: Blender never removes its settings folder, so
+  // "config only" columns pile up. Trashing one drops its links and sync points too.
+  const deleteSettingsFolder = useCallback(
+    async (column: SyncVersionColumn) => {
+      const bytes = SYNC_COMPONENT_IDS.reduce((sum, id) => sum + (column.components[id]?.bytes ?? 0), 0)
+      const ok = await confirmDialog({
+        title: t('sync.deleteConfigTitle', { minor: column.minor }),
+        message: t('sync.deleteConfigMessage', { minor: column.minor, size: formatBytes(bytes) }),
+        variant: 'danger',
+        tone: 'danger',
+        confirmLabel: t('common.delete')
+      })
+      if (!ok) return
+      setRestoring(true)
+      setError(null)
+      try {
+        absorb(await syncApi.deleteSettingsFolder(column.minor))
+      } catch (err) {
+        setError(cleanErrorMessage(err))
+      } finally {
+        setRestoring(false)
+      }
+    },
+    [syncApi, absorb, confirmDialog, t]
   )
 
   // the fallback for versions the catalog does not carry: point at an existing install
@@ -1227,6 +1253,21 @@ export default function SyncPage({ onShowInstalls }: { onShowInstalls?: (version
                                   className="w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10 disabled:opacity-50"
                                 >
                                   {t('sync.locateVersion')}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    void deleteSettingsFolder(column)
+                                    setVersionMenu(null)
+                                  }}
+                                  disabled={busy || !isDesktop || source === column.minor}
+                                  title={
+                                    source === column.minor
+                                      ? t('sync.deleteConfigSourceHint')
+                                      : t('sync.deleteConfigHint')
+                                  }
+                                  className="w-full rounded px-2 py-1.5 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 disabled:hover:bg-transparent"
+                                >
+                                  {t('sync.deleteConfig')}
                                 </button>
                               </>
                             )}

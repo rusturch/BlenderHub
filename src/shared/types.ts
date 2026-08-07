@@ -549,6 +549,8 @@ export interface SettingsSyncApi {
    * they already hold — bookkeeping only, no files are touched.
    */
   inheritBaselines: (fromSource: string, toSource: string) => Promise<void>
+  /** trash the leftover settings folder of a version that has no installed build */
+  deleteSettingsFolder: (minor: string) => Promise<SyncScanResult>
   /** Record the current state of a cell as its new sync point (used after "Copy into source…"). */
   recordSyncPoint: (minor: string, component: SyncComponentId) => Promise<SyncScanResult>
   listBackups: () => Promise<SettingsBackupInfo[]>

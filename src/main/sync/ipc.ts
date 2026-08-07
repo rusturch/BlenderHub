@@ -8,6 +8,7 @@ import type { SettingsSyncRequest, SyncComponentId, SyncLinks, SyncScanResult } 
 import { scanSettings } from './scan'
 import { applySettingsSync, inheritBaselines, recordSyncPoint, restoreSettingsBackup } from './apply'
 import { deleteBackup, listBackups, revealBackup } from './backups'
+import { deleteSettingsFolder } from './config-dir'
 import { updateSyncState } from './state'
 
 // Application Security Requirement: the renderer sends only minors, component ids and
@@ -135,6 +136,15 @@ export function registerSettingsSyncIpc(): void {
   // bookkeeping only — carries provably-valid sync points to a newly picked source
   ipcMain.handle('sync:inherit-baselines', (_event, rawFrom: unknown, rawTo: unknown) =>
     withExclusiveOp('settings sync', () => inheritBaselines(requireMinor(rawFrom), requireMinor(rawTo)))
+  )
+
+  // leftover settings of an uninstalled version — main resolves the path itself and
+  // refuses anything that still has a build (see deleteSettingsFolder)
+  ipcMain.handle('sync:delete-settings-folder', (_event, rawMinor: unknown) =>
+    withExclusiveOp('settings sync', async () => {
+      cache = await deleteSettingsFolder(requireMinor(rawMinor))
+      return cache
+    })
   )
 
   ipcMain.handle('sync:list-backups', () => listBackups())

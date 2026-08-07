@@ -277,6 +277,9 @@ function createPreviewFallbackApi(): LauncherApi {
     onApplyProgress: () => () => {},
     setLinks: async () => {},
     inheritBaselines: async () => {},
+    deleteSettingsFolder: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
     recordSyncPoint: async () => {
       throw new Error(DESKTOP_ONLY)
     },

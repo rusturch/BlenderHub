@@ -198,6 +198,8 @@ const api: LauncherApi = {
     setLinks: (links: SyncLinks): Promise<void> => ipcRenderer.invoke('sync:set-links', links),
     inheritBaselines: (fromSource: string, toSource: string): Promise<void> =>
       ipcRenderer.invoke('sync:inherit-baselines', fromSource, toSource),
+    deleteSettingsFolder: (minor: string): Promise<SyncScanResult> =>
+      ipcRenderer.invoke('sync:delete-settings-folder', minor),
     recordSyncPoint: (minor: string, component: SyncComponentId): Promise<SyncScanResult> =>
       ipcRenderer.invoke('sync:record-sync-point', minor, component),
     listBackups: (): Promise<SettingsBackupInfo[]> => ipcRenderer.invoke('sync:list-backups'),
