@@ -278,6 +278,16 @@ const readCString = (file: BlendFile, offset: number, maxBytes: number): string 
   return file.buffer.toString('utf8', offset, stop)
 }
 
+// Short char arrays are raw bytes, not text: theme colors are `unsigned char[4]`, and
+// C-string decoding would truncate them at the first zero byte and fold every byte
+// >= 0x80 into U+FFFD — two different colors could then produce the SAME identity, so
+// a real theme edit would read as "in sync". Longer arrays are genuine strings (paths,
+// names) and stay text, which keeps the drift diff readable.
+const BYTE_ARRAY_MAX = 8
+
+const readBytesHex = (file: BlendFile, offset: number, length: number): string =>
+  file.buffer.toString('hex', offset, Math.min(offset + length, file.buffer.length))
+
 function readIntField(file: BlendFile, bodyStart: number, field: FoundField): number {
   const at = bodyStart + field.offset
   if (field.byteSize === 1) return file.buffer.readInt8(at)
@@ -681,16 +691,18 @@ function serializeStruct(
     }
     const dims = dimsOf(rawName)
     if (typeName === 'char' && dims.length > 0) {
-      // char arrays are C strings (bytes past the NUL are uninitialized noise);
-      // a 2D char array is a list of strings
+      // long char arrays are C strings (bytes past the NUL are uninitialized noise);
+      // short ones are byte payloads and must stay exact — see BYTE_ARRAY_MAX
+      const rowLength = dims[dims.length - 1]
+      const readRow = (start: number, length: number): string =>
+        rowLength <= BYTE_ARRAY_MAX ? readBytesHex(file, start, length) : readCString(file, start, length)
       if (dims.length === 1) {
-        out[name] = readCString(file, at, size)
+        out[name] = readRow(at, size)
       } else {
-        const rowLength = dims[dims.length - 1]
         const rows = dims.slice(0, -1).reduce((total, dim) => total * dim, 1)
-        const texts: CanonValue[] = []
-        for (let i = 0; i < rows; i++) texts.push(readCString(file, at + i * rowLength, rowLength))
-        out[name] = texts
+        const values: CanonValue[] = []
+        for (let i = 0; i < rows; i++) values.push(readRow(at + i * rowLength, rowLength))
+        out[name] = values
       }
       continue
     }

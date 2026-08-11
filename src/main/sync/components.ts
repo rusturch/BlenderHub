@@ -151,9 +151,22 @@ export interface ComponentFingerprint {
   lines?: string[]
 }
 
-/** does a stored baseline hash match this fingerprint? (accepts pre-semantic byte hashes) */
-export const fingerprintMatches = (stored: string, fp: ComponentFingerprint): boolean =>
-  stored === fp.hash || (fp.rawHash !== undefined && stored === fp.rawHash)
+/** semantic identities of prefs, newest first — see SEMANTIC_PREFIX */
+const SEMANTIC_PREFIXES = ['sem2:', 'sem1:']
+
+/**
+ * Does a stored baseline hash match this fingerprint? Accepts pre-semantic byte hashes,
+ * and treats a baseline written by an OLDER semantic format as matching: the two are
+ * not comparable at all, and claiming "changed" would flag every prefs cell (both
+ * sides at once — a wall of conflicts) the first time a launcher update refines the
+ * canonical dump. The scan rewrites such baselines to the current format in place.
+ */
+export const fingerprintMatches = (stored: string, fp: ComponentFingerprint): boolean => {
+  if (stored === fp.hash || (fp.rawHash !== undefined && stored === fp.rawHash)) return true
+  const current = SEMANTIC_PREFIXES.findIndex((prefix) => fp.hash?.startsWith(prefix))
+  const previous = SEMANTIC_PREFIXES.findIndex((prefix) => stored.startsWith(prefix))
+  return current >= 0 && previous > current
+}
 
 // manifests are stored in sync-state.json for "what changed" summaries — cap them
 // so a giant datafiles tree cannot bloat the state file (hash-only above the cap)
@@ -182,7 +195,9 @@ async function collectStamps(root: string, rel: string[], out: FileStamp[]): Pro
   }
 }
 
-const SEMANTIC_PREFIX = 'sem1:'
+// bump whenever the canonical dump changes shape (sem2: short char arrays are exact
+// bytes, so theme colours compare byte-for-byte instead of as mangled text)
+const SEMANTIC_PREFIX = 'sem2:'
 
 /**
  * Preferences get a SEMANTIC identity: .blend bytes churn on every save (BHead
