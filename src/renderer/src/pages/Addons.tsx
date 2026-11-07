@@ -61,6 +61,16 @@ function rowMatchesQuery(row: MatrixRow, q: string): boolean {
   )
 }
 
+// The typed search survives a tab switch the same way the Projects one does: the page
+// unmounts on every switch, the module does not. A search arriving from outside (drop,
+// notification, "show builds for this version") still wins over it, and the drop flow
+// wipes the snapshot through the exported reset so nothing lands behind a stale filter.
+let querySnapshot = ''
+
+export function clearAddonsSearch(): void {
+  querySnapshot = ''
+}
+
 export default function AddonsPage({
   onOpenSettings,
   initialSearch
@@ -110,23 +120,48 @@ export default function AddonsPage({
   const [applyProgress, setApplyProgress] = useState<AddonApplyProgress | null>(null)
   const [installProgress, setInstallProgress] = useState<LibraryInstallProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState(initialSearch ?? '')
+  const [query, setQuery] = useState(initialSearch || querySnapshot)
+  useEffect(() => {
+    querySnapshot = query
+  }, [query])
+
   // a drop-initiated visit starts on All: the added add-on's row may fold into any
   // source tab (and can even move once a catalog loads), All shows it regardless
-  const [tab, setTab] = useState<AddonTab>(initialSearch ? 'all' : 'user')
+  const [tab, setTab] = useState<AddonTab>(() => {
+    if (initialSearch) return 'all'
+    const stored = uiGet('addons.tab')
+    return SOURCE_TABS.some((entry) => entry.key === stored) ? (stored as AddonTab) : 'user'
+  })
+  // written only once the value really moves: an arriving search forces All, and that
+  // must not overwrite the chosen tab (and it survives StrictMode's double effect run)
+  const persistedTab = useRef(tab)
+  useEffect(() => {
+    if (tab === persistedTab.current) return
+    persistedTab.current = tab
+    uiSet('addons.tab', tab)
+  }, [tab])
   // Sort/filter selects mirroring the Installs toolbar. Persisted like the Projects ones:
   // the page unmounts on every tab switch, so plain state would reset on each visit.
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() =>
     uiGet('addons.sortDir') === 'desc' ? 'desc' : 'asc'
   )
+  // a search arrival (drop / notification) targets an add-on that may be disabled,
+  // so the persisted status filter must not hide it — the visit starts on All, like
+  // the tab above; the stored preference survives (the persist skips its mount echo)
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>(() => {
+    if (initialSearch) return 'all'
     const stored = uiGet('addons.enabledFilter')
     return stored === 'enabled' || stored === 'disabled' ? stored : 'all'
   })
   useEffect(() => {
     uiSet('addons.sortDir', sortDir)
   }, [sortDir])
+  const enabledFilterMounted = useRef(false)
   useEffect(() => {
+    if (!enabledFilterMounted.current) {
+      enabledFilterMounted.current = true
+      return
+    }
     uiSet('addons.enabledFilter', enabledFilter)
   }, [enabledFilter])
   // Blender-style "Show Tags" filter: a category is visible unless it's in this set

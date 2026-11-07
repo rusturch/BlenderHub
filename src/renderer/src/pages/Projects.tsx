@@ -48,12 +48,15 @@ let treeSelectedPathSnapshot: string | null = null
 let treeExpandedSnapshot: Set<string> | null = null
 // rows already unfolded once on their own; re-offering them would undo a fold
 let treeOfferedSnapshot: Set<string> = new Set()
+// the typed search, for the same reason: glancing at another tab must not lose it
+let querySnapshot = ''
 
-// Drop flows land on a freshly remounted page; a restored tree filter could hide
-// the just-added file, so App clears the snapshot before remounting.
-export function clearProjectsTreeSelection(): void {
+// Drop flows land on a freshly remounted page; a restored filter could hide the
+// just-added file, so App clears the snapshots before remounting.
+export function clearProjectsFilters(): void {
   treeSelectedSnapshot = null
   treeSelectedPathSnapshot = null
+  querySnapshot = ''
 }
 
 export default function ProjectsPage({
@@ -84,7 +87,7 @@ export default function ProjectsPage({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() =>
     uiGet('projects.sortDir') === 'asc' ? 'asc' : 'desc'
   )
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(querySnapshot)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   const [newProjectOpen, setNewProjectOpen] = useState(false)
@@ -176,6 +179,10 @@ export default function ProjectsPage({
     treeExpandedSnapshot = treeExpanded
     if (treeSelected === null) treeSelectedPathSnapshot = null
   }, [treeSelected, treeExpanded])
+
+  useEffect(() => {
+    querySnapshot = query
+  }, [query])
 
   // Guarded by a sequence number: optimistic patches (rename/duplicate/delete) kick a
   // background reconcile scan, and a stale response from an earlier scan must not

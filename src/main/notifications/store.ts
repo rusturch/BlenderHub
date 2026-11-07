@@ -57,6 +57,8 @@ function payloadOk(category: string, payload: Record<string, unknown>): boolean 
       )
     case 'superhive-auth':
       return true
+    case 'cloud-sync':
+      return payload.reason === 'auth' || payload.reason === 'overwritten'
     default:
       return false
   }

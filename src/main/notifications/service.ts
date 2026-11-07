@@ -116,6 +116,20 @@ export function applyLauncherUpdateState(state: UpdateCheckResult): void {
   void reconcile('launcher-update', drafts).catch(() => {})
 }
 
+/**
+ * Cloud-sync engine hook: reflect the current attention reason (or clear it).
+ * State-derived, so a resolved condition removes the entry and a recurrence
+ * pings again; respects the notify.cloudSync toggle.
+ */
+export async function reconcileCloudSyncNotification(
+  reason: NotificationPayloads['cloud-sync']['reason'] | null
+): Promise<void> {
+  const ui = await readUiState()
+  const on = notifyCategoryEnabledValue('cloud-sync', ui[NOTIFY_CATEGORY_KEYS['cloud-sync']])
+  const drafts = reason && on ? [draft('cloud-sync', `cloud-sync:${reason}`, { reason })] : []
+  await reconcile('cloud-sync', drafts)
+}
+
 /** called by the builds:install handler; cancelled installs never get here */
 export function notifyBuildInstallResult(
   build: { version: string; releaseCycle: string },

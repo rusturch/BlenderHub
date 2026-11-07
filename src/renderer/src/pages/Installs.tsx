@@ -40,6 +40,20 @@ import {
 } from './installs/installs-utils'
 import type { DisplayRow } from './installs/types'
 
+// The typed search survives a tab switch the same way the Projects one does: the page
+// unmounts on every switch, the module does not. A search arriving from outside (drop,
+// notification, "show builds for this version") still wins over it, and the drop flow
+// wipes the snapshot through the exported reset so nothing lands behind a stale filter.
+let querySnapshot = ''
+
+export function clearInstallsSearch(): void {
+  querySnapshot = ''
+}
+
+// every tab the toolbar can show; which cycle tabs are actually rendered depends on
+// what the catalog currently serves, so a restored one is re-checked against that too
+const CYCLE_TABS = ['all', 'stable', 'candidate', 'beta', 'alpha', 'experimental']
+
 export default function InstallsPage({
   onShowProjects,
   initialSearch
@@ -58,8 +72,26 @@ export default function InstallsPage({
   const [installed, setInstalled] = useState<InstalledBuild[]>([])
   // opening Installs normally lands on Stable; arriving via a version search (from
   // Projects, Sync or the tray) stays on All so the searched build is not filtered out
-  const [filter, setFilter] = useState<string>(initialSearch ? 'all' : 'stable')
-  const [query, setQuery] = useState(initialSearch ?? '')
+  const [filter, setFilter] = useState<string>(() => {
+    if (initialSearch) return 'all'
+    const stored = uiGet('installs.filter')
+    return stored && CYCLE_TABS.includes(stored) ? stored : 'stable'
+  })
+  // Persisted like the other toolbar controls, but only once the value really moves:
+  // a visit that arrives with a search is forced onto All, and writing that back would
+  // overwrite the tab the user chose. Comparing against the mounted value also makes
+  // this immune to StrictMode running the effect twice in dev.
+  const persistedFilter = useRef(filter)
+  useEffect(() => {
+    if (filter === persistedFilter.current) return
+    persistedFilter.current = filter
+    uiSet('installs.filter', filter)
+  }, [filter])
+  const [query, setQuery] = useState(initialSearch || querySnapshot)
+  useEffect(() => {
+    querySnapshot = query
+  }, [query])
+
   const [sortKey, setSortKey] = useState<'version' | 'date'>('version')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   // "Other versions" drawers open per series; in-memory only, resets with the page
@@ -87,8 +119,14 @@ export default function InstallsPage({
     () => uiGet('installs.hideEmptyProjectCount') === '1'
   )
   const [showSize, setShowSize] = useState(() => uiGet('installs.showSize') === '1')
-  const [installedFilter, setInstalledFilter] = useState<'all' | 'installed' | 'not-installed'>(
-    () => (uiGet('installs.installedFilter') as 'all' | 'installed' | 'not-installed' | undefined) ?? 'all'
+  // a version-search arrival targets a build that is usually NOT installed (an
+  // "Install X" jump from Projects/Sync), so the persisted status filter must not
+  // hide it — the visit starts on All, like the cycle tabs above; the stored
+  // preference itself survives (the persist effect skips its mount echo)
+  const [installedFilter, setInstalledFilter] = useState<'all' | 'installed' | 'not-installed'>(() =>
+    initialSearch
+      ? 'all'
+      : ((uiGet('installs.installedFilter') as 'all' | 'installed' | 'not-installed' | undefined) ?? 'all')
   )
   const [syncOffers, setSyncOffers] = useState<
     { minor: string; version: string; settingsSource: string | null; sourceOptions: string[] }[]
@@ -119,7 +157,14 @@ export default function InstallsPage({
     uiSet('installs.showSize', showSize ? '1' : '0')
   }, [showSize])
 
+  // the mount echo is skipped: persisting it would overwrite the stored choice
+  // with the search-arrival override; a change made by the user still persists
+  const installedFilterMounted = useRef(false)
   useEffect(() => {
+    if (!installedFilterMounted.current) {
+      installedFilterMounted.current = true
+      return
+    }
     uiSet('installs.installedFilter', installedFilter)
   }, [installedFilter])
 
@@ -470,6 +515,12 @@ export default function InstallsPage({
     const cycleTabs = ['stable', 'candidate', 'beta', 'alpha'].filter((cycle) => present.has(cycle))
     return ['all', ...cycleTabs, 'experimental']
   }, [remote])
+
+  // the catalog may not serve the cycle the last visit ended on (or may stop serving
+  // it): leaving the filter there would show an empty list with no tab highlighted
+  useEffect(() => {
+    if (remote !== null && !filters.includes(filter)) setFilter('all')
+  }, [remote, filters, filter])
 
   // newest released (stable/lts) version per minor across ALL sources — used to
   // de-emphasize a candidate's Install button while its series has a released

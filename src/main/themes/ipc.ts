@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { getDataRoot } from '../paths'
 import { requireString } from '../ipc-util'
+import { scheduleCloudPush } from '../cloud-sync/engine'
 import { openThemeEditorWindow } from './editor-window'
 import { isThemeId, sanitizeThemeColors, THEME_NAME_MAX } from '../../shared/theme'
 import type { UserThemeFile } from '../../shared/types'
@@ -84,7 +85,7 @@ export function registerThemesIpc(): void {
       }
       const run = (saveChains.get(id) ?? Promise.resolve()).then(write)
       saveChains.set(id, run.catch(() => {}))
-      return run
+      return run.then(() => scheduleCloudPush())
     }
   )
 
@@ -96,6 +97,7 @@ export function registerThemesIpc(): void {
       return // already gone — deleting twice is not an error
     }
     await shell.trashItem(target)
+    scheduleCloudPush()
   })
 
   ipcMain.handle('themes:open-dir', async () => {

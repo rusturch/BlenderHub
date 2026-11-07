@@ -7,9 +7,9 @@ import { DialogProvider } from './components/Dialog'
 import { LanguageProvider } from './lib/i18n'
 import { getLauncherApi } from './lib/preview-fallback'
 import { uiGet, uiSet } from './lib/ui-store'
-import ProjectsPage, { clearProjectsTreeSelection } from './pages/Projects'
-import InstallsPage from './pages/Installs'
-import AddonsPage from './pages/Addons'
+import ProjectsPage, { clearProjectsFilters } from './pages/Projects'
+import InstallsPage, { clearInstallsSearch } from './pages/Installs'
+import AddonsPage, { clearAddonsSearch } from './pages/Addons'
 import SyncPage from './pages/Sync'
 import ActivityPage from './pages/Activity'
 import SettingsPage from './pages/Settings'
@@ -69,6 +69,9 @@ export default function App() {
       case 'superhive-auth':
         openSettings('superhive')
         return
+      case 'cloud-sync':
+        openSettings('cloud-sync')
+        return
       case 'sync-changes':
         setPage('sync')
         return
@@ -95,9 +98,11 @@ export default function App() {
     // not navigate(): it would wipe the add-on search being handed over
     setAddonsSearch(target === 'addons' && addonSearch ? addonSearch : '')
     if (target === 'installs') setInstallsSearch('')
-    // the remounted Projects page must not hide the dropped file behind a
-    // previously selected tree folder
-    if (target === 'projects') clearProjectsTreeSelection()
+    // whatever was dropped has to be visible on arrival, so the target page starts
+    // without the filters its last visit left behind — a handed-over search still wins
+    if (target === 'projects') clearProjectsFilters()
+    if (target === 'installs') clearInstallsSearch()
+    if (target === 'addons') clearAddonsSearch()
     setSettingsHighlight(null)
     setDropEpoch((epoch) => epoch + 1)
     setPage(target)
@@ -113,6 +118,7 @@ export default function App() {
             onNotificationClick={handleNotificationClick}
             onOpenNotificationSettings={() => openSettings('notifications')}
             onOpenThemeSettings={() => openSettings('theme')}
+            onOpenCloudSettings={() => openSettings('cloud-sync')}
           />
           <div className="flex min-h-0 flex-1">
             <Sidebar

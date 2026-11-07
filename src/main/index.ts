@@ -10,10 +10,12 @@ import { registerSettingsSyncIpc } from './sync/ipc'
 import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
 import { registerNotificationsIpc } from './notifications/ipc'
-import { setupNotifications } from './notifications/service'
+import { setupNotifications, reconcileCloudSyncNotification } from './notifications/service'
 import { registerUiStateIpc, readUiState } from './ui-state'
 import { registerAssetLibraryIpc } from './asset-library/ipc'
 import { setupAssetLibrary } from './asset-library/service'
+import { registerCloudSyncIpc, setupCloudSync } from './cloud-sync/ipc'
+import { setCloudNotifyHook } from './cloud-sync/engine'
 import { registerThemesIpc } from './themes/ipc'
 import { closeThemeEditorWindow } from './themes/editor-window'
 import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
@@ -145,10 +147,15 @@ if (!app.requestSingleInstanceLock()) {
     registerNotificationsIpc()
     registerThemesIpc()
     registerAssetLibraryIpc()
+    registerCloudSyncIpc()
     setupTray()
     setupAutostart()
     setupAssetLibrary()
     setupNotifications()
+    setCloudNotifyHook((reason) => {
+      void reconcileCloudSyncNotification(reason).catch(() => {})
+    })
+    void setupCloudSync()
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

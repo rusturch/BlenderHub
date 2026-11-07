@@ -31,6 +31,7 @@ import type {
 } from '../../../shared/types'
 import { BehaviorToggle, SectionCard, StorageUsageCard } from './settings/cells'
 import { AssetLibraryCard } from './settings/AssetLibraryCard'
+import { CloudSyncCard } from './settings/CloudSyncCard'
 import { ThemeCard } from './settings/ThemeCard'
 import { ChevronDownIcon, XIcon } from './settings/icons'
 import { fileNameOf } from './projects/projects-utils'
@@ -79,7 +80,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
       'addon-update': read('addon-update'),
       operation: read('operation'),
       'sync-changes': read('sync-changes'),
-      'superhive-auth': read('superhive-auth')
+      'superhive-auth': read('superhive-auth'),
+      'cloud-sync': read('cloud-sync')
     }
   })
   const [notifyRolling, setNotifyRolling] = useState(() =>
@@ -204,7 +206,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
       highlight === 'superhive' ||
       highlight === 'updates' ||
       highlight === 'notifications' ||
-      highlight === 'theme'
+      highlight === 'theme' ||
+      highlight === 'cloud-sync'
     ) {
       document
         .getElementById(`${highlight}-card`)
@@ -576,7 +579,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
                 ['addon-update', 'settings.notifyAddons'],
                 ['operation', 'settings.notifyOperations'],
                 ['sync-changes', 'settings.notifySync'],
-                ['superhive-auth', 'settings.notifySuperhive']
+                ['superhive-auth', 'settings.notifySuperhive'],
+                ['cloud-sync', 'settings.notifyCloudSync']
               ] as [ToggleableNotificationCategory, string][]
             ).map(([category, labelKey]) => (
               <label
@@ -790,6 +794,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
             {t('settings.superhiveWhereToken')}
           </button>
         </SectionCard>
+
+        <CloudSyncCard anchorId="cloud-sync-card" highlighted={highlight === 'cloud-sync'} />
 
         <SectionCard title={t('settings.projectFolders')} hint={t('settings.projectFoldersHint')}>
           <div className="flex flex-wrap gap-2">

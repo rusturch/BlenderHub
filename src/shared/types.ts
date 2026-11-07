@@ -758,6 +758,8 @@ export interface NotificationPayloads {
   'sync-changes': { minors: string[]; conflicts: number; changed: number }
   /** the stored Superhive token stopped working */
   'superhive-auth': Record<string, never>
+  /** cloud sync needs attention: Google access revoked, or local edits were overwritten */
+  'cloud-sync': { reason: 'auth' | 'overwritten' }
 }
 
 export type NotificationCategory = keyof NotificationPayloads
@@ -829,6 +831,64 @@ export interface DropApi {
   handle: (path: string, kind: DroppedItemKind) => Promise<DropHandleResult>
 }
 
+// --- cloud sync (user's own Google Drive, hidden app folder) ------------------
+
+export interface CloudSyncAccount {
+  displayName: string
+  email: string
+}
+
+/** what the launcher's items occupy in the app folder — kilobytes, informational */
+export interface CloudSyncUsage {
+  usedBytes: number
+  itemCount: number
+}
+
+export interface CloudSyncStatus {
+  /** a usable Google sign-in is stored on this machine */
+  connected: boolean
+  /** OS secure storage is available (needed to store the sign-in) */
+  available: boolean
+  /** the cloud.enabled toggle */
+  enabled: boolean
+  account: CloudSyncAccount | null
+  usage: CloudSyncUsage | null
+  syncing: boolean
+  lastSyncAt: number | null
+  lastError: string | null
+  /** first machine-link found diverging ui-state and is waiting for the user's choice */
+  firstLinkPending: boolean
+  /** a Google sign-in attempt is in progress (browser consent pending) */
+  connecting: boolean
+  /** name of the file-sync provider the data folder sits in (Dropbox…), else null */
+  dataFolderCloudHint: string | null
+}
+
+export interface CloudConnectPending {
+  status: 'pending'
+  /** the Google consent URL opened in the browser (built by main, fixed host) */
+  verificationUrl: string
+  expiresAt: number
+}
+
+export interface CloudSyncApi {
+  status: () => Promise<CloudSyncStatus>
+  /** begin the Google sign-in; main opens the browser and waits in the background */
+  connectStart: () => Promise<CloudConnectPending>
+  connectCancel: () => Promise<void>
+  /** re-open the consent page for the pending sign-in attempt */
+  openVerification: () => Promise<void>
+  /** answer the first-link prompt: take cloud settings, or upload this machine's */
+  resolveFirstLink: (choice: 'cloud' | 'local') => Promise<CloudSyncStatus>
+  /** disconnect this machine; optionally wipe the cloud copy too */
+  disconnect: (deleteCloudData: boolean) => Promise<CloudSyncStatus>
+  syncNow: () => Promise<CloudSyncStatus>
+  refreshAccount: () => Promise<CloudSyncStatus>
+  deleteCloudData: () => Promise<CloudSyncStatus>
+  /** status changed (round finished, connection changed) from any trigger */
+  onStateChanged: (callback: (status: CloudSyncStatus) => void) => () => void
+}
+
 /** host OS, narrowed to the three targets the launcher ships for */
 export type LauncherPlatform = 'win32' | 'darwin' | 'linux'
 
@@ -847,6 +907,7 @@ export interface LauncherApi {
   tray: TrayApi
   drop: DropApi
   assetLibrary: AssetLibraryApi
+  cloudSync: CloudSyncApi
   /** synchronous webUtils bridge: the OS path of a File dragged into the window ('' when it has none) */
   getPathForFile: (file: File) => string
 }

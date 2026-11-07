@@ -395,6 +395,45 @@ function createPreviewFallbackApi(): LauncherApi {
     },
     onProgress: () => () => {}
   }
+  const cloudSync: LauncherApi['cloudSync'] = {
+    // no sign-in store or Drive access in the browser — the card renders "not connected"
+    status: async () => ({
+      connected: false,
+      available: false,
+      enabled: false,
+      account: null,
+      usage: null,
+      syncing: false,
+      lastSyncAt: null,
+      lastError: null,
+      firstLinkPending: false,
+      connecting: false,
+      dataFolderCloudHint: null
+    }),
+    connectStart: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    connectCancel: async () => {},
+    openVerification: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    resolveFirstLink: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    disconnect: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    syncNow: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    refreshAccount: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    deleteCloudData: async () => {
+      throw new Error(DESKTOP_ONLY)
+    },
+    onStateChanged: () => () => {}
+  }
   return {
     platform: previewPlatform(),
     builds,
@@ -409,6 +448,7 @@ function createPreviewFallbackApi(): LauncherApi {
     tray,
     drop,
     assetLibrary,
+    cloudSync,
     // browsers expose no OS paths for dragged files — the overlay shows its
     // desktop-only notice before ever calling this
     getPathForFile: () => ''

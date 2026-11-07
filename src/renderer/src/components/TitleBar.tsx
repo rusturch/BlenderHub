@@ -13,7 +13,7 @@ import { onUiChanged, uiGet } from '../lib/ui-store'
 import { sanitizeThemeColors, THEME_SELECTED_UI_KEY } from '../../../shared/theme'
 import type { ThemeColors } from '../../../shared/theme'
 import { isReleasedCycle } from '../../../shared/blender-builds'
-import type { HubNotification } from '../../../shared/types'
+import type { CloudSyncStatus, HubNotification } from '../../../shared/types'
 import Dropdown from './Dropdown'
 // category icons mirror the sidebar tabs each notification navigates to
 import { BlocksIcon, DownloadIcon, SyncIcon } from './Sidebar'
@@ -251,6 +251,133 @@ function ThemeMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   )
 }
 
+function CloudIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9Z" />
+    </svg>
+  )
+}
+
+/**
+ * Cloud-sync quick access next to the theme/bell buttons. Hidden until an
+ * account is connected so non-subscribers see no extra chrome. The badge on
+ * the icon is the live signal: accent pulse while a round runs, amber when
+ * the connection needs attention (expired / error / outdated client).
+ */
+function CloudSyncMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const { t, language } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [status, setStatus] = useState<CloudSyncStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const { api } = getLauncherApi()
+    let alive = true
+    api.cloudSync
+      .status()
+      .then((next) => {
+        if (alive) setStatus(next)
+      })
+      .catch(() => {})
+    const off = api.cloudSync.onStateChanged((next) => setStatus(next))
+    return () => {
+      alive = false
+      off()
+    }
+  }, [])
+
+  if (!status?.connected) return null
+
+  const attention = Boolean(status.lastError)
+
+  const run = async (action: 'sync' | 'refresh'): Promise<void> => {
+    const cloud = getLauncherApi().api.cloudSync
+    setBusy(true)
+    try {
+      setStatus(await (action === 'sync' ? cloud.syncNow() : cloud.refreshAccount()))
+    } catch {
+      // the state broadcast carries the error text into the panel
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dropdown
+      open={open}
+      onClose={() => setOpen(false)}
+      align="right"
+      menuClassName="w-64 rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
+      trigger={
+        <button
+          onClick={() => setOpen(!open)}
+          title={t('settings.cloudSync')}
+          className="relative flex h-7 w-7 items-center justify-center rounded-md text-icon transition-colors hover:bg-white/10 hover:text-icon-hover [-webkit-app-region:no-drag]"
+        >
+          <CloudIcon className="h-[18px] w-[18px]" />
+          {status.syncing ? (
+            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-blender" />
+          ) : attention ? (
+            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+          ) : null}
+        </button>
+      }
+    >
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+        <span className="text-xs font-semibold text-zinc-400">{t('settings.cloudSync')}</span>
+        <button
+          onClick={() => {
+            setOpen(false)
+            onOpenSettings()
+          }}
+          title={t('settings.cloudSync')}
+          className="flex h-6 w-6 items-center justify-center rounded text-icon transition-colors hover:bg-white/10 hover:text-icon-hover"
+        >
+          <GearIcon className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mb-1 border-t border-white/5" />
+      <div className="flex flex-col gap-1 px-3 py-1.5">
+        <span className="truncate text-xs text-zinc-300">
+          {status.account?.displayName || t('settings.cloudConnected')}
+        </span>
+        {status.syncing && <span className="text-xs font-medium text-zinc-400">{t('settings.cloudSyncing')}</span>}
+        {status.lastError && <span className="text-[11px] text-amber-400">{status.lastError}</span>}
+        {status.lastSyncAt && (
+          <span className="text-[11px] text-zinc-500">
+            {t('settings.cloudLastSync', { time: notificationWhen(status.lastSyncAt, language) })}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 px-3 pb-2 pt-1">
+        <button
+          onClick={() => run('sync')}
+          disabled={busy || status.syncing}
+          className="rounded-md bg-accent-button px-2.5 py-1 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t('settings.cloudSyncNow')}
+        </button>
+        <button
+          onClick={() => run('refresh')}
+          disabled={busy}
+          className="rounded-md border border-white/10 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t('settings.cloudCheckStatus')}
+        </button>
+      </div>
+    </Dropdown>
+  )
+}
+
 /** "4.5.12" for released builds, "5.3.0 alpha" otherwise — cycle words are badges, never translated */
 const buildLabel = (version: string, cycle: string): string =>
   isReleasedCycle(cycle) || !cycle ? version : `${version} ${cycle}`
@@ -299,6 +426,11 @@ function notificationTexts(
         title: t('notifications.superhiveAuth'),
         detail: t('notifications.superhiveAuthDetail')
       }
+    case 'cloud-sync':
+      return {
+        title: t('notifications.cloudSync'),
+        detail: t(`notifications.cloudSync.${notification.payload.reason}`)
+      }
   }
   // the store filters unknown categories out, but a record slipping through must
   // degrade to a label, never crash the render
@@ -320,12 +452,15 @@ interface TitleBarProps {
   onOpenNotificationSettings: () => void
   /** the theme menu's gear — jumps to the theme editor card in Settings */
   onOpenThemeSettings: () => void
+  /** the cloud menu's gear — jumps to the Cloud sync card in Settings */
+  onOpenCloudSettings: () => void
 }
 
 export default function TitleBar({
   onNotificationClick,
   onOpenNotificationSettings,
-  onOpenThemeSettings
+  onOpenThemeSettings,
+  onOpenCloudSettings
 }: TitleBarProps) {
   const { t, language } = useTranslation()
   const mac = isMac()
@@ -367,6 +502,7 @@ export default function TitleBar({
         paddingRight: mac ? EDGE_PADDING : WINDOWS_OVERLAY_WIDTH
       }}
     >
+      <CloudSyncMenu onOpenSettings={onOpenCloudSettings} />
       <ThemeMenu onOpenSettings={onOpenThemeSettings} />
       <Dropdown
         open={menuOpen}
@@ -419,13 +555,18 @@ export default function TitleBar({
                       ? SyncIcon
                       : item.category === 'superhive-auth'
                         ? AlertIcon
-                        : DownloadIcon // blender-update and install operations — the Installs tab
+                        : item.category === 'cloud-sync'
+                          ? SyncIcon
+                          : DownloadIcon // blender-update and install operations — the Installs tab
               const tone =
                 item.category === 'operation' && item.payload.result === 'error'
                   ? 'text-red-400'
                   : item.category === 'sync-changes' && item.payload.conflicts > 0
                     ? 'text-amber-400'
-                    : item.read
+                    : item.category === 'cloud-sync' &&
+                        (item.payload.reason === 'auth' || item.payload.reason === 'overwritten')
+                      ? 'text-amber-400'
+                      : item.read
                       ? 'text-zinc-500'
                       : 'text-blender'
               return (

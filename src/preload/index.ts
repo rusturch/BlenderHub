@@ -9,6 +9,8 @@ import type {
   AssetLibraryInfo,
   AssetLibraryProgress,
   BlendFileInfo,
+  CloudConnectPending,
+  CloudSyncStatus,
   DroppedItem,
   DroppedItemKind,
   DropHandleResult,
@@ -289,6 +291,26 @@ const api: LauncherApi = {
       ipcRenderer.on('assetlib:progress', listener)
       return () => {
         ipcRenderer.removeListener('assetlib:progress', listener)
+      }
+    }
+  },
+  cloudSync: {
+    status: (): Promise<CloudSyncStatus> => ipcRenderer.invoke('cloud-sync:status'),
+    connectStart: (): Promise<CloudConnectPending> => ipcRenderer.invoke('cloud-sync:connect-start'),
+    connectCancel: (): Promise<void> => ipcRenderer.invoke('cloud-sync:connect-cancel'),
+    openVerification: (): Promise<void> => ipcRenderer.invoke('cloud-sync:open-verification'),
+    resolveFirstLink: (choice: 'cloud' | 'local'): Promise<CloudSyncStatus> =>
+      ipcRenderer.invoke('cloud-sync:resolve-first-link', choice),
+    disconnect: (deleteCloudData: boolean): Promise<CloudSyncStatus> =>
+      ipcRenderer.invoke('cloud-sync:disconnect', deleteCloudData),
+    syncNow: (): Promise<CloudSyncStatus> => ipcRenderer.invoke('cloud-sync:sync-now'),
+    refreshAccount: (): Promise<CloudSyncStatus> => ipcRenderer.invoke('cloud-sync:refresh-account'),
+    deleteCloudData: (): Promise<CloudSyncStatus> => ipcRenderer.invoke('cloud-sync:delete-cloud-data'),
+    onStateChanged: (callback: (status: CloudSyncStatus) => void): (() => void) => {
+      const listener = (_event: unknown, status: CloudSyncStatus): void => callback(status)
+      ipcRenderer.on('cloud-sync:state', listener)
+      return () => {
+        ipcRenderer.removeListener('cloud-sync:state', listener)
       }
     }
   },
