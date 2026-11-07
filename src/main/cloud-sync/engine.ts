@@ -6,21 +6,28 @@ import { getDataRoot } from '../paths'
 import { readUiState, setUiValueFromMain } from '../ui-state'
 import {
   BUNDLE_SCHEMA,
+  buildRefKey,
+  buildRefLabel,
   CLOUD_ENABLED_UI_KEY,
+  INSTALLS_ITEM_ID,
   isSharedUiKey,
   isSyncItemId,
   isThemeItemId,
   MANIFEST_MAX_ITEMS,
+  sanitizeBuildRefs,
   sharedUiSubset,
   stableStringify,
   themeIdFromItemId,
   themeItemId,
   UI_STATE_ITEM_ID,
   type ManifestItem,
+  type SyncedBuildRef,
   type SyncEnvelope
 } from '../../shared/cloud-sync'
+import { isReleasedCycle } from '../../shared/blender-builds'
 import { isThemeId, sanitizeThemeColors, THEME_NAME_MAX } from '../../shared/theme'
 import type { CloudSyncAccount, CloudSyncStatus, CloudSyncUsage } from '../../shared/types'
+import { listInstalled } from '../blender/installs'
 import * as drive from './drive'
 import { CloudAuthError } from './drive'
 import { openAuthUrlInBrowser, startSignIn, type SignInSession } from './google-auth'
@@ -37,6 +44,7 @@ import { readSyncState, resetSyncState, updateSyncState } from './store'
 
 const UI_PAYLOAD_FORMAT = 'ui-state@1'
 const THEME_PAYLOAD_FORMAT = 'theme@1'
+const INSTALLS_PAYLOAD_FORMAT = 'installs@1'
 const THEME_FILE_MAX_BYTES = 64 * 1024
 
 const STARTUP_DELAY_MS = 60_000
@@ -49,6 +57,13 @@ export function setCloudNotifyHook(hook: (reason: NotifyReason | null) => void):
   notifyHook = hook
 }
 
+// separate channel for "builds from your other machines are missing here":
+// state-derived, display labels, null clears the entry
+let buildsHook: (versions: string[] | null) => void = () => {}
+export function setCloudBuildsNotifyHook(hook: (versions: string[] | null) => void): void {
+  buildsHook = hook
+}
+
 // --- module state ------------------------------------------------------------
 
 let enabled = false
@@ -57,6 +72,7 @@ let lastSyncAt: number | null = null
 let lastError: string | null = null
 let cachedAccount: CloudSyncAccount | null = null
 let cachedUsage: CloudSyncUsage | null = null
+let missingBuilds: SyncedBuildRef[] = []
 let applying = false // suppress the push feedback from our own ui-state writes
 
 let roundTimer: ReturnType<typeof setTimeout> | null = null
@@ -98,6 +114,7 @@ function buildStatus(connected: boolean): CloudSyncStatus {
     lastError,
     firstLinkPending,
     connecting: connectSession !== null,
+    missingBuilds,
     dataFolderCloudHint: detectCloudSyncedDataFolder(getDataRoot())
   }
 }
@@ -239,7 +256,12 @@ function buildEnvelope(itemId: string, item: LocalItem, parentGeneration: number
   return {
     bundleSchema: BUNDLE_SCHEMA,
     itemId,
-    payloadFormat: itemId === UI_STATE_ITEM_ID ? UI_PAYLOAD_FORMAT : THEME_PAYLOAD_FORMAT,
+    payloadFormat:
+      itemId === UI_STATE_ITEM_ID
+        ? UI_PAYLOAD_FORMAT
+        : itemId === INSTALLS_ITEM_ID
+          ? INSTALLS_PAYLOAD_FORMAT
+          : THEME_PAYLOAD_FORMAT,
     parentGeneration,
     deviceId: machineId(),
     updatedAt: Date.now(),
@@ -376,6 +398,97 @@ async function rememberPulledUi(payload: unknown): Promise<void> {
   await updateSyncState((state) => ({ ...state, lastPulledUiState: record }))
 }
 
+// --- installed-builds list (set semantics, not LWW) ---------------------------
+
+/**
+ * Catalog-addressable refs of the builds present on THIS machine. Located
+ * builds count only when released (their version is resolvable in the archive
+ * on another machine); located rolling builds are custom by nature and stay
+ * machine-local.
+ */
+async function collectLocalBuildRefs(): Promise<SyncedBuildRef[]> {
+  const installed = await listInstalled()
+  const refs: SyncedBuildRef[] = []
+  for (const build of installed) {
+    if (!build.managed && !isReleasedCycle(build.releaseCycle)) continue
+    const ref: SyncedBuildRef = { version: build.version, releaseCycle: build.releaseCycle }
+    if (build.branch) ref.branch = build.branch
+    refs.push(ref)
+  }
+  return sanitizeBuildRefs(refs)
+}
+
+/**
+ * The cloud build list is a SET shared by all machines, so it merges 3-way
+ * instead of last-write-wins: base = this machine's own set at its previous
+ * reconcile. Only THIS machine's installs/uninstalls since then are applied to
+ * the cloud list; everything other machines contributed stays. Uninstalls
+ * propagate as "stop listing it", never as an uninstall elsewhere: the list
+ * only ever drives an OFFER to install what's missing.
+ */
+async function reconcileInstalls(token: string, remote: ManifestItem | undefined): Promise<void> {
+  const localRefs = await collectLocalBuildRefs()
+  const localKeys = new Set(localRefs.map(buildRefKey))
+  const state = await readSyncState()
+  const record = state.items[INSTALLS_ITEM_ID]
+  const prevLocal = new Set(state.installsPrevLocal ?? [])
+
+  // current cloud list: the cached copy while the generation still matches,
+  // a fresh fetch otherwise
+  let cloudRefs: SyncedBuildRef[] = []
+  let cloudGen = 0
+  let cloudSha = remote?.sha256 ?? ''
+  if (remote) {
+    cloudGen = remote.generation
+    if (record && record.lastSyncedGeneration === remote.generation && state.lastPulledInstalls) {
+      cloudRefs = state.lastPulledInstalls
+    } else {
+      const fetched = await drive.fetchItem(token, INSTALLS_ITEM_ID)
+      if (fetched) {
+        cloudRefs = sanitizeBuildRefs((fetched.envelope.payload as { builds?: unknown } | null)?.builds)
+        cloudGen = fetched.generation
+        if (typeof fetched.envelope.sha256 === 'string') cloudSha = fetched.envelope.sha256
+      }
+    }
+  }
+
+  // nothing anywhere: don't create an empty cloud item for the sake of it
+  if (!remote && localRefs.length === 0) {
+    missingBuilds = []
+    buildsHook(null)
+    return
+  }
+
+  const added = localRefs.filter((ref) => !prevLocal.has(buildRefKey(ref)))
+  const removedKeys = new Set([...prevLocal].filter((key) => !localKeys.has(key)))
+  const byKey = new Map(cloudRefs.map((ref) => [buildRefKey(ref), ref]))
+  for (const ref of added) byKey.set(buildRefKey(ref), ref)
+  for (const key of removedKeys) byKey.delete(key)
+  const target = sanitizeBuildRefs([...byKey.values()])
+
+  const sameAsCloud = target.map(buildRefKey).join('|') === cloudRefs.map(buildRefKey).join('|')
+  let finalGen = cloudGen
+  let finalSha = cloudSha
+  if (!sameAsCloud || !remote) {
+    const payload = { builds: target }
+    const item: LocalItem = { payload, sha: sha256(stableStringify(payload)), deleted: false }
+    const result = await drive.putItem(token, INSTALLS_ITEM_ID, buildEnvelope(INSTALLS_ITEM_ID, item, cloudGen), cloudGen)
+    if (!result.ok) return // lost the write race — the next round re-merges from scratch
+    finalGen = result.generation
+    finalSha = item.sha
+  }
+
+  await recordItem(INSTALLS_ITEM_ID, { lastSyncedGeneration: finalGen, lastSyncedSha256: finalSha })
+  await updateSyncState((s) => ({
+    ...s,
+    installsPrevLocal: [...localKeys].sort(),
+    lastPulledInstalls: target
+  }))
+
+  missingBuilds = target.filter((ref) => !localKeys.has(buildRefKey(ref)))
+  buildsHook(missingBuilds.length > 0 ? missingBuilds.map(buildRefLabel) : null)
+}
+
 async function runRound(): Promise<void> {
   const token = await getCloudToken()
   if (!token) return
@@ -394,6 +507,8 @@ async function runRound(): Promise<void> {
   if (state.linked && manifest.dataEpoch !== state.dataEpoch) {
     await resetSyncState()
     await setUiValueFromMain(CLOUD_ENABLED_UI_KEY, 'off') // listener drops `enabled`
+    missingBuilds = []
+    buildsHook(null)
     lastError = 'Cloud data was deleted — turn sync back on to start fresh'
     return
   }
@@ -416,20 +531,26 @@ async function runRound(): Promise<void> {
 
   const fresh = await readSyncState()
   const localThemeIds = await listLocalThemeIds()
-  const itemIds = new Set<string>([UI_STATE_ITEM_ID])
+  const itemIds = new Set<string>([UI_STATE_ITEM_ID, INSTALLS_ITEM_ID])
   for (const id of localThemeIds) itemIds.add(themeItemId(id))
   for (const item of validItems) itemIds.add(item.itemId)
 
   let overwroteLocal = false
   const errors: string[] = []
   for (const itemId of itemIds) {
-    const local =
-      itemId === UI_STATE_ITEM_ID
-        ? await extractUiState(fresh.lastPulledUiState)
-        : isThemeItemId(itemId)
-          ? await extractTheme(themeIdFromItemId(itemId))
-          : { payload: null, sha: '', deleted: true }
     try {
+      // the build list merges as a SET (union + own removals), not as an
+      // LWW-envelope — it has its own reconcile
+      if (itemId === INSTALLS_ITEM_ID) {
+        await reconcileInstalls(token, remoteById.get(itemId))
+        continue
+      }
+      const local =
+        itemId === UI_STATE_ITEM_ID
+          ? await extractUiState(fresh.lastPulledUiState)
+          : isThemeItemId(itemId)
+            ? await extractTheme(themeIdFromItemId(itemId))
+            : { payload: null, sha: '', deleted: true }
       const result = await reconcileItem(token, itemId, local, remoteById.get(itemId))
       overwroteLocal = overwroteLocal || result.overwroteLocal
     } catch (error) {
@@ -659,10 +780,12 @@ export async function disconnect(deleteCloud: boolean): Promise<CloudSyncStatus>
   drive.dropCaches(token)
   cachedAccount = null
   cachedUsage = null
+  missingBuilds = []
   lastError = null
   firstLinkPending = false
   firstLinkChoice = null
   notifyHook(null)
+  buildsHook(null)
   await emitState()
   return currentStatus()
 }
@@ -673,6 +796,8 @@ export async function deleteCloud(): Promise<CloudSyncStatus> {
     await drive.deleteCloudData(token)
     await resetSyncState()
     cachedUsage = { usedBytes: 0, itemCount: 0 }
+    missingBuilds = []
+    buildsHook(null)
     // turn sync OFF so this machine doesn't immediately re-upload everything
     // and undo the deletion; the user re-enables it to start fresh
     await setUiValueFromMain(CLOUD_ENABLED_UI_KEY, 'off')

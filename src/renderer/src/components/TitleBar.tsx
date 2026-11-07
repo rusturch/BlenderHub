@@ -431,6 +431,11 @@ function notificationTexts(
         title: t('notifications.cloudSync'),
         detail: t(`notifications.cloudSync.${notification.payload.reason}`)
       }
+    case 'cloud-builds':
+      return {
+        title: t('notifications.cloudBuilds'),
+        detail: notification.payload.versions.join(', ')
+      }
   }
   // the store filters unknown categories out, but a record slipping through must
   // degrade to a label, never crash the render

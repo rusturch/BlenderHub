@@ -81,7 +81,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
       operation: read('operation'),
       'sync-changes': read('sync-changes'),
       'superhive-auth': read('superhive-auth'),
-      'cloud-sync': read('cloud-sync')
+      'cloud-sync': read('cloud-sync'),
+      'cloud-builds': read('cloud-builds')
     }
   })
   const [notifyRolling, setNotifyRolling] = useState(() =>
@@ -580,7 +581,8 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
                 ['operation', 'settings.notifyOperations'],
                 ['sync-changes', 'settings.notifySync'],
                 ['superhive-auth', 'settings.notifySuperhive'],
-                ['cloud-sync', 'settings.notifyCloudSync']
+                ['cloud-sync', 'settings.notifyCloudSync'],
+                ['cloud-builds', 'settings.notifyCloudBuilds']
               ] as [ToggleableNotificationCategory, string][]
             ).map(([category, labelKey]) => (
               <label

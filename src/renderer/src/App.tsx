@@ -72,6 +72,9 @@ export default function App() {
       case 'cloud-sync':
         openSettings('cloud-sync')
         return
+      case 'cloud-builds':
+        setPage('installs')
+        return
       case 'sync-changes':
         setPage('sync')
         return

@@ -20,6 +20,7 @@ const EMPTY_STATUS: CloudSyncStatus = {
   lastError: null,
   firstLinkPending: false,
   connecting: false,
+  missingBuilds: [],
   dataFolderCloudHint: null
 }
 

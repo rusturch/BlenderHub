@@ -11,7 +11,8 @@ export const NOTIFY_CATEGORY_KEYS: Record<ToggleableNotificationCategory, string
   operation: 'notify.operations',
   'sync-changes': 'notify.syncChanges',
   'superhive-auth': 'notify.superhiveAuth',
-  'cloud-sync': 'notify.cloudSync'
+  'cloud-sync': 'notify.cloudSync',
+  'cloud-builds': 'notify.cloudBuilds'
 }
 
 /** categories that stay quiet until explicitly enabled */

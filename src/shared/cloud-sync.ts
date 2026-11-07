@@ -50,6 +50,7 @@ export function sharedUiSubset(state: Record<string, string>): Record<string, st
 // --- item ids ----------------------------------------------------------------
 
 export const UI_STATE_ITEM_ID = 'ui-state'
+export const INSTALLS_ITEM_ID = 'installs'
 export const THEME_ITEM_PREFIX = 'theme:'
 
 export const themeItemId = (themeId: string): string => `${THEME_ITEM_PREFIX}${themeId}`
@@ -62,7 +63,7 @@ export const themeIdFromItemId = (itemId: string): string => itemId.slice(THEME_
  * ever reaches a filesystem path: a manifest is untrusted input, and an id like
  * `theme:../../secrets` would otherwise traverse out of the themes folder.
  */
-export const ITEM_ID_RE = /^(ui-state|theme:[a-z0-9][a-z0-9_-]{0,63})$/
+export const ITEM_ID_RE = /^(ui-state|installs|theme:[a-z0-9][a-z0-9_-]{0,63})$/
 
 export const isSyncItemId = (itemId: string): boolean => ITEM_ID_RE.test(itemId)
 
@@ -99,6 +100,66 @@ export interface SyncManifest {
   /** random id stamped on the cloud copy; changes when "delete cloud data" wipes it */
   dataEpoch: string
   items: ManifestItem[]
+}
+
+// --- synced installed builds ---------------------------------------------------
+
+/**
+ * Catalog-addressable reference to an installed Blender build — the cloud list
+ * carries these, never binaries: every machine downloads from the official
+ * catalogs itself. Released builds (stable/lts/candidate/rc) are one-per-version;
+ * rolling builds (daily/experimental/patch) churn commits daily, so their
+ * cross-machine identity is "this branch of this minor".
+ */
+export interface SyncedBuildRef {
+  version: string
+  releaseCycle: string
+  branch?: string
+}
+
+const CYCLE_CLASS = (cycle: string): string => (cycle === 'lts' ? 'stable' : cycle === 'rc' ? 'candidate' : cycle)
+const RELEASED_CLASSES = new Set(['stable', 'candidate'])
+const MINOR_OF = (version: string): string => version.split('.').slice(0, 2).join('.')
+
+export const isReleasedBuildRef = (ref: SyncedBuildRef): boolean => RELEASED_CLASSES.has(CYCLE_CLASS(ref.releaseCycle))
+
+/** identity key used for union/merge and the "is it installed here" check. */
+export function buildRefKey(ref: SyncedBuildRef): string {
+  if (isReleasedBuildRef(ref)) return `r:${ref.version}:${CYCLE_CLASS(ref.releaseCycle)}`
+  return `b:${MINOR_OF(ref.version)}:${ref.branch ?? CYCLE_CLASS(ref.releaseCycle)}`
+}
+
+/** short display label: "4.5.11", "4.5.12 candidate", "5.1 main". */
+export function buildRefLabel(ref: SyncedBuildRef): string {
+  if (isReleasedBuildRef(ref)) {
+    return CYCLE_CLASS(ref.releaseCycle) === 'stable' ? ref.version : `${ref.version} ${ref.releaseCycle}`
+  }
+  return `${MINOR_OF(ref.version)} ${ref.branch ?? ref.releaseCycle}`
+}
+
+const VERSION_RE = /^\d+\.\d+(\.\d+)?$/
+const CYCLE_RE = /^[a-z][a-z0-9-]{0,19}$/
+const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$/
+export const MAX_SYNCED_BUILDS = 100
+
+/** pulled lists are untrusted input: drop malformed entries, dedupe, cap, sort. */
+export function sanitizeBuildRefs(raw: unknown): SyncedBuildRef[] {
+  if (!Array.isArray(raw)) return []
+  const byKey = new Map<string, SyncedBuildRef>()
+  for (const entry of raw) {
+    if (byKey.size >= MAX_SYNCED_BUILDS) break
+    const record = entry as { version?: unknown; releaseCycle?: unknown; branch?: unknown } | null
+    if (!record || typeof record !== 'object') continue
+    if (typeof record.version !== 'string' || !VERSION_RE.test(record.version)) continue
+    if (typeof record.releaseCycle !== 'string' || !CYCLE_RE.test(record.releaseCycle)) continue
+    const ref: SyncedBuildRef = { version: record.version, releaseCycle: record.releaseCycle }
+    if (record.branch !== undefined) {
+      if (typeof record.branch !== 'string' || !BRANCH_RE.test(record.branch)) continue
+      ref.branch = record.branch
+    }
+    byKey.set(buildRefKey(ref), ref)
+  }
+  return [...byKey.values()].sort((a, b) => buildRefKey(a).localeCompare(buildRefKey(b)))
 }
 
 /** stable stringify (sorted keys) so equal content always hashes identically. */

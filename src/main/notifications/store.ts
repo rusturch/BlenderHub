@@ -59,6 +59,13 @@ function payloadOk(category: string, payload: Record<string, unknown>): boolean 
       return true
     case 'cloud-sync':
       return payload.reason === 'auth' || payload.reason === 'overwritten'
+    case 'cloud-builds':
+      return (
+        Array.isArray(payload.versions) &&
+        payload.versions.length > 0 &&
+        payload.versions.length <= 50 &&
+        payload.versions.every((entry) => isString(entry) && entry.length <= 40)
+      )
     default:
       return false
   }

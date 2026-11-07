@@ -10,12 +10,16 @@ import { registerSettingsSyncIpc } from './sync/ipc'
 import { registerStorageIpc } from './storage/ipc'
 import { registerUpdatesIpc } from './updates/ipc'
 import { registerNotificationsIpc } from './notifications/ipc'
-import { setupNotifications, reconcileCloudSyncNotification } from './notifications/service'
+import {
+  setupNotifications,
+  reconcileCloudSyncNotification,
+  reconcileCloudBuildsNotification
+} from './notifications/service'
 import { registerUiStateIpc, readUiState } from './ui-state'
 import { registerAssetLibraryIpc } from './asset-library/ipc'
 import { setupAssetLibrary } from './asset-library/service'
 import { registerCloudSyncIpc, setupCloudSync } from './cloud-sync/ipc'
-import { setCloudNotifyHook } from './cloud-sync/engine'
+import { setCloudBuildsNotifyHook, setCloudNotifyHook } from './cloud-sync/engine'
 import { registerThemesIpc } from './themes/ipc'
 import { closeThemeEditorWindow } from './themes/editor-window'
 import { currentWindowChrome, initWindowChrome } from './themes/window-chrome'
@@ -154,6 +158,9 @@ if (!app.requestSingleInstanceLock()) {
     setupNotifications()
     setCloudNotifyHook((reason) => {
       void reconcileCloudSyncNotification(reason).catch(() => {})
+    })
+    setCloudBuildsNotifyHook((versions) => {
+      void reconcileCloudBuildsNotification(versions).catch(() => {})
     })
     void setupCloudSync()
 

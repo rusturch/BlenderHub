@@ -760,6 +760,8 @@ export interface NotificationPayloads {
   'superhive-auth': Record<string, never>
   /** cloud sync needs attention: Google access revoked, or local edits were overwritten */
   'cloud-sync': { reason: 'auth' | 'overwritten' }
+  /** builds installed on the user's other machines are missing here */
+  'cloud-builds': { versions: string[] }
 }
 
 export type NotificationCategory = keyof NotificationPayloads
@@ -860,6 +862,8 @@ export interface CloudSyncStatus {
   firstLinkPending: boolean
   /** a Google sign-in attempt is in progress (browser consent pending) */
   connecting: boolean
+  /** builds installed on the user's other machines that are absent here (never auto-installed) */
+  missingBuilds: import('./cloud-sync').SyncedBuildRef[]
   /** name of the file-sync provider the data folder sits in (Dropbox…), else null */
   dataFolderCloudHint: string | null
 }

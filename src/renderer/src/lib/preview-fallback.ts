@@ -408,6 +408,7 @@ function createPreviewFallbackApi(): LauncherApi {
       lastError: null,
       firstLinkPending: false,
       connecting: false,
+      missingBuilds: [],
       dataFolderCloudHint: null
     }),
     connectStart: async () => {

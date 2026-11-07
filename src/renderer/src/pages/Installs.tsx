@@ -11,6 +11,7 @@ import { useTranslation } from '../lib/i18n'
 import { getLauncherApi } from '../lib/preview-fallback'
 import { uiGet, uiSet } from '../lib/ui-store'
 import { minorOf } from '../../../shared/blender-archive'
+import { buildRefLabel, isReleasedBuildRef, type SyncedBuildRef } from '../../../shared/cloud-sync'
 import {
   compareVersionsDesc,
   cycleClass,
@@ -70,6 +71,10 @@ export default function InstallsPage({
   const [remoteError, setRemoteError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [installed, setInstalled] = useState<InstalledBuild[]>([])
+  // builds present on the user's other machines but not here (cloud sync);
+  // surfaced as an offer banner — nothing is ever installed automatically
+  const [cloudMissing, setCloudMissing] = useState<SyncedBuildRef[]>([])
+  const [cloudInstalling, setCloudInstalling] = useState(false)
   // opening Installs normally lands on Stable; arriving via a version search (from
   // Projects, Sync or the tray) stays on All so the searched build is not filtered out
   const [filter, setFilter] = useState<string>(() => {
@@ -243,6 +248,41 @@ export default function InstallsPage({
     },
     [buildsApi]
   )
+
+  // the cloud build list lives in main's sync engine; the page just mirrors it
+  useEffect(() => {
+    let alive = true
+    api.cloudSync
+      .status()
+      .then((status) => {
+        if (alive) setCloudMissing(status.missingBuilds)
+      })
+      .catch(() => {})
+    const off = api.cloudSync.onStateChanged((status) => {
+      if (alive) setCloudMissing(status.missingBuilds)
+    })
+    return () => {
+      alive = false
+      off()
+    }
+  }, [api])
+
+  // resolve each missing ref against the loaded catalog: released builds by
+  // version+cycle class, rolling ones by branch within the minor (newest wins
+  // by catalog construction). Unresolvable refs are listed but not installable.
+  const cloudOffers = useMemo(() => {
+    if (cloudMissing.length === 0) return []
+    return cloudMissing.map((ref) => {
+      const build =
+        remote?.find((candidate) =>
+          isReleasedBuildRef(ref)
+            ? candidate.version === ref.version &&
+              cycleClass(candidate.releaseCycle) === cycleClass(ref.releaseCycle)
+            : candidate.branch === (ref.branch ?? '') && minorOf(candidate.version) === minorOf(ref.version)
+        ) ?? null
+      return { ref, build }
+    })
+  }, [cloudMissing, remote])
 
   useEffect(() => {
     refreshInstalled()
@@ -1027,6 +1067,33 @@ export default function InstallsPage({
               </button>
             ))}
           </div>
+
+          {cloudOffers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3">
+              <p className="text-sm text-zinc-300">
+                {t('installs.cloudMissing')}{' '}
+                <span className="text-zinc-400">{cloudOffers.map(({ ref }) => buildRefLabel(ref)).join(', ')}</span>
+              </p>
+              {cloudOffers.some(({ build }) => build !== null) && (
+                <button
+                  onClick={async () => {
+                    setCloudInstalling(true)
+                    try {
+                      for (const { build } of cloudOffers) {
+                        if (build) await requestInstall(build)
+                      }
+                    } finally {
+                      setCloudInstalling(false)
+                    }
+                  }}
+                  disabled={cloudInstalling}
+                  className="rounded-lg border border-sky-500/40 px-3 py-1 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {cloudInstalling ? '…' : t('installs.cloudInstallAll')}
+                </button>
+              )}
+            </div>
+          )}
 
           {remoteError ? (
             <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">

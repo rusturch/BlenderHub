@@ -130,6 +130,28 @@ export async function reconcileCloudSyncNotification(
   await reconcile('cloud-sync', drafts)
 }
 
+/**
+ * Cloud-sync engine hook: builds installed on the user's other machines that
+ * are missing here. State-derived with a content-fingerprint id — the entry
+ * disappears the moment the set is installed (or the list empties) and pings
+ * again on a genuinely new set; respects the notify.cloudBuilds toggle.
+ */
+export async function reconcileCloudBuildsNotification(versions: string[] | null): Promise<void> {
+  const ui = await readUiState()
+  const on = notifyCategoryEnabledValue('cloud-builds', ui[NOTIFY_CATEGORY_KEYS['cloud-builds']])
+  const drafts =
+    versions && versions.length > 0 && on
+      ? [
+          draft(
+            'cloud-builds',
+            `cloud-builds:${createHash('sha256').update(versions.join('|')).digest('hex').slice(0, 12)}`,
+            { versions: versions.slice(0, 50) }
+          )
+        ]
+      : []
+  await reconcile('cloud-builds', drafts)
+}
+
 /** called by the builds:install handler; cancelled installs never get here */
 export function notifyBuildInstallResult(
   build: { version: string; releaseCycle: string },
