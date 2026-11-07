@@ -72,7 +72,14 @@ ConvertTo-Json -InputObject @($out) -Compress`
 }
 
 async function listProcessesPosix(): Promise<ProcEntry[]> {
-  const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,command='], { timeout: EXEC_TIMEOUT_MS })
+  // -ww: never truncate the command column. macOS/BSD `ps` caps it at the terminal
+  // width by default, which clips a deep managed-install path
+  // (…/installs/<build>/Blender.app/Contents/MacOS/Blender) so the full-path prefix
+  // match below fails and a running Blender is missed — letting a headless prefs
+  // write race a live instance that re-saves on exit.
+  const { stdout } = await execFileAsync('ps', ['-axww', '-o', 'pid=,command='], {
+    timeout: EXEC_TIMEOUT_MS
+  })
   const entries: ProcEntry[] = []
   for (const line of stdout.split('\n')) {
     const match = /^\s*(\d+)\s+(.+)$/.exec(line)

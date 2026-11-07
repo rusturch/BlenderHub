@@ -25,6 +25,13 @@ win:
 mac:
   category: public.app-category.graphics-design
   target: dmg
+  # The mac build ships UNSIGNED on purpose (no Apple Developer cert): the in-app
+  # updater is Windows-only and the .dmg is a manual download, so Gatekeeper is
+  # cleared once with a right-click → Open or `xattr -cr "/Applications/Blender Hub.app"`.
+  # identity: null makes that explicit — electron-builder then never tries to sign
+  # with whatever Developer ID happens to be in the build machine's keychain, so
+  # `npm run build:mac` produces the same unsigned bundle on CI and on any dev Mac.
+  identity: null
 linux:
   target:
     - AppImage
