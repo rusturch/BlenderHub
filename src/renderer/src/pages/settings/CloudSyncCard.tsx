@@ -20,7 +20,8 @@ const EMPTY_STATUS: CloudSyncStatus = {
   lastError: null,
   firstLinkPending: false,
   connecting: false,
-  missingBuilds: [],
+  syncedItems: [],
+  libraryFiles: null,
   dataFolderCloudHint: null
 }
 
@@ -34,6 +35,7 @@ export function CloudSyncCard({ anchorId, highlighted }: { anchorId?: string; hi
 
   const [status, setStatus] = useState<CloudSyncStatus>(EMPTY_STATUS)
   const [enabled, setEnabled] = useState(cloudEnabled)
+  const [filesOpen, setFilesOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState(false)
   const pendingRef = useRef(false)
@@ -203,6 +205,58 @@ export function CloudSyncCard({ anchorId, highlighted }: { anchorId?: string; hi
             <span className="text-[11px] text-zinc-500">
               {t('settings.cloudUsage', { used: formatBytes(usage.usedBytes), count: usage.itemCount })}
             </span>
+          )}
+
+          {(status.syncedItems.length > 0 || status.libraryFiles) && (
+            <div className="flex flex-col gap-1 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+              <span className="text-[11px] font-semibold text-zinc-500">{t('settings.cloudSyncedItems')}</span>
+              {status.syncedItems.map((item) => (
+                <div key={item.itemId} className="flex items-baseline justify-between gap-3 text-[11px]">
+                  <span className="truncate text-zinc-300">
+                    {item.itemId === 'ui-state'
+                      ? t('settings.cloudItemUiState')
+                      : item.itemId === 'addon-library'
+                        ? t('settings.cloudItemLibrary')
+                        : item.itemId.startsWith('theme:')
+                          ? t('settings.cloudItemTheme', { name: item.itemId.slice('theme:'.length) })
+                          : item.itemId}
+                  </span>
+                  <span className="shrink-0 text-zinc-600">
+                    {formatBytes(item.size)}
+                    {item.updatedAt > 0 ? ` · ${new Date(item.updatedAt).toLocaleString()}` : ''}
+                  </span>
+                </div>
+              ))}
+              {status.libraryFiles && (
+                <>
+                  <button
+                    onClick={() => setFilesOpen((open) => !open)}
+                    className="flex w-full items-baseline justify-between gap-3 text-left text-[11px]"
+                  >
+                    <span className="truncate text-zinc-300 hover:text-zinc-100">
+                      <span
+                        className={`mr-1 inline-block text-zinc-600 transition-transform ${filesOpen ? 'rotate-90' : ''}`}
+                      >
+                        ▸
+                      </span>
+                      {t('settings.cloudItemLibraryFiles', { count: status.libraryFiles.count })}
+                    </span>
+                    <span className="shrink-0 text-zinc-600">{formatBytes(status.libraryFiles.bytes)}</span>
+                  </button>
+                  {filesOpen && status.libraryFiles.files.length > 0 && (
+                    <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto pl-4">
+                      {/* names can repeat (same archive name, different content) — index key */}
+                      {status.libraryFiles.files.map((file, index) => (
+                        <div key={index} className="flex items-baseline justify-between gap-3 text-[11px]">
+                          <span className="truncate text-zinc-400">{file.name}</span>
+                          <span className="shrink-0 text-zinc-600">{formatBytes(file.size)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           )}
 
           {status.dataFolderCloudHint && (

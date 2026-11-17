@@ -17,7 +17,6 @@ import {
 import { locateInstalls } from './locate'
 import { listRunningBlenders, requestCloseBlenders } from './running'
 import { scheduleAssetLibraryReconcile } from '../asset-library/service'
-import { scheduleCloudPush } from '../cloud-sync/engine'
 import { notifyBuildInstallResult } from '../notifications/service'
 import { requireString } from '../ipc-util'
 import type { InstallProgress } from '../../shared/types'
@@ -78,7 +77,6 @@ export function registerBlenderIpc(): void {
       // anyway until the version has run once and owns a userpref.blend)
       scheduleAssetLibraryReconcile()
       notifyBuildInstallResult(build)
-      scheduleCloudPush() // the synced build list changed
       return installed
     } catch (error) {
       // a cancel is the user's own doing, not a failure to report as one
@@ -125,10 +123,7 @@ export function registerBlenderIpc(): void {
     requestCloseBlenders(requireMinors(rawMinors))
   )
 
-  ipcMain.handle('builds:uninstall', async (_event, rawId: unknown) => {
-    await uninstallBuild(requireString(rawId, 'install id'))
-    scheduleCloudPush() // the synced build list changed
-  })
+  ipcMain.handle('builds:uninstall', (_event, rawId: unknown) => uninstallBuild(requireString(rawId, 'install id')))
 
   ipcMain.handle('builds:open-folder', async (_event, rawId: unknown) => {
     const build = await findInstalled(requireString(rawId, 'install id'))

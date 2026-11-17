@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { sanitizeBuildRefs, type SyncedBuildRef } from '../../shared/cloud-sync'
+import { sanitizeLibraryEntries } from '../../shared/cloud-sync'
+import type { LibraryAddon } from '../../shared/types'
 import { getDataRoot } from '../paths'
 import { machineTag } from './machine'
 
@@ -21,10 +22,10 @@ export interface CloudSyncState {
   items: Record<string, ItemSyncRecord>
   /** last full ui-state payload pulled from cloud, for push carry-through */
   lastPulledUiState?: Record<string, string>
-  /** identity keys of THIS machine's builds at the last reconcile — the 3-way merge base */
-  installsPrevLocal?: string[]
-  /** last cloud build list this machine saw (avoids refetching an unchanged item) */
-  lastPulledInstalls?: SyncedBuildRef[]
+  /** library entry ids of THIS machine already reflected in the cloud — the merge base */
+  libraryPrevLocal?: string[]
+  /** last cloud library index this machine saw (avoids refetching an unchanged item) */
+  lastPulledLibrary?: LibraryAddon[]
   /** cloud data epoch this machine last reconciled against */
   dataEpoch: string
   /** whether the first-link resolution has run for the current connection */
@@ -60,15 +61,15 @@ export async function readSyncState(): Promise<CloudSyncState> {
     raw.lastPulledUiState && typeof raw.lastPulledUiState === 'object'
       ? (raw.lastPulledUiState as Record<string, string>)
       : undefined
-  const prevLocal = Array.isArray(raw.installsPrevLocal)
-    ? (raw.installsPrevLocal as unknown[]).filter((key): key is string => typeof key === 'string').slice(0, 200)
+  const libraryPrevLocal = Array.isArray(raw.libraryPrevLocal)
+    ? (raw.libraryPrevLocal as unknown[]).filter((key): key is string => typeof key === 'string').slice(0, 600)
     : undefined
-  const lastPulledInstalls = raw.lastPulledInstalls !== undefined ? sanitizeBuildRefs(raw.lastPulledInstalls) : undefined
+  const lastPulledLibrary = raw.lastPulledLibrary !== undefined ? sanitizeLibraryEntries(raw.lastPulledLibrary) : undefined
   return {
     items,
     lastPulledUiState: lastPulled,
-    installsPrevLocal: prevLocal,
-    lastPulledInstalls,
+    libraryPrevLocal,
+    lastPulledLibrary,
     dataEpoch: typeof raw.dataEpoch === 'string' ? raw.dataEpoch : '',
     linked: raw.linked === true
   }
@@ -96,8 +97,12 @@ export function updateSyncState(patch: (state: CloudSyncState) => CloudSyncState
           ...rawFields,
           items: next.items,
           lastPulledUiState: next.lastPulledUiState,
-          installsPrevLocal: next.installsPrevLocal,
-          lastPulledInstalls: next.lastPulledInstalls,
+          libraryPrevLocal: next.libraryPrevLocal,
+          lastPulledLibrary: next.lastPulledLibrary,
+          // retired fields from the 0.6.0 installed-builds sync: force-dropped
+          // so stale merge bases can't linger in the per-machine state file
+          installsPrevLocal: undefined,
+          lastPulledInstalls: undefined,
           dataEpoch: next.dataEpoch,
           linked: next.linked
         },

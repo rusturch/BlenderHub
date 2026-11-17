@@ -1,33 +1,36 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, shell } from 'electron'
 import { createHash } from 'crypto'
-import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
+import { readConfig, updateConfig } from '../config'
 import { getDataRoot } from '../paths'
 import { readUiState, setUiValueFromMain } from '../ui-state'
 import {
   BUNDLE_SCHEMA,
-  buildRefKey,
-  buildRefLabel,
   CLOUD_ENABLED_UI_KEY,
-  INSTALLS_ITEM_ID,
   isSharedUiKey,
   isSyncItemId,
   isThemeItemId,
+  LIBRARY_ITEM_ID,
   MANIFEST_MAX_ITEMS,
-  sanitizeBuildRefs,
+  MAX_LIBRARY_BLOB_BYTES,
+  sanitizeLibraryEntries,
   sharedUiSubset,
   stableStringify,
   themeIdFromItemId,
   themeItemId,
   UI_STATE_ITEM_ID,
   type ManifestItem,
-  type SyncedBuildRef,
   type SyncEnvelope
 } from '../../shared/cloud-sync'
-import { isReleasedCycle } from '../../shared/blender-builds'
 import { isThemeId, sanitizeThemeColors, THEME_NAME_MAX } from '../../shared/theme'
-import type { CloudSyncAccount, CloudSyncStatus, CloudSyncUsage } from '../../shared/types'
-import { listInstalled } from '../blender/installs'
+import type {
+  CloudSyncAccount,
+  CloudSyncedItem,
+  CloudSyncStatus,
+  CloudSyncUsage,
+  LibraryAddon
+} from '../../shared/types'
 import * as drive from './drive'
 import { CloudAuthError } from './drive'
 import { openAuthUrlInBrowser, startSignIn, type SignInSession } from './google-auth'
@@ -44,8 +47,12 @@ import { readSyncState, resetSyncState, updateSyncState } from './store'
 
 const UI_PAYLOAD_FORMAT = 'ui-state@1'
 const THEME_PAYLOAD_FORMAT = 'theme@1'
-const INSTALLS_PAYLOAD_FORMAT = 'installs@1'
+const LIBRARY_PAYLOAD_FORMAT = 'addon-library@1'
 const THEME_FILE_MAX_BYTES = 64 * 1024
+/** unreferenced archive blobs younger than this survive GC: their index push may be in flight */
+const BLOB_GC_GRACE_MS = 24 * 60 * 60_000
+/** the retired installed-builds list (shipped in 0.6.0) — deleted from the cloud on sight */
+const LEGACY_INSTALLS_ITEM_ID = 'installs'
 
 const STARTUP_DELAY_MS = 60_000
 const ROUND_INTERVAL_MS = 15 * 60_000
@@ -57,13 +64,6 @@ export function setCloudNotifyHook(hook: (reason: NotifyReason | null) => void):
   notifyHook = hook
 }
 
-// separate channel for "builds from your other machines are missing here":
-// state-derived, display labels, null clears the entry
-let buildsHook: (versions: string[] | null) => void = () => {}
-export function setCloudBuildsNotifyHook(hook: (versions: string[] | null) => void): void {
-  buildsHook = hook
-}
-
 // --- module state ------------------------------------------------------------
 
 let enabled = false
@@ -72,7 +72,9 @@ let lastSyncAt: number | null = null
 let lastError: string | null = null
 let cachedAccount: CloudSyncAccount | null = null
 let cachedUsage: CloudSyncUsage | null = null
-let missingBuilds: SyncedBuildRef[] = []
+let cachedItems: CloudSyncedItem[] = []
+let cachedLibraryFiles: { count: number; bytes: number } | null = null
+let cachedLibraryList: { name: string; size: number }[] = []
 let applying = false // suppress the push feedback from our own ui-state writes
 
 let roundTimer: ReturnType<typeof setTimeout> | null = null
@@ -114,7 +116,8 @@ function buildStatus(connected: boolean): CloudSyncStatus {
     lastError,
     firstLinkPending,
     connecting: connectSession !== null,
-    missingBuilds,
+    syncedItems: cachedItems,
+    libraryFiles: cachedLibraryFiles ? { ...cachedLibraryFiles, files: cachedLibraryList } : null,
     dataFolderCloudHint: detectCloudSyncedDataFolder(getDataRoot())
   }
 }
@@ -259,8 +262,8 @@ function buildEnvelope(itemId: string, item: LocalItem, parentGeneration: number
     payloadFormat:
       itemId === UI_STATE_ITEM_ID
         ? UI_PAYLOAD_FORMAT
-        : itemId === INSTALLS_ITEM_ID
-          ? INSTALLS_PAYLOAD_FORMAT
+        : itemId === LIBRARY_ITEM_ID
+          ? LIBRARY_PAYLOAD_FORMAT
           : THEME_PAYLOAD_FORMAT,
     parentGeneration,
     deviceId: machineId(),
@@ -398,54 +401,46 @@ async function rememberPulledUi(payload: unknown): Promise<void> {
   await updateSyncState((state) => ({ ...state, lastPulledUiState: record }))
 }
 
-// --- installed-builds list (set semantics, not LWW) ---------------------------
+// --- add-on library (content-addressed set, not LWW) ---------------------------
+
+const libraryRootDir = async (): Promise<string> =>
+  (await readConfig()).addonLibraryDir || join(getDataRoot(), 'addon-library')
 
 /**
- * Catalog-addressable refs of the builds present on THIS machine. Located
- * builds count only when released (their version is resolvable in the archive
- * on another machine); located rolling builds are custom by nature and stay
- * machine-local.
+ * The library syncs as a SET of content-addressed entries (id = first 12 hex of
+ * the file's sha256, minted identically on every machine) plus one archive blob
+ * per entry. 3-way merge like the ui whitelist's sibling features: base = this
+ * machine's own set at its previous reconcile; only its own adds/removals touch
+ * the shared index. Archives upload BEFORE their index entries are published
+ * and download with a hash check before an entry lands in config; removals made
+ * elsewhere move the local copy to the OS trash — recoverable, never wiped.
  */
-async function collectLocalBuildRefs(): Promise<SyncedBuildRef[]> {
-  const installed = await listInstalled()
-  const refs: SyncedBuildRef[] = []
-  for (const build of installed) {
-    if (!build.managed && !isReleasedCycle(build.releaseCycle)) continue
-    const ref: SyncedBuildRef = { version: build.version, releaseCycle: build.releaseCycle }
-    if (build.branch) ref.branch = build.branch
-    refs.push(ref)
-  }
-  return sanitizeBuildRefs(refs)
-}
-
-/**
- * The cloud build list is a SET shared by all machines, so it merges 3-way
- * instead of last-write-wins: base = this machine's own set at its previous
- * reconcile. Only THIS machine's installs/uninstalls since then are applied to
- * the cloud list; everything other machines contributed stays. Uninstalls
- * propagate as "stop listing it", never as an uninstall elsewhere: the list
- * only ever drives an OFFER to install what's missing.
- */
-async function reconcileInstalls(token: string, remote: ManifestItem | undefined): Promise<void> {
-  const localRefs = await collectLocalBuildRefs()
-  const localKeys = new Set(localRefs.map(buildRefKey))
+async function reconcileLibrary(
+  token: string,
+  remote: ManifestItem | undefined,
+  blobs: drive.CloudBlob[],
+  errors: string[]
+): Promise<void> {
+  const root = await libraryRootDir()
+  const localEntries = sanitizeLibraryEntries((await readConfig()).addonLibrary)
+  const localIds = new Set(localEntries.map((entry) => entry.id))
   const state = await readSyncState()
-  const record = state.items[INSTALLS_ITEM_ID]
-  const prevLocal = new Set(state.installsPrevLocal ?? [])
+  const record = state.items[LIBRARY_ITEM_ID]
+  const prevLocal = new Set(state.libraryPrevLocal ?? [])
+  const blobShas = new Set(blobs.map((blob) => blob.sha256))
 
-  // current cloud list: the cached copy while the generation still matches,
-  // a fresh fetch otherwise
-  let cloudRefs: SyncedBuildRef[] = []
+  // current cloud index: cached while the generation matches, fetched otherwise
+  let cloudEntries: LibraryAddon[] = []
   let cloudGen = 0
   let cloudSha = remote?.sha256 ?? ''
   if (remote) {
     cloudGen = remote.generation
-    if (record && record.lastSyncedGeneration === remote.generation && state.lastPulledInstalls) {
-      cloudRefs = state.lastPulledInstalls
+    if (record && record.lastSyncedGeneration === remote.generation && state.lastPulledLibrary) {
+      cloudEntries = state.lastPulledLibrary
     } else {
-      const fetched = await drive.fetchItem(token, INSTALLS_ITEM_ID)
+      const fetched = await drive.fetchItem(token, LIBRARY_ITEM_ID)
       if (fetched) {
-        cloudRefs = sanitizeBuildRefs((fetched.envelope.payload as { builds?: unknown } | null)?.builds)
+        cloudEntries = sanitizeLibraryEntries((fetched.envelope.payload as { entries?: unknown } | null)?.entries)
         cloudGen = fetched.generation
         if (typeof fetched.envelope.sha256 === 'string') cloudSha = fetched.envelope.sha256
       }
@@ -453,40 +448,113 @@ async function reconcileInstalls(token: string, remote: ManifestItem | undefined
   }
 
   // nothing anywhere: don't create an empty cloud item for the sake of it
-  if (!remote && localRefs.length === 0) {
-    missingBuilds = []
-    buildsHook(null)
-    return
+  if (!remote && localEntries.length === 0) return
+
+  const added = localEntries.filter((entry) => !prevLocal.has(entry.id))
+  const removedIds = new Set([...prevLocal].filter((id) => !localIds.has(id)))
+
+  // upload archives for this machine's additions BEFORE publishing their index
+  // entries — the shared index must never reference a missing file. A failed
+  // upload keeps its entry local-only and retries next round.
+  const addedOk: LibraryAddon[] = []
+  for (const entry of added) {
+    try {
+      if (!blobShas.has(entry.sha256)) {
+        const filePath = join(root, entry.id, entry.fileName)
+        const info = await stat(filePath)
+        if (info.size > MAX_LIBRARY_BLOB_BYTES) throw new Error(`${entry.fileName} exceeds the 512 MB sync limit`)
+        await drive.uploadBlob(token, entry.sha256, filePath, info.size)
+        blobShas.add(entry.sha256)
+      }
+      addedOk.push(entry)
+    } catch (error) {
+      if (error instanceof CloudAuthError) throw error
+      errors.push(error instanceof Error ? error.message : String(error))
+      console.warn(`[cloud-sync] library upload failed for ${entry.fileName}:`, error)
+    }
   }
 
-  const added = localRefs.filter((ref) => !prevLocal.has(buildRefKey(ref)))
-  const removedKeys = new Set([...prevLocal].filter((key) => !localKeys.has(key)))
-  const byKey = new Map(cloudRefs.map((ref) => [buildRefKey(ref), ref]))
-  for (const ref of added) byKey.set(buildRefKey(ref), ref)
-  for (const key of removedKeys) byKey.delete(key)
-  const target = sanitizeBuildRefs([...byKey.values()])
+  const byId = new Map(cloudEntries.map((entry) => [entry.id, entry]))
+  for (const entry of addedOk) byId.set(entry.id, entry)
+  for (const id of removedIds) byId.delete(id)
+  const target = sanitizeLibraryEntries([...byId.values()])
+  const targetIds = new Set(target.map((entry) => entry.id))
+  cachedLibraryList = target
+    .map((entry) => ({ name: entry.fileName, size: entry.fileSize }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
-  const sameAsCloud = target.map(buildRefKey).join('|') === cloudRefs.map(buildRefKey).join('|')
   let finalGen = cloudGen
   let finalSha = cloudSha
-  if (!sameAsCloud || !remote) {
-    const payload = { builds: target }
+  const changed = target.map((entry) => entry.id).join('|') !== cloudEntries.map((entry) => entry.id).join('|')
+  if (changed || !remote) {
+    const payload = { entries: target }
     const item: LocalItem = { payload, sha: sha256(stableStringify(payload)), deleted: false }
-    const result = await drive.putItem(token, INSTALLS_ITEM_ID, buildEnvelope(INSTALLS_ITEM_ID, item, cloudGen), cloudGen)
+    const result = await drive.putItem(token, LIBRARY_ITEM_ID, buildEnvelope(LIBRARY_ITEM_ID, item, cloudGen), cloudGen)
     if (!result.ok) return // lost the write race — the next round re-merges from scratch
     finalGen = result.generation
     finalSha = item.sha
   }
 
-  await recordItem(INSTALLS_ITEM_ID, { lastSyncedGeneration: finalGen, lastSyncedSha256: finalSha })
+  // pull: entries other machines added — archive first (hash-verified), then config
+  for (const entry of target) {
+    if (localIds.has(entry.id)) continue
+    try {
+      if (!blobShas.has(entry.sha256)) throw new Error(`${entry.fileName}: archive is not in the cloud yet`)
+      const dir = join(root, entry.id)
+      await mkdir(dir, { recursive: true })
+      await drive.downloadBlobToFile(token, entry.sha256, join(dir, entry.fileName), entry.fileSize + 1024)
+      // same duplicate guard as addToLibrary: the config write is serialized
+      await updateConfig((config) =>
+        config.addonLibrary.some((candidate) => candidate.id === entry.id || candidate.sha256 === entry.sha256)
+          ? config
+          : { ...config, addonLibrary: [...config.addonLibrary, entry] }
+      )
+      localIds.add(entry.id)
+    } catch (error) {
+      if (error instanceof CloudAuthError) throw error
+      errors.push(error instanceof Error ? error.message : String(error))
+      console.warn(`[cloud-sync] library download failed for ${entry.fileName}:`, error)
+    }
+  }
+
+  // entries removed elsewhere (synced before, gone from the index now): drop the
+  // config entry and move the folder to the OS trash — recoverable by design
+  for (const entry of localEntries) {
+    if (targetIds.has(entry.id) || !prevLocal.has(entry.id)) continue
+    try {
+      await updateConfig((config) => ({
+        ...config,
+        addonLibrary: config.addonLibrary.filter((candidate) => candidate.id !== entry.id)
+      }))
+      try {
+        await shell.trashItem(join(root, entry.id))
+      } catch {
+        await rm(join(root, entry.id), { recursive: true, force: true })
+      }
+      localIds.delete(entry.id)
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error))
+      console.warn(`[cloud-sync] library removal failed for ${entry.fileName}:`, error)
+    }
+  }
+
+  await recordItem(LIBRARY_ITEM_ID, { lastSyncedGeneration: finalGen, lastSyncedSha256: finalSha })
   await updateSyncState((s) => ({
     ...s,
-    installsPrevLocal: [...localKeys].sort(),
-    lastPulledInstalls: target
+    // merge base = what is both local and reflected in the shared index now;
+    // a failed upload stays out and counts as "added" again next round
+    libraryPrevLocal: [...localIds].filter((id) => targetIds.has(id)).sort(),
+    lastPulledLibrary: target
   }))
 
-  missingBuilds = target.filter((ref) => !localKeys.has(buildRefKey(ref)))
-  buildsHook(missingBuilds.length > 0 ? missingBuilds.map(buildRefLabel) : null)
+  // garbage-collect unreferenced archives, sparing recent ones: another machine
+  // may have uploaded a blob whose index push has not landed yet
+  const referenced = new Set(target.map((entry) => entry.sha256))
+  for (const blob of blobs) {
+    if (referenced.has(blob.sha256)) continue
+    if (Date.now() - blob.updatedAt < BLOB_GC_GRACE_MS) continue
+    await drive.deleteBlob(token, blob.sha256).catch(() => {})
+  }
 }
 
 async function runRound(): Promise<void> {
@@ -507,20 +575,30 @@ async function runRound(): Promise<void> {
   if (state.linked && manifest.dataEpoch !== state.dataEpoch) {
     await resetSyncState()
     await setUiValueFromMain(CLOUD_ENABLED_UI_KEY, 'off') // listener drops `enabled`
-    missingBuilds = []
-    buildsHook(null)
     lastError = 'Cloud data was deleted — turn sync back on to start fresh'
     return
   }
 
+  // the retired installed-builds item (0.6.0) is junk now — remove it on sight
+  // so the app folder holds only what current clients actually sync
+  if (manifest.items.some((item) => item.itemId === LEGACY_INSTALLS_ITEM_ID)) {
+    await drive.deleteItem(token, LEGACY_INSTALLS_ITEM_ID).catch(() => {})
+    await recordItem(LEGACY_INSTALLS_ITEM_ID, null)
+  }
+
   // validate every cloud-supplied id before it can reach a filesystem path,
   // and cap how many we process (the listing is untrusted input)
-  const validItems = manifest.items.filter((item) => isSyncItemId(item.itemId)).slice(0, MANIFEST_MAX_ITEMS)
+  const validItems = manifest.items
+    .filter((item) => isSyncItemId(item.itemId) && item.itemId !== LEGACY_INSTALLS_ITEM_ID)
+    .slice(0, MANIFEST_MAX_ITEMS)
   const remoteById = new Map(validItems.map((item) => [item.itemId, item]))
+  const blobBytes = manifest.blobs.reduce((sum, blob) => sum + blob.size, 0)
   cachedUsage = {
-    usedBytes: validItems.reduce((sum, item) => sum + item.size, 0),
+    usedBytes: validItems.reduce((sum, item) => sum + item.size, 0) + blobBytes,
     itemCount: validItems.length
   }
+  cachedItems = validItems.map((item) => ({ itemId: item.itemId, size: item.size, updatedAt: item.updatedAt }))
+  cachedLibraryFiles = manifest.blobs.length > 0 ? { count: manifest.blobs.length, bytes: blobBytes } : null
 
   const firstLink = !state.linked
   if (firstLink) {
@@ -531,7 +609,7 @@ async function runRound(): Promise<void> {
 
   const fresh = await readSyncState()
   const localThemeIds = await listLocalThemeIds()
-  const itemIds = new Set<string>([UI_STATE_ITEM_ID, INSTALLS_ITEM_ID])
+  const itemIds = new Set<string>([UI_STATE_ITEM_ID, LIBRARY_ITEM_ID])
   for (const id of localThemeIds) itemIds.add(themeItemId(id))
   for (const item of validItems) itemIds.add(item.itemId)
 
@@ -539,10 +617,9 @@ async function runRound(): Promise<void> {
   const errors: string[] = []
   for (const itemId of itemIds) {
     try {
-      // the build list merges as a SET (union + own removals), not as an
-      // LWW-envelope — it has its own reconcile
-      if (itemId === INSTALLS_ITEM_ID) {
-        await reconcileInstalls(token, remoteById.get(itemId))
+      // the library is a content-addressed set with its own merge + archives
+      if (itemId === LIBRARY_ITEM_ID) {
+        await reconcileLibrary(token, remoteById.get(itemId), manifest.blobs, errors)
         continue
       }
       const local =
@@ -780,12 +857,13 @@ export async function disconnect(deleteCloud: boolean): Promise<CloudSyncStatus>
   drive.dropCaches(token)
   cachedAccount = null
   cachedUsage = null
-  missingBuilds = []
+  cachedItems = []
+  cachedLibraryFiles = null
+  cachedLibraryList = []
   lastError = null
   firstLinkPending = false
   firstLinkChoice = null
   notifyHook(null)
-  buildsHook(null)
   await emitState()
   return currentStatus()
 }
@@ -796,8 +874,9 @@ export async function deleteCloud(): Promise<CloudSyncStatus> {
     await drive.deleteCloudData(token)
     await resetSyncState()
     cachedUsage = { usedBytes: 0, itemCount: 0 }
-    missingBuilds = []
-    buildsHook(null)
+    cachedItems = []
+    cachedLibraryFiles = null
+    cachedLibraryList = []
     // turn sync OFF so this machine doesn't immediately re-upload everything
     // and undo the deletion; the user re-enables it to start fresh
     await setUiValueFromMain(CLOUD_ENABLED_UI_KEY, 'off')

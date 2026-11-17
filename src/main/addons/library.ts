@@ -6,6 +6,7 @@ import { shell } from 'electron'
 import { basename, extname, join, resolve } from 'path'
 import { getDataRoot } from '../paths'
 import { readConfig, updateConfig } from '../config'
+import { scheduleCloudPush } from '../cloud-sync/engine'
 import { parseBlInfo, parseManifest } from './addon-meta'
 import { listZipEntries, readZipEntryBytes, readZipEntryText } from './zip-util'
 import { buildZip } from './zip-write'
@@ -343,6 +344,7 @@ export async function addToLibraryOrExisting(
       }
       throw error
     }
+    scheduleCloudPush() // the synced library set changed
     return { entry, existed: false }
   } finally {
     if (inner) await rm(inner.tempPath, { force: true }).catch(() => {})
@@ -367,6 +369,7 @@ export async function removeFromLibrary(id: string): Promise<LibraryAddon[]> {
     ...config,
     addonLibrary: config.addonLibrary.filter((candidate) => candidate.id !== id)
   }))
+  scheduleCloudPush() // the synced library set changed
   return next.addonLibrary
 }
 

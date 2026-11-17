@@ -50,7 +50,7 @@ export function sharedUiSubset(state: Record<string, string>): Record<string, st
 // --- item ids ----------------------------------------------------------------
 
 export const UI_STATE_ITEM_ID = 'ui-state'
-export const INSTALLS_ITEM_ID = 'installs'
+export const LIBRARY_ITEM_ID = 'addon-library'
 export const THEME_ITEM_PREFIX = 'theme:'
 
 export const themeItemId = (themeId: string): string => `${THEME_ITEM_PREFIX}${themeId}`
@@ -63,7 +63,7 @@ export const themeIdFromItemId = (itemId: string): string => itemId.slice(THEME_
  * ever reaches a filesystem path: a manifest is untrusted input, and an id like
  * `theme:../../secrets` would otherwise traverse out of the themes folder.
  */
-export const ITEM_ID_RE = /^(ui-state|installs|theme:[a-z0-9][a-z0-9_-]{0,63})$/
+export const ITEM_ID_RE = /^(ui-state|addon-library|theme:[a-z0-9][a-z0-9_-]{0,63})$/
 
 export const isSyncItemId = (itemId: string): boolean => ITEM_ID_RE.test(itemId)
 
@@ -102,64 +102,57 @@ export interface SyncManifest {
   items: ManifestItem[]
 }
 
-// --- synced installed builds ---------------------------------------------------
+// --- synced add-on library -------------------------------------------------------
+
+/** hard cap per stored add-on archive — mirrors the install-side archive cap. */
+export const MAX_LIBRARY_BLOB_BYTES = 512 * 1024 * 1024
+export const MAX_LIBRARY_ENTRIES = 500
+
+const LIBRARY_ID_RE = /^[0-9a-f]{12}$/
+const SHA256_RE = /^[0-9a-f]{64}$/
+// display file names land in a filesystem path — no separators, no traversal,
+// no Windows-reserved punctuation, no leading dot (hides files on unix)
+const FILE_NAME_RE = /^[^\\/:*?"<>|\u0000-\u001f.][^\\/:*?"<>|\u0000-\u001f]{0,159}$/
+
+const optionalShortString = (value: unknown, max: number): string | null =>
+  typeof value === 'string' && value.length > 0 ? value.slice(0, max) : null
 
 /**
- * Catalog-addressable reference to an installed Blender build — the cloud list
- * carries these, never binaries: every machine downloads from the official
- * catalogs itself. Released builds (stable/lts/candidate/rc) are one-per-version;
- * rolling builds (daily/experimental/patch) churn commits daily, so their
- * cross-machine identity is "this branch of this minor".
+ * A pulled library index is untrusted input. Entries are content-addressed:
+ * `id` must be the first 12 hex chars of `sha256` (that's how the library mints
+ * ids), which pins every entry to the exact file bytes it describes.
  */
-export interface SyncedBuildRef {
-  version: string
-  releaseCycle: string
-  branch?: string
-}
-
-const CYCLE_CLASS = (cycle: string): string => (cycle === 'lts' ? 'stable' : cycle === 'rc' ? 'candidate' : cycle)
-const RELEASED_CLASSES = new Set(['stable', 'candidate'])
-const MINOR_OF = (version: string): string => version.split('.').slice(0, 2).join('.')
-
-export const isReleasedBuildRef = (ref: SyncedBuildRef): boolean => RELEASED_CLASSES.has(CYCLE_CLASS(ref.releaseCycle))
-
-/** identity key used for union/merge and the "is it installed here" check. */
-export function buildRefKey(ref: SyncedBuildRef): string {
-  if (isReleasedBuildRef(ref)) return `r:${ref.version}:${CYCLE_CLASS(ref.releaseCycle)}`
-  return `b:${MINOR_OF(ref.version)}:${ref.branch ?? CYCLE_CLASS(ref.releaseCycle)}`
-}
-
-/** short display label: "4.5.11", "4.5.12 candidate", "5.1 main". */
-export function buildRefLabel(ref: SyncedBuildRef): string {
-  if (isReleasedBuildRef(ref)) {
-    return CYCLE_CLASS(ref.releaseCycle) === 'stable' ? ref.version : `${ref.version} ${ref.releaseCycle}`
-  }
-  return `${MINOR_OF(ref.version)} ${ref.branch ?? ref.releaseCycle}`
-}
-
-const VERSION_RE = /^\d+\.\d+(\.\d+)?$/
-const CYCLE_RE = /^[a-z][a-z0-9-]{0,19}$/
-const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$/
-export const MAX_SYNCED_BUILDS = 100
-
-/** pulled lists are untrusted input: drop malformed entries, dedupe, cap, sort. */
-export function sanitizeBuildRefs(raw: unknown): SyncedBuildRef[] {
+export function sanitizeLibraryEntries(raw: unknown): import('./types').LibraryAddon[] {
   if (!Array.isArray(raw)) return []
-  const byKey = new Map<string, SyncedBuildRef>()
-  for (const entry of raw) {
-    if (byKey.size >= MAX_SYNCED_BUILDS) break
-    const record = entry as { version?: unknown; releaseCycle?: unknown; branch?: unknown } | null
+  const byId = new Map<string, import('./types').LibraryAddon>()
+  for (const candidate of raw) {
+    if (byId.size >= MAX_LIBRARY_ENTRIES) break
+    const record = candidate as Record<string, unknown> | null
     if (!record || typeof record !== 'object') continue
-    if (typeof record.version !== 'string' || !VERSION_RE.test(record.version)) continue
-    if (typeof record.releaseCycle !== 'string' || !CYCLE_RE.test(record.releaseCycle)) continue
-    const ref: SyncedBuildRef = { version: record.version, releaseCycle: record.releaseCycle }
-    if (record.branch !== undefined) {
-      if (typeof record.branch !== 'string' || !BRANCH_RE.test(record.branch)) continue
-      ref.branch = record.branch
-    }
-    byKey.set(buildRefKey(ref), ref)
+    const id = record.id
+    const sha256 = record.sha256
+    const fileName = record.fileName
+    if (typeof id !== 'string' || !LIBRARY_ID_RE.test(id)) continue
+    if (typeof sha256 !== 'string' || !SHA256_RE.test(sha256) || !sha256.startsWith(id)) continue
+    if (typeof fileName !== 'string' || !FILE_NAME_RE.test(fileName) || fileName.includes('..')) continue
+    if (record.format !== 'legacy' && record.format !== 'extension') continue
+    const fileSize = typeof record.fileSize === 'number' ? record.fileSize : NaN
+    if (!Number.isInteger(fileSize) || fileSize <= 0 || fileSize > MAX_LIBRARY_BLOB_BYTES) continue
+    byId.set(id, {
+      id,
+      format: record.format,
+      name: optionalShortString(record.name, 200) ?? id,
+      moduleId: optionalShortString(record.moduleId, 120) ?? id,
+      version: optionalShortString(record.version, 32),
+      minBlender: optionalShortString(record.minBlender, 16),
+      maxBlender: optionalShortString(record.maxBlender, 16),
+      fileName,
+      fileSize,
+      sha256,
+      addedAt: optionalShortString(record.addedAt, 40) ?? ''
+    })
   }
-  return [...byKey.values()].sort((a, b) => buildRefKey(a).localeCompare(buildRefKey(b)))
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
 }
 
 /** stable stringify (sorted keys) so equal content always hashes identically. */
