@@ -12,7 +12,8 @@ export function SectionCard({
   children,
   control,
   anchorId,
-  highlighted
+  highlighted,
+  hidden
 }: {
   title: string
   hint: string
@@ -21,7 +22,10 @@ export function SectionCard({
   control?: ReactNode
   anchorId?: string
   highlighted?: boolean
+  /** not rendered at all — the settings window shows one section's cards at a time */
+  hidden?: boolean
 }) {
+  if (hidden) return null
   return (
     <section
       id={anchorId}

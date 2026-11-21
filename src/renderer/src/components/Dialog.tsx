@@ -120,6 +120,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       {children}
       {pending && (
         <div
+          // marks a pending answer: the settings window, which may be underneath, leaves
+          // Escape alone while this is up
+          data-modal-overlay=""
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           {...backdrop}
         >

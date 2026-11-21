@@ -131,7 +131,11 @@ function DropdownMenu({
       onCloseRef.current()
     }
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onCloseRef.current()
+      if (event.key !== 'Escape') return
+      // the menu consumes this Escape — a window-level listener (the settings window)
+      // must not also close whatever the menu sits in
+      event.stopPropagation()
+      onCloseRef.current()
     }
     const dismiss = (): void => onCloseRef.current()
     // scrolling inside the menu itself must not dismiss it

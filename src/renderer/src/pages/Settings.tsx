@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import PageLayout from '../components/PageLayout'
 import Dropdown from '../components/Dropdown'
 import { useDialog } from '../components/Dialog'
 import { useTranslation, AVAILABLE_LANGUAGES, languageLabel } from '../lib/i18n'
@@ -33,16 +32,33 @@ import { BehaviorToggle, SectionCard, StorageUsageCard } from './settings/cells'
 import { AssetLibraryCard } from './settings/AssetLibraryCard'
 import { CloudSyncCard } from './settings/CloudSyncCard'
 import { ThemeCard } from './settings/ThemeCard'
-import { ChevronDownIcon, XIcon } from './settings/icons'
+import { ChevronDownIcon, UpdateBadgeIcon, XIcon } from './settings/icons'
 import { SUPERHIVE_DOCS_URL, pathBoxClass, primaryButtonClass, secondaryButtonClass } from './settings/constants'
+import { SettingsWindow } from './settings/SettingsWindow'
+import {
+  SETTINGS_SECTION_KEY,
+  isSettingsSection,
+  sectionForHighlight,
+  type SettingsSection
+} from './settings/sections'
 
-export default function SettingsPage({ highlight }: { highlight?: string }) {
+export default function SettingsPage({ highlight, onClose }: { highlight?: string; onClose: () => void }) {
   const { api, isDesktop } = getLauncherApi()
   const projectsApi = api.projects
   const buildsApi = api.builds
   const addonsApi = api.addons
   const { language, setLanguage, t } = useTranslation()
   const { confirm: confirmDialog, alert: alertDialog } = useDialog()
+
+  // a deep link picks its card's section; otherwise the window reopens where it was left
+  const [section, setSection] = useState<SettingsSection>(() => {
+    const stored = uiGet(SETTINGS_SECTION_KEY)
+    return sectionForHighlight(highlight) ?? (isSettingsSection(stored) ? stored : 'general')
+  })
+
+  useEffect(() => {
+    uiSet(SETTINGS_SECTION_KEY, section)
+  }, [section])
 
   const [folders, setFolders] = useState<ProjectFolder[]>([])
   const [files, setFiles] = useState<BlendFileInfo[]>([])
@@ -409,293 +425,355 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
 
   const desktopOnlyTitle = isDesktop ? undefined : t('settings.desktopOnlyHint')
 
+  const downloadProgressLabel = updateProgress?.totalBytes
+    ? `${Math.round(((updateProgress.receivedBytes ?? 0) / updateProgress.totalBytes) * 100)}%`
+    : formatBytes(updateProgress?.receivedBytes ?? 0)
+
+  // The launcher-update notice across the top of the window, on every section — the same
+  // state and actions as the Updates card, just surfaced where it can't be missed.
+  const updateBanner = updateInfo?.updateAvailable ? (
+    <div className="flex shrink-0 items-center gap-3 border-b border-blender/20 bg-blender/10 px-6 py-3">
+      <UpdateBadgeIcon className="h-5 w-5 shrink-0" />
+      <div className="min-w-0 flex-1">
+        {/* the version rides in the title so it stays visible through every state below */}
+        <p className="text-sm font-semibold text-zinc-100">
+          {t('settings.updateBannerTitle', { version: updateInfo.latestVersion ?? '' })}
+        </p>
+        <p className="truncate text-xs text-zinc-300">
+          {updateProgress?.phase === 'downloading'
+            ? t('settings.updatesDownloading', { progress: downloadProgressLabel })
+            : updateProgress?.phase === 'verifying'
+              ? t('settings.updatesVerifying')
+              : updateProgress?.phase === 'extracting'
+                ? t('settings.updatesExtracting')
+                : updateInfo.downloaded
+                  ? t('settings.updatesReady')
+                  : !updateInfo.canSelfUpdate
+                    ? t('settings.updatesManualOnly')
+                    : t('settings.updateBannerDownloadHint')}
+        </p>
+      </div>
+      <button onClick={openReleases} className={secondaryButtonClass}>
+        {t('settings.updatesReleaseNotes')}
+      </button>
+      {updateInfo.canSelfUpdate &&
+        (updateInfo.downloaded ? (
+          <button onClick={installUpdate} className={primaryButtonClass}>
+            {t('settings.updatesRestart')}
+          </button>
+        ) : (
+          <button
+            onClick={downloadUpdate}
+            disabled={updateBusy || updateProgress?.phase === 'downloading'}
+            className={primaryButtonClass}
+          >
+            {updateBusy ? '…' : t('settings.updatesDownload')}
+          </button>
+        ))}
+    </div>
+  ) : null
+
   return (
-    <PageLayout title={t('nav.settings')}>
-      <div className="flex flex-col gap-4">
-        <SectionCard
-          title={t('settings.updates')}
-          hint={t('settings.updatesHint')}
-          anchorId="updates-card"
-          highlighted={highlight === 'updates'}
-        >
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-zinc-500">{t('settings.updatesCurrent')}</span>
-              <span className="font-medium text-zinc-200">
-                {updateInfo?.currentVersion ? `v${updateInfo.currentVersion}` : '—'}
-              </span>
-            </div>
+    <SettingsWindow
+      section={section}
+      onSectionChange={setSection}
+      onClose={onClose}
+      banner={updateBanner}
+    >
+      <SectionCard
+        hidden={section !== 'updates'}
+        title={t('settings.updates')}
+        hint={t('settings.updatesHint')}
+        anchorId="updates-card"
+        highlighted={highlight === 'updates'}
+      >
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-zinc-500">{t('settings.updatesCurrent')}</span>
+            <span className="font-medium text-zinc-200">
+              {updateInfo?.currentVersion ? `v${updateInfo.currentVersion}` : '—'}
+            </span>
+          </div>
 
-            {updateChecking ? (
-              <p className="text-xs text-zinc-500">{t('settings.updatesChecking')}</p>
-            ) : updateInfo?.updateAvailable ? (
-              // a known update outranks a transient check error — offline users
-              // with a staged update must still see (and be able to install) it
-              <p className="text-xs font-medium text-blender">
-                {t('settings.updatesAvailable', { version: updateInfo.latestVersion ?? '' })}
-              </p>
-            ) : updateInfo?.error ? (
-              <p className="text-xs text-amber-400">
-                {t('settings.updatesCheckFailed', { error: updateInfo.error })}
-              </p>
-            ) : updateInfo?.latestVersion ? (
-              <p className="text-xs text-emerald-400">{t('settings.updatesUpToDate')}</p>
-            ) : null}
+          {updateChecking ? (
+            <p className="text-xs text-zinc-500">{t('settings.updatesChecking')}</p>
+          ) : updateInfo?.updateAvailable ? (
+            // a known update outranks a transient check error — offline users
+            // with a staged update must still see (and be able to install) it
+            <p className="text-xs font-medium text-blender">
+              {t('settings.updatesAvailable', { version: updateInfo.latestVersion ?? '' })}
+            </p>
+          ) : updateInfo?.error ? (
+            <p className="text-xs text-amber-400">
+              {t('settings.updatesCheckFailed', { error: updateInfo.error })}
+            </p>
+          ) : updateInfo?.latestVersion ? (
+            <p className="text-xs text-emerald-400">{t('settings.updatesUpToDate')}</p>
+          ) : null}
 
-            {updateProgress?.phase === 'downloading' && (
-              <p className="text-xs text-zinc-400">
-                {t('settings.updatesDownloading', {
-                  progress: updateProgress.totalBytes
-                    ? `${Math.round(((updateProgress.receivedBytes ?? 0) / updateProgress.totalBytes) * 100)}%`
-                    : formatBytes(updateProgress.receivedBytes ?? 0)
-                })}
-              </p>
-            )}
-            {updateProgress?.phase === 'verifying' && (
-              <p className="text-xs text-zinc-400">{t('settings.updatesVerifying')}</p>
-            )}
-            {updateProgress?.phase === 'extracting' && (
-              <p className="text-xs text-zinc-400">{t('settings.updatesExtracting')}</p>
-            )}
-            {updateInfo?.downloaded && (
-              <p className="text-xs text-emerald-400">{t('settings.updatesReady')}</p>
-            )}
-            {updateInfo?.updateAvailable && !updateInfo.canSelfUpdate && (
-              <p className="text-xs text-zinc-500">{t('settings.updatesManualOnly')}</p>
-            )}
+          {updateProgress?.phase === 'downloading' && (
+            <p className="text-xs text-zinc-400">
+              {t('settings.updatesDownloading', { progress: downloadProgressLabel })}
+            </p>
+          )}
+          {updateProgress?.phase === 'verifying' && (
+            <p className="text-xs text-zinc-400">{t('settings.updatesVerifying')}</p>
+          )}
+          {updateProgress?.phase === 'extracting' && (
+            <p className="text-xs text-zinc-400">{t('settings.updatesExtracting')}</p>
+          )}
+          {updateInfo?.downloaded && (
+            <p className="text-xs text-emerald-400">{t('settings.updatesReady')}</p>
+          )}
+          {updateInfo?.updateAvailable && !updateInfo.canSelfUpdate && (
+            <p className="text-xs text-zinc-500">{t('settings.updatesManualOnly')}</p>
+          )}
 
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              {updateInfo?.updateAvailable && updateInfo.canSelfUpdate && !updateInfo.downloaded && (
-                <button
-                  onClick={downloadUpdate}
-                  disabled={updateBusy || updateProgress?.phase === 'downloading'}
-                  className={primaryButtonClass}
-                >
-                  {updateBusy ? '…' : t('settings.updatesDownload')}
-                </button>
-              )}
-              {updateInfo?.updateAvailable && updateInfo.canSelfUpdate && updateInfo.downloaded && (
-                <button onClick={installUpdate} className={primaryButtonClass}>
-                  {t('settings.updatesRestart')}
-                </button>
-              )}
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {updateInfo?.updateAvailable && updateInfo.canSelfUpdate && !updateInfo.downloaded && (
               <button
-                onClick={checkUpdates}
-                disabled={!isDesktop || updateChecking || updateBusy}
-                title={desktopOnlyTitle}
-                className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+                onClick={downloadUpdate}
+                disabled={updateBusy || updateProgress?.phase === 'downloading'}
+                className={primaryButtonClass}
               >
-                {t('settings.updatesCheck')}
+                {updateBusy ? '…' : t('settings.updatesDownload')}
               </button>
-            </div>
+            )}
+            {updateInfo?.updateAvailable && updateInfo.canSelfUpdate && updateInfo.downloaded && (
+              <button onClick={installUpdate} className={primaryButtonClass}>
+                {t('settings.updatesRestart')}
+              </button>
+            )}
             <button
-              onClick={openReleases}
-              className="self-start text-[11px] text-zinc-500 underline transition-colors hover:text-zinc-300"
+              onClick={checkUpdates}
+              disabled={!isDesktop || updateChecking || updateBusy}
+              title={desktopOnlyTitle}
+              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
             >
-              {t('settings.updatesOpenReleases')}
+              {t('settings.updatesCheck')}
             </button>
           </div>
-        </SectionCard>
-
-        <SectionCard
-          title={t('settings.notifications')}
-          hint={t('settings.notificationsHint')}
-          anchorId="notifications-card"
-          highlighted={highlight === 'notifications'}
-        >
-          <div
-            title={desktopOnlyTitle}
-            className={`flex flex-col gap-2 ${isDesktop ? '' : 'opacity-40'}`}
+          <button
+            onClick={openReleases}
+            className="self-start text-[11px] text-zinc-500 underline transition-colors hover:text-zinc-300"
           >
+            {t('settings.updatesOpenReleases')}
+          </button>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        hidden={section !== 'notifications'}
+        title={t('settings.notifications')}
+        hint={t('settings.notificationsHint')}
+        anchorId="notifications-card"
+        highlighted={highlight === 'notifications'}
+      >
+        <div
+          title={desktopOnlyTitle}
+          className={`flex flex-col gap-2 ${isDesktop ? '' : 'opacity-40'}`}
+        >
+          <label
+            className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
+              isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={notifyCategories['blender-update']}
+              onChange={() => toggleNotifyCategory('blender-update')}
+              disabled={!isDesktop}
+              className="accent-blender disabled:cursor-not-allowed"
+            />
+            {t('settings.notifyBlender')}
+          </label>
+          <label
+            className={`ml-5 flex items-center gap-1.5 self-start text-xs transition-colors ${
+              isDesktop && notifyCategories['blender-update']
+                ? 'cursor-pointer text-zinc-300 hover:text-zinc-100'
+                : 'cursor-not-allowed text-zinc-600'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={notifyRolling}
+              onChange={toggleNotifyRolling}
+              disabled={!isDesktop || !notifyCategories['blender-update']}
+              className="accent-blender disabled:cursor-not-allowed"
+            />
+            {t('settings.notifyBlenderRolling')}
+          </label>
+          {(
+            [
+              ['addon-update', 'settings.notifyAddons'],
+              ['operation', 'settings.notifyOperations'],
+              ['sync-changes', 'settings.notifySync'],
+              ['superhive-auth', 'settings.notifySuperhive'],
+              ['cloud-sync', 'settings.notifyCloudSync']
+            ] as [ToggleableNotificationCategory, string][]
+          ).map(([category, labelKey]) => (
             <label
+              key={category}
               className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
                 isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
               }`}
             >
               <input
                 type="checkbox"
-                checked={notifyCategories['blender-update']}
-                onChange={() => toggleNotifyCategory('blender-update')}
+                checked={notifyCategories[category]}
+                onChange={() => toggleNotifyCategory(category)}
                 disabled={!isDesktop}
                 className="accent-blender disabled:cursor-not-allowed"
               />
-              {t('settings.notifyBlender')}
+              {t(labelKey)}
             </label>
-            <label
-              className={`ml-5 flex items-center gap-1.5 self-start text-xs transition-colors ${
-                isDesktop && notifyCategories['blender-update']
-                  ? 'cursor-pointer text-zinc-300 hover:text-zinc-100'
-                  : 'cursor-not-allowed text-zinc-600'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={notifyRolling}
-                onChange={toggleNotifyRolling}
-                disabled={!isDesktop || !notifyCategories['blender-update']}
-                className="accent-blender disabled:cursor-not-allowed"
-              />
-              {t('settings.notifyBlenderRolling')}
-            </label>
-            {(
-              [
-                ['addon-update', 'settings.notifyAddons'],
-                ['operation', 'settings.notifyOperations'],
-                ['sync-changes', 'settings.notifySync'],
-                ['superhive-auth', 'settings.notifySuperhive'],
-                ['cloud-sync', 'settings.notifyCloudSync']
-              ] as [ToggleableNotificationCategory, string][]
-            ).map(([category, labelKey]) => (
-              <label
-                key={category}
-                className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
-                  isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        hidden={section !== 'general'}
+        title={t('settings.language')}
+        hint={t('settings.languageHint')}
+        control={
+          <Dropdown
+            open={languageMenuOpen}
+            onClose={() => setLanguageMenuOpen(false)}
+            align="right"
+            menuClassName="max-h-64 w-48 overflow-auto rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
+            trigger={
+              <button
+                onClick={() => setLanguageMenuOpen((open) => !open)}
+                className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10"
+              >
+                {languageLabel(language)}
+                <ChevronDownIcon className="h-4 w-4 shrink-0 text-zinc-500" />
+              </button>
+            }
+          >
+            {AVAILABLE_LANGUAGES.map((code) => (
+              <button
+                key={code}
+                onClick={() => {
+                  setLanguage(code)
+                  setLanguageMenuOpen(false)
+                }}
+                className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
+                  language === code ? 'bg-selection text-selection-text' : 'text-zinc-300 hover:bg-white/10'
                 }`}
               >
-                <input
-                  type="checkbox"
-                  checked={notifyCategories[category]}
-                  onChange={() => toggleNotifyCategory(category)}
-                  disabled={!isDesktop}
-                  className="accent-blender disabled:cursor-not-allowed"
-                />
-                {t(labelKey)}
-              </label>
+                {languageLabel(code)}
+              </button>
             ))}
-          </div>
-        </SectionCard>
+          </Dropdown>
+        }
+      />
 
-        <SectionCard
-          title={t('settings.language')}
-          hint={t('settings.languageHint')}
-          control={
-            <Dropdown
-              open={languageMenuOpen}
-              onClose={() => setLanguageMenuOpen(false)}
-              align="right"
-              menuClassName="max-h-64 w-48 overflow-auto rounded-lg border border-white/10 bg-surface-menu p-1 shadow-xl"
-              trigger={
-                <button
-                  onClick={() => setLanguageMenuOpen((open) => !open)}
-                  className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10"
-                >
-                  {languageLabel(language)}
-                  <ChevronDownIcon className="h-4 w-4 shrink-0 text-zinc-500" />
-                </button>
-              }
-            >
-              {AVAILABLE_LANGUAGES.map((code) => (
-                <button
-                  key={code}
-                  onClick={() => {
-                    setLanguage(code)
-                    setLanguageMenuOpen(false)
-                  }}
-                  className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
-                    language === code ? 'bg-selection text-selection-text' : 'text-zinc-300 hover:bg-white/10'
-                  }`}
-                >
-                  {languageLabel(code)}
-                </button>
-              ))}
-            </Dropdown>
-          }
-        />
-
+      {section === 'appearance' && (
         <ThemeCard anchorId="theme-card" highlighted={highlight === 'theme'} />
+      )}
 
-        <SectionCard title={t('settings.startup')} hint={t('settings.startupHint')}>
-          <div
-            title={desktopOnlyTitle}
-            className={`flex flex-col gap-2 ${isDesktop ? '' : 'opacity-40'}`}
+      <SectionCard
+        hidden={section !== 'general'}
+        title={t('settings.startup')}
+        hint={t('settings.startupHint')}
+      >
+        <div
+          title={desktopOnlyTitle}
+          className={`flex flex-col gap-2 ${isDesktop ? '' : 'opacity-40'}`}
+        >
+          <label
+            className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
+              isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
+            }`}
           >
-            <label
-              className={`flex items-center gap-1.5 self-start text-xs text-zinc-300 transition-colors ${
-                isDesktop ? 'cursor-pointer hover:text-zinc-100' : 'cursor-not-allowed'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={startupEnabled}
-                onChange={toggleStartupEnabled}
-                disabled={!isDesktop}
-                className="accent-blender disabled:cursor-not-allowed"
-              />
-              {t('settings.startupWithSystem')}
-            </label>
-            <label
-              className={`flex items-center gap-1.5 self-start text-xs transition-colors ${
-                isDesktop && startupEnabled
-                  ? 'cursor-pointer text-zinc-300 hover:text-zinc-100'
-                  : 'cursor-not-allowed text-zinc-600'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={startupMinimized}
-                onChange={toggleStartupMinimized}
-                disabled={!isDesktop || !startupEnabled}
-                className="accent-blender disabled:cursor-not-allowed"
-              />
-              {t('settings.startupMinimized')}
-            </label>
-          </div>
-        </SectionCard>
+            <input
+              type="checkbox"
+              checked={startupEnabled}
+              onChange={toggleStartupEnabled}
+              disabled={!isDesktop}
+              className="accent-blender disabled:cursor-not-allowed"
+            />
+            {t('settings.startupWithSystem')}
+          </label>
+          <label
+            className={`flex items-center gap-1.5 self-start text-xs transition-colors ${
+              isDesktop && startupEnabled
+                ? 'cursor-pointer text-zinc-300 hover:text-zinc-100'
+                : 'cursor-not-allowed text-zinc-600'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={startupMinimized}
+              onChange={toggleStartupMinimized}
+              disabled={!isDesktop || !startupEnabled}
+              className="accent-blender disabled:cursor-not-allowed"
+            />
+            {t('settings.startupMinimized')}
+          </label>
+        </div>
+      </SectionCard>
 
-        <SectionCard title={t('settings.tray')} hint={t('settings.trayHint')}>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-zinc-300">{t('settings.trayOnClose')}</span>
-              <BehaviorToggle
-                value={closeBehavior}
-                onChange={changeCloseBehavior}
-                disabled={!isDesktop}
-                title={desktopOnlyTitle}
-                options={[
-                  { id: 'quit', label: t('settings.trayActionQuit') },
-                  { id: 'tray', label: t('settings.trayActionTray') }
-                ]}
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-zinc-300">{t('settings.trayOnMinimize')}</span>
-              <BehaviorToggle
-                value={minimizeBehavior}
-                onChange={changeMinimizeBehavior}
-                disabled={!isDesktop}
-                title={desktopOnlyTitle}
-                options={[
-                  { id: 'taskbar', label: t('settings.trayActionTaskbar') },
-                  { id: 'tray', label: t('settings.trayActionTray') }
-                ]}
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-zinc-300">{t('settings.trayPages')}</span>
-              <div
-                title={isDesktop ? undefined : desktopOnlyTitle}
-                className={`flex flex-wrap items-center gap-3 ${isDesktop ? '' : 'opacity-40'}`}
-              >
-                {TRAY_PAGE_IDS.map((page) => (
-                  <label
-                    key={page}
-                    className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={trayPages.includes(page)}
-                      onChange={() => toggleTrayPage(page)}
-                      disabled={!isDesktop}
-                      className="accent-blender disabled:cursor-not-allowed"
-                    />
-                    {t(`nav.${page}`)}
-                  </label>
-                ))}
-              </div>
+      <SectionCard
+        hidden={section !== 'general'}
+        title={t('settings.tray')}
+        hint={t('settings.trayHint')}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-zinc-300">{t('settings.trayOnClose')}</span>
+            <BehaviorToggle
+              value={closeBehavior}
+              onChange={changeCloseBehavior}
+              disabled={!isDesktop}
+              title={desktopOnlyTitle}
+              options={[
+                { id: 'quit', label: t('settings.trayActionQuit') },
+                { id: 'tray', label: t('settings.trayActionTray') }
+              ]}
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-zinc-300">{t('settings.trayOnMinimize')}</span>
+            <BehaviorToggle
+              value={minimizeBehavior}
+              onChange={changeMinimizeBehavior}
+              disabled={!isDesktop}
+              title={desktopOnlyTitle}
+              options={[
+                { id: 'taskbar', label: t('settings.trayActionTaskbar') },
+                { id: 'tray', label: t('settings.trayActionTray') }
+              ]}
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-zinc-300">{t('settings.trayPages')}</span>
+            <div
+              title={isDesktop ? undefined : desktopOnlyTitle}
+              className={`flex flex-wrap items-center gap-3 ${isDesktop ? '' : 'opacity-40'}`}
+            >
+              {TRAY_PAGE_IDS.map((page) => (
+                <label
+                  key={page}
+                  className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200"
+                >
+                  <input
+                    type="checkbox"
+                    checked={trayPages.includes(page)}
+                    onChange={() => toggleTrayPage(page)}
+                    disabled={!isDesktop}
+                    className="accent-blender disabled:cursor-not-allowed"
+                  />
+                  {t(`nav.${page}`)}
+                </label>
+              ))}
             </div>
           </div>
-        </SectionCard>
+        </div>
+      </SectionCard>
 
+      {section === 'storage' && (
         <StorageUsageCard
           usage={storage}
           loading={storageLoading}
@@ -703,213 +781,233 @@ export default function SettingsPage({ highlight }: { highlight?: string }) {
           desktopOnlyTitle={desktopOnlyTitle}
           onRecalculate={refreshStorage}
         />
+      )}
 
-        <SectionCard
-          title={t('settings.superhive')}
-          hint={t('settings.superhiveHint')}
-          anchorId="superhive-card"
-          highlighted={highlight === 'superhive'}
-        >
-          {isDesktop && !superhive.available ? (
-            <p className="text-xs text-amber-400">{t('settings.superhiveUnavailable')}</p>
-          ) : superhive.connected ? (
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                {t('settings.superhiveConnected')}
-              </span>
-              <button
-                onClick={disconnectSuperhive}
-                disabled={superhiveBusy || !isDesktop}
-                className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-              >
-                {t('settings.superhiveDisconnect')}
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                type="password"
-                value={superhiveToken}
-                onChange={(event) => setSuperhiveToken(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && superhiveToken.trim() && !superhiveBusy) connectSuperhive()
-                }}
-                placeholder={t('settings.superhiveTokenPlaceholder')}
-                disabled={!isDesktop}
-                autoComplete="off"
-                spellCheck={false}
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none disabled:opacity-40"
-              />
-              <button
-                onClick={connectSuperhive}
-                disabled={!isDesktop || !superhiveToken.trim() || superhiveBusy}
-                className="shrink-0 rounded-lg bg-accent-button px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {superhiveBusy ? '…' : t('settings.superhiveConnect')}
-              </button>
-            </div>
-          )}
-          <button
-            onClick={() => window.open(SUPERHIVE_DOCS_URL, '_blank', 'noopener')}
-            className="mt-2 text-[11px] text-zinc-500 underline transition-colors hover:text-zinc-300"
-          >
-            {t('settings.superhiveWhereToken')}
-          </button>
-        </SectionCard>
-
-        <CloudSyncCard anchorId="cloud-sync-card" highlighted={highlight === 'cloud-sync'} />
-
-        <SectionCard title={t('settings.projectFolders')} hint={t('settings.projectFoldersHint')}>
-          <div className="flex flex-wrap gap-2">
-            {folders.length === 0 ? (
-              <p className="text-xs text-zinc-500">{t('settings.noFolders')}</p>
-            ) : (
-              folders.map((folder) => (
-                <span
-                  key={folder.path}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-surface-menu py-1 pl-3 pr-2 text-xs text-zinc-300"
-                >
-                  <span className="truncate" title={folder.path}>
-                    {folder.name}
-                  </span>
-                  <button
-                    onClick={() => removeFolder(folder)}
-                    title={t('common.remove')}
-                    className="rounded-full p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-red-400"
-                  >
-                    <XIcon />
-                  </button>
-                </span>
-              ))
-            )}
+      <SectionCard
+        hidden={section !== 'addons'}
+        title={t('settings.superhive')}
+        hint={t('settings.superhiveHint')}
+        anchorId="superhive-card"
+        highlighted={highlight === 'superhive'}
+      >
+        {isDesktop && !superhive.available ? (
+          <p className="text-xs text-amber-400">{t('settings.superhiveUnavailable')}</p>
+        ) : superhive.connected ? (
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              {t('settings.superhiveConnected')}
+            </span>
+            <button
+              onClick={disconnectSuperhive}
+              disabled={superhiveBusy || !isDesktop}
+              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+            >
+              {t('settings.superhiveDisconnect')}
+            </button>
           </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={superhiveToken}
+              onChange={(event) => setSuperhiveToken(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && superhiveToken.trim() && !superhiveBusy) connectSuperhive()
+              }}
+              placeholder={t('settings.superhiveTokenPlaceholder')}
+              disabled={!isDesktop}
+              autoComplete="off"
+              spellCheck={false}
+              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-surface-input px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-blender/50 focus:outline-none disabled:opacity-40"
+            />
+            <button
+              onClick={connectSuperhive}
+              disabled={!isDesktop || !superhiveToken.trim() || superhiveBusy}
+              className="shrink-0 rounded-lg bg-accent-button px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-accent-button-hover disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {superhiveBusy ? '…' : t('settings.superhiveConnect')}
+            </button>
+          </div>
+        )}
+        <button
+          onClick={() => window.open(SUPERHIVE_DOCS_URL, '_blank', 'noopener')}
+          className="mt-2 text-[11px] text-zinc-500 underline transition-colors hover:text-zinc-300"
+        >
+          {t('settings.superhiveWhereToken')}
+        </button>
+      </SectionCard>
+
+      {section === 'cloud' && (
+        <CloudSyncCard anchorId="cloud-sync-card" highlighted={highlight === 'cloud-sync'} />
+      )}
+
+      <SectionCard
+        hidden={section !== 'projects'}
+        title={t('settings.projectFolders')}
+        hint={t('settings.projectFoldersHint')}
+      >
+        <div className="flex flex-wrap gap-2">
+          {folders.length === 0 ? (
+            <p className="text-xs text-zinc-500">{t('settings.noFolders')}</p>
+          ) : (
+            folders.map((folder) => (
+              <span
+                key={folder.path}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-surface-menu py-1 pl-3 pr-2 text-xs text-zinc-300"
+              >
+                <span className="truncate" title={folder.path}>
+                  {folder.name}
+                </span>
+                <button
+                  onClick={() => removeFolder(folder)}
+                  title={t('common.remove')}
+                  className="rounded-full p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-red-400"
+                >
+                  <XIcon />
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+        <button
+          onClick={addFolder}
+          disabled={!isDesktop}
+          title={desktopOnlyTitle}
+          className={`mt-3 disabled:cursor-not-allowed disabled:opacity-40 ${secondaryButtonClass}`}
+        >
+          + {t('settings.addFolder')}
+        </button>
+      </SectionCard>
+
+      <SectionCard
+        hidden={section !== 'projects'}
+        title={t('settings.removeMissingProjects')}
+        hint={t('settings.removeMissingProjectsHint')}
+        control={
           <button
-            onClick={addFolder}
+            onClick={removeMissing}
+            disabled={missingFiles.length === 0 || !isDesktop}
+            title={desktopOnlyTitle}
+            className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {missingFiles.length === 0
+              ? t('settings.removeMissingProjectsNone')
+              : t('settings.removeMissingProjects')}
+          </button>
+        }
+      />
+
+      <SectionCard
+        hidden={section !== 'installs'}
+        title={t('settings.installFolder')}
+        hint={t('settings.installFolderHint')}
+      >
+        <div className="flex items-center gap-2">
+          <p className={pathBoxClass} title={installsDirPath}>
+            {installsDirPath || '—'}
+          </p>
+          <button
+            onClick={openInstallsDir}
             disabled={!isDesktop}
             title={desktopOnlyTitle}
-            className={`mt-3 disabled:cursor-not-allowed disabled:opacity-40 ${secondaryButtonClass}`}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
           >
-            + {t('settings.addFolder')}
+            {t('settings.openFolder')}
           </button>
-        </SectionCard>
+          <button
+            onClick={changeInstallsDir}
+            disabled={!isDesktop}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {t('settings.change')}
+          </button>
+          <button
+            onClick={resetInstallsDirPath}
+            disabled={!isDesktop}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {t('settings.resetToDefault')}
+          </button>
+        </div>
+      </SectionCard>
 
-        <SectionCard
-          title={t('settings.removeMissingProjects')}
-          hint={t('settings.removeMissingProjectsHint')}
-          control={
-            <button
-              onClick={removeMissing}
-              disabled={missingFiles.length === 0 || !isDesktop}
-              title={desktopOnlyTitle}
-              className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {missingFiles.length === 0
-                ? t('settings.removeMissingProjectsNone')
-                : t('settings.removeMissingProjects')}
-            </button>
-          }
-        />
+      <SectionCard
+        hidden={section !== 'installs'}
+        title={t('settings.downloadFolder')}
+        hint={t('settings.downloadFolderHint')}
+      >
+        <div className="flex items-center gap-2">
+          <p className={pathBoxClass} title={downloadsDirPath}>
+            {downloadsDirPath || '—'}
+          </p>
+          <button
+            onClick={openDownloadsDir}
+            disabled={!isDesktop}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {t('settings.openFolder')}
+          </button>
+          <button
+            onClick={changeDownloadsDir}
+            disabled={!isDesktop}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {t('settings.change')}
+          </button>
+          <button
+            onClick={resetDownloadsDirPath}
+            disabled={!isDesktop}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {t('settings.resetToDefault')}
+          </button>
+        </div>
+      </SectionCard>
 
-        <SectionCard title={t('settings.installFolder')} hint={t('settings.installFolderHint')}>
-          <div className="flex items-center gap-2">
-            <p className={pathBoxClass} title={installsDirPath}>
-              {installsDirPath || '—'}
-            </p>
-            <button
-              onClick={openInstallsDir}
-              disabled={!isDesktop}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.openFolder')}
-            </button>
-            <button
-              onClick={changeInstallsDir}
-              disabled={!isDesktop}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.change')}
-            </button>
-            <button
-              onClick={resetInstallsDirPath}
-              disabled={!isDesktop}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.resetToDefault')}
-            </button>
-          </div>
-        </SectionCard>
+      <SectionCard
+        hidden={section !== 'addons'}
+        title={t('settings.libraryFolder')}
+        hint={t('settings.libraryFolderHint')}
+      >
+        <div className="flex items-center gap-2">
+          <p className={pathBoxClass} title={libraryDirPath}>
+            {libraryDirPath || '—'}
+          </p>
+          <button
+            onClick={openLibraryDir}
+            disabled={!isDesktop || libraryDirBusy}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {t('settings.openFolder')}
+          </button>
+          <button
+            onClick={changeLibraryDir}
+            disabled={!isDesktop || libraryDirBusy}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {libraryDirBusy ? t('settings.libraryFolderMoving') : t('settings.change')}
+          </button>
+          <button
+            onClick={resetLibraryDirPath}
+            disabled={!isDesktop || libraryDirBusy}
+            title={desktopOnlyTitle}
+            className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {t('settings.resetToDefault')}
+          </button>
+        </div>
+      </SectionCard>
 
-        <SectionCard title={t('settings.downloadFolder')} hint={t('settings.downloadFolderHint')}>
-          <div className="flex items-center gap-2">
-            <p className={pathBoxClass} title={downloadsDirPath}>
-              {downloadsDirPath || '—'}
-            </p>
-            <button
-              onClick={openDownloadsDir}
-              disabled={!isDesktop}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.openFolder')}
-            </button>
-            <button
-              onClick={changeDownloadsDir}
-              disabled={!isDesktop}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.change')}
-            </button>
-            <button
-              onClick={resetDownloadsDirPath}
-              disabled={!isDesktop}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.resetToDefault')}
-            </button>
-          </div>
-        </SectionCard>
-
-        <SectionCard title={t('settings.libraryFolder')} hint={t('settings.libraryFolderHint')}>
-          <div className="flex items-center gap-2">
-            <p className={pathBoxClass} title={libraryDirPath}>
-              {libraryDirPath || '—'}
-            </p>
-            <button
-              onClick={openLibraryDir}
-              disabled={!isDesktop || libraryDirBusy}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.openFolder')}
-            </button>
-            <button
-              onClick={changeLibraryDir}
-              disabled={!isDesktop || libraryDirBusy}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {libraryDirBusy ? t('settings.libraryFolderMoving') : t('settings.change')}
-            </button>
-            <button
-              onClick={resetLibraryDirPath}
-              disabled={!isDesktop || libraryDirBusy}
-              title={desktopOnlyTitle}
-              className={`${secondaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {t('settings.resetToDefault')}
-            </button>
-          </div>
-        </SectionCard>
-
-        <AssetLibraryCard />
-      </div>
-    </PageLayout>
+      {section === 'addons' && <AssetLibraryCard />}
+    </SettingsWindow>
   )
 }
 

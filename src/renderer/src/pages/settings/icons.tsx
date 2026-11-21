@@ -15,6 +15,21 @@ export function XIcon({ className = 'h-3 w-3' }: { className?: string }) {
   )
 }
 
+export function UpdateBadgeIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" className="fill-blender" />
+      <path
+        d="M12 7v9m-4-4 4 4 4-4"
+        className="stroke-on-accent"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg

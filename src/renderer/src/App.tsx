@@ -21,6 +21,11 @@ export default function App() {
   const [installsSearch, setInstallsSearch] = useState<string>('')
   const [addonsSearch, setAddonsSearch] = useState<string>('')
   const [settingsHighlight, setSettingsHighlight] = useState<string | null>(null)
+  // settings are a window over the current page rather than a page of their own; the
+  // epoch remounts it on every open, so a deep link always lands on its own section
+  // even when the window is already showing another one
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsEpoch, setSettingsEpoch] = useState(0)
   // bumped after a completed drag-and-drop or a notification jump: remounts the page
   // area so the target tab re-reads its data (and picks up a prefilled search) even
   // when the jump lands on the tab already open
@@ -32,17 +37,23 @@ export default function App() {
     uiSet('sidebar.collapsed', sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
 
+  const openSettings = (highlight?: string): void => {
+    setSettingsHighlight(highlight ?? null)
+    setSettingsEpoch((epoch) => epoch + 1)
+    setSettingsOpen(true)
+  }
+
   const navigate = (target: Page): void => {
+    if (target === 'settings') {
+      openSettings()
+      return
+    }
     // plain sidebar navigation clears any prefilled search / settings focus
     if (target === 'installs') setInstallsSearch('')
     if (target === 'addons') setAddonsSearch('')
     setSettingsHighlight(null)
+    setSettingsOpen(false)
     setPage(target)
-  }
-
-  const openSettings = (highlight?: string): void => {
-    setSettingsHighlight(highlight ?? null)
-    setPage('settings')
   }
 
   const showProjectsForVersion = (version: string): void => {
@@ -61,7 +72,10 @@ export default function App() {
   // the bell's entries jump to the page that can act on them, carrying a search
   // where one helps pin the exact row
   const handleNotificationClick = (notification: HubNotification): void => {
+    // a jump to a page must not leave the settings window covering it; the settings
+    // cases below reopen it
     setSettingsHighlight(null)
+    setSettingsOpen(false)
     switch (notification.category) {
       case 'launcher-update':
         openSettings('updates')
@@ -104,6 +118,7 @@ export default function App() {
     if (target === 'installs') clearInstallsSearch()
     if (target === 'addons') clearAddonsSearch()
     setSettingsHighlight(null)
+    setSettingsOpen(false)
     setDropEpoch((epoch) => epoch + 1)
     setPage(target)
   }
@@ -122,7 +137,7 @@ export default function App() {
           />
           <div className="flex min-h-0 flex-1">
             <Sidebar
-              current={page}
+              current={settingsOpen ? 'settings' : page}
               onNavigate={navigate}
               onUpdateClick={() => openSettings('updates')}
               collapsed={sidebarCollapsed}
@@ -150,9 +165,15 @@ export default function App() {
               {page === 'addons' && <AddonsPage onOpenSettings={openSettings} initialSearch={addonsSearch} />}
               {page === 'sync' && <SyncPage onShowInstalls={showInstallsForVersion} />}
               {page === 'activity' && <ActivityPage />}
-              {page === 'settings' && <SettingsPage highlight={settingsHighlight ?? undefined} />}
             </main>
           </div>
+          {settingsOpen && (
+            <SettingsPage
+              key={settingsEpoch}
+              highlight={settingsHighlight ?? undefined}
+              onClose={() => setSettingsOpen(false)}
+            />
+          )}
           <DropOverlay onDone={handleDropComplete} />
         </div>
       </DialogProvider>
