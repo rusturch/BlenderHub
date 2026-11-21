@@ -8,7 +8,7 @@ import { onUiStateSet, readUiState } from './ui-state'
 import { reconcileTrayIconPromotion } from './tray-promotion'
 import { readBlendInfo } from './blender/blend-parser'
 import { listInstalled } from './blender/installs'
-import { getProjectFiles, getProjectFolders, recordProjectOpened } from './projects/store'
+import { getProjectFolders, recordProjectOpened } from './projects/store'
 import { listRecentProjectFiles } from './projects/service'
 import { TRAY_PAGES_KEY, parseTrayPages } from '../shared/tray-menu'
 import { pickNativeInstall } from '../shared/blender-builds'
@@ -141,8 +141,7 @@ async function openProjectFromTray(filePath: string, lang: TrayLang): Promise<vo
 // the same folders/files the Projects page scans — most recently MODIFIED on disk,
 // not most recently opened through the launcher
 async function recentProjectItems(lang: TrayLang): Promise<MenuItemConstructorOptions[]> {
-  const [folders, individualFiles] = await Promise.all([getProjectFolders(), getProjectFiles()])
-  const recents = await listRecentProjectFiles(folders, individualFiles, RECENT_PROJECTS_LIMIT)
+  const recents = await listRecentProjectFiles(await getProjectFolders(), RECENT_PROJECTS_LIMIT)
   if (recents.length === 0) {
     return [{ label: TRAY_LABELS[lang].noRecentProjects, enabled: false }]
   }

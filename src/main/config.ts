@@ -24,6 +24,8 @@ export interface FileIdentity {
 
 export interface LauncherConfig {
   projectFolders: string[]
+  /** legacy: single files tracked by older versions; read once and folded into
+   *  projectFolders (see adoptLegacyFiles), never written to again */
   projectFiles: string[]
   /** folder-scanned .blend files seen in a previous scan — used to detect vanished files */
   knownFiles: string[]

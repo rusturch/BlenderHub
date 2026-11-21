@@ -143,9 +143,6 @@ function createPreviewFallbackApi(): LauncherApi {
     addFolder: async () => {
       throw new Error(DESKTOP_ONLY)
     },
-    addFile: async () => {
-      throw new Error(DESKTOP_ONLY)
-    },
     pickFolder: async () => {
       throw new Error(DESKTOP_ONLY)
     },
@@ -186,7 +183,6 @@ function createPreviewFallbackApi(): LauncherApi {
     deleteFile: async () => {
       throw new Error(DESKTOP_ONLY)
     },
-    listTrackedFiles: async () => [],
     renameFolder: async () => {
       throw new Error(DESKTOP_ONLY)
     },

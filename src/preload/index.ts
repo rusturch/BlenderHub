@@ -88,7 +88,6 @@ const api: LauncherApi = {
   projects: {
     listFolders: (): Promise<ProjectFolder[]> => ipcRenderer.invoke('projects:list-folders'),
     addFolder: (): Promise<ProjectFolder[]> => ipcRenderer.invoke('projects:add-folder'),
-    addFile: (): Promise<string | null> => ipcRenderer.invoke('projects:add-file'),
     pickFolder: (startIn?: string): Promise<string | null> =>
       ipcRenderer.invoke('projects:pick-folder', startIn),
     removeFolder: (path: string): Promise<ProjectFolder[]> =>
@@ -112,7 +111,6 @@ const api: LauncherApi = {
     removeFromList: (path: string): Promise<void> =>
       ipcRenderer.invoke('projects:remove-from-list', path),
     deleteFile: (path: string): Promise<void> => ipcRenderer.invoke('projects:delete-file', path),
-    listTrackedFiles: (): Promise<string[]> => ipcRenderer.invoke('projects:list-tracked-files'),
     renameFolder: (path: string, newName: string): Promise<string> =>
       ipcRenderer.invoke('projects:rename-folder', path, newName),
     openFolder: (path: string): Promise<void> => ipcRenderer.invoke('projects:open-folder', path),

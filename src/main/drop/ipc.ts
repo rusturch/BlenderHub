@@ -1,12 +1,12 @@
 import { rm, stat } from 'fs/promises'
-import { basename, dirname } from 'path'
+import { dirname } from 'path'
 import { BrowserWindow, ipcMain } from 'electron'
 import { downloadArchiveByUrl } from '../addons/extensions-api'
 import { addToLibraryOrExisting } from '../addons/library'
 import { getSuperhiveToken, SUPERHIVE_HOST } from '../addons/superhive'
 import { installLocalArchive } from '../blender/installs'
 import { scheduleAssetLibraryReconcile } from '../asset-library/service'
-import { addProjectFile } from '../projects/store'
+import { ensureFolderTracked } from '../projects/store'
 import { requireString } from '../ipc-util'
 import { classifyDroppedPath, extensionLinkFileName, EXTENSION_LINK_HOSTS } from './classify'
 import type { DroppedItemKind, DropHandleResult } from '../../shared/types'
@@ -49,8 +49,10 @@ async function handleItem(path: string, kind: DroppedItemKind): Promise<DropHand
     case 'project': {
       if (!path.toLowerCase().endsWith('.blend')) throw new Error('Not a .blend file')
       await stat(path) // must still exist
-      await addProjectFile(path)
-      return { status: 'ok', detail: basename(path) }
+      // projects are tracked by folder: the dropped file brings its folder along
+      await ensureFolderTracked(dirname(path))
+      // what was added is the folder, so that is what the result names
+      return { status: 'ok', detail: dirname(path) }
     }
     case 'addon': {
       const { entry, existed } = await addToLibraryOrExisting(path)

@@ -1,9 +1,50 @@
-import { isAbsolute, join, relative, resolve } from 'path'
+import { existsSync } from 'fs'
+import { dirname, isAbsolute, join, relative, resolve } from 'path'
 import { readConfig, updateConfig } from '../config'
 import type { FileIdentity } from '../config'
 
+// Folders are the only thing the launcher tracks. Older versions also kept a list of
+// single .blend files; a file listed that way now stands for the folder it lives in.
+// Entries whose file is gone are dropped — a dead path is no reason to start watching
+// a folder. Runs once per process, ahead of the first read of the folder list.
+let legacyFilesAdopted: Promise<void> | null = null
+
+function adoptLegacyFiles(): Promise<void> {
+  legacyFilesAdopted ??= updateConfig((config) => {
+    if (config.projectFiles.length === 0) return config
+    const projectFolders = [...config.projectFolders]
+    for (const file of config.projectFiles) {
+      const folder = dirname(resolve(file))
+      if (!existsSync(file)) continue
+      if (!projectFolders.some((known) => isPathUnder(folder, known))) projectFolders.push(folder)
+    }
+    return { ...config, projectFolders, projectFiles: [] }
+  }).then(
+    () => undefined,
+    (error) => {
+      // a locked config must not poison every later read: try again next time
+      legacyFilesAdopted = null
+      throw error
+    }
+  )
+  return legacyFilesAdopted
+}
+
 export async function getProjectFolders(): Promise<string[]> {
+  await adoptLegacyFiles()
   return (await readConfig()).projectFolders
+}
+
+/**
+ * Makes sure the launcher lists what lives in `folder`: registers it unless a tracked
+ * folder already covers it. This is how anything pointed at from outside the tracked
+ * set (a dropped file, a new project, a move destination) stays visible.
+ */
+export async function ensureFolderTracked(folder: string): Promise<void> {
+  const normalized = resolve(folder)
+  const folders = await getProjectFolders()
+  if (folders.some((known) => isPathUnder(normalized, known))) return
+  await addProjectFolder(normalized)
 }
 
 export async function addProjectFolder(folder: string): Promise<void> {
@@ -49,7 +90,6 @@ export async function remapProjectPaths(oldRoot: string, newRoot: string): Promi
     return {
       ...config,
       projectFolders: [...new Set(config.projectFolders.map(remap))],
-      projectFiles: [...new Set(config.projectFiles.map(remap))],
       knownFiles: [...new Set(config.knownFiles.map(remap))],
       keptFolders: [...new Set(config.keptFolders.map(remap))],
       favoriteFolders: [...new Set(config.favoriteFolders.map(remap))],
@@ -125,7 +165,6 @@ export async function forgetProjectPathsUnder(root: string): Promise<void> {
     return {
       ...config,
       projectFolders: config.projectFolders.filter((known) => !isPathUnder(known, rootKey)),
-      projectFiles: config.projectFiles.filter((known) => !isPathUnder(known, rootKey)),
       knownFiles: config.knownFiles.filter((known) => !isPathUnder(known, rootKey)),
       keptFolders: config.keptFolders.filter((known) => !isPathUnder(known, rootKey)),
       favoriteFolders: config.favoriteFolders.filter((known) => !isPathUnder(known, rootKey)),
@@ -134,30 +173,14 @@ export async function forgetProjectPathsUnder(root: string): Promise<void> {
   })
 }
 
-// "Remove from list": drop entries from individual tracking and scan memory, leaving
-// the files themselves alone. A file that is (or later reappears) inside a tracked
-// folder is simply picked up by the next scan again.
+// Forget remembered paths without touching the files: a file that is still (or later
+// reappears) inside a tracked folder is simply picked up by the next scan again.
 export async function untrackProjectPaths(paths: string[]): Promise<void> {
   if (paths.length === 0) return
   const keys = new Set(paths.map((path) => resolve(path)))
   await updateConfig((config) => ({
     ...config,
-    projectFiles: config.projectFiles.filter((known) => !keys.has(resolve(known))),
     knownFiles: config.knownFiles.filter((known) => !keys.has(resolve(known)))
-  }))
-}
-
-export async function getProjectFiles(): Promise<string[]> {
-  return (await readConfig()).projectFiles
-}
-
-export async function addProjectFile(file: string): Promise<void> {
-  const normalized = resolve(file)
-  await updateConfig((config) => ({
-    ...config,
-    projectFiles: config.projectFiles.some((known) => resolve(known) === normalized)
-      ? config.projectFiles
-      : [...config.projectFiles, normalized]
   }))
 }
 
@@ -203,22 +226,12 @@ export async function setScanMemory(
   })
 }
 
-// After moving a file: carry its list membership and recents over to the new path.
-// alwaysTrack=false (rename in place) only keeps an existing individual-tracking entry
-// instead of converting folder-scanned files into individually-tracked ones.
-export async function migrateProjectPath(
-  oldPath: string,
-  newPath: string,
-  alwaysTrack = true
-): Promise<void> {
+// After a file changed place: its recents entry follows, the old path is forgotten.
+// Whether the file stays listed is decided by folders alone — see ensureFolderTracked.
+export async function migrateProjectPath(oldPath: string, newPath: string): Promise<void> {
   const oldKey = resolve(oldPath)
   const newKey = resolve(newPath)
   await updateConfig((config) => {
-    const wasTracked = config.projectFiles.some((known) => resolve(known) === oldKey)
-    const projectFiles = config.projectFiles.filter((known) => resolve(known) !== oldKey)
-    if ((alwaysTrack || wasTracked) && !projectFiles.some((known) => resolve(known) === newKey)) {
-      projectFiles.push(newKey)
-    }
     const recentlyOpened = { ...config.recentlyOpened }
     if (recentlyOpened[oldKey] !== undefined) {
       recentlyOpened[newKey] = recentlyOpened[oldKey]
@@ -226,7 +239,6 @@ export async function migrateProjectPath(
     }
     return {
       ...config,
-      projectFiles,
       knownFiles: config.knownFiles.filter((known) => resolve(known) !== oldKey),
       recentlyOpened
     }
@@ -265,7 +277,6 @@ export async function forgetProjectPath(path: string): Promise<void> {
     delete recentlyOpened[key]
     return {
       ...config,
-      projectFiles: config.projectFiles.filter((known) => resolve(known) !== key),
       knownFiles: config.knownFiles.filter((known) => resolve(known) !== key),
       recentlyOpened
     }

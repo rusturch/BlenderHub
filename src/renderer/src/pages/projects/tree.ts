@@ -219,8 +219,7 @@ export function buildProjectTree(
   keptFolders: string[] = []
 ): ProjectTree {
   const live = files.filter((file) => !file.missing)
-  // Compact mode groups by the source folder the scan attributed each file to (the
-  // registered root, or the parent directory for individually added files). Full
+  // Compact mode groups by the tracked folder the scan attributed each file to. Full
   // mode groups by volume instead, so nested roots merge into the one real disk tree.
   const groups = new Map<string, { path: string; files: BlendFileInfo[]; kept: string[] }>()
   const groupFor = (groupPath: string): { path: string; files: BlendFileInfo[]; kept: string[] } => {
@@ -277,8 +276,8 @@ export function buildProjectTree(
     nodes.push(...liftEmptyVolumeRoot(root, nodeKeys, keyOfPath))
     groups.delete(folder.path.toLowerCase())
   }
-  // what remains are parent folders of individually added files — plain leaf
-  // folders in the tree, deliberately not expanded up to the drive root
+  // what remains belongs to a root the folder list does not carry yet (the two are
+  // fetched separately and can be a refresh apart) — shown as-is rather than dropped
   const extras = [...groups.values()].sort((a, b) => a.path.localeCompare(b.path))
   for (const group of extras) {
     const root = buildRootNode(

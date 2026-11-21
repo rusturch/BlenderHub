@@ -84,10 +84,8 @@ export interface BlendFileInfo {
   blenderVersion: string | null
   thumbnail: string | null
   hasCustomPreview: boolean
-  /** an individually-tracked file that no longer exists on disk */
+  /** seen by an earlier scan of its folder, no longer on disk */
   missing: boolean
-  /** listed because of an individual entry, not a folder scan — removable one by one */
-  tracked: boolean
 }
 
 export interface NewProjectInput {
@@ -112,7 +110,6 @@ export interface RelinkResult {
 export interface ProjectsApi {
   listFolders: () => Promise<ProjectFolder[]>
   addFolder: () => Promise<ProjectFolder[]>
-  addFile: () => Promise<string | null>
   /** startIn only preselects where the dialog opens */
   pickFolder: (startIn?: string) => Promise<string | null>
   removeFolder: (path: string) => Promise<ProjectFolder[]>
@@ -129,8 +126,6 @@ export interface ProjectsApi {
   findMissing: (path: string) => Promise<string | null>
   removeFromList: (path: string) => Promise<void>
   deleteFile: (path: string) => Promise<void>
-  /** raw individually-tracked file entries, for the Settings management list */
-  listTrackedFiles: () => Promise<string[]>
   /** rename a folder on disk; stored paths inside it follow along */
   renameFolder: (path: string, newName: string) => Promise<string>
   /** open a folder in the system file manager */

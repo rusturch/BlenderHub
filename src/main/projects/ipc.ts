@@ -24,13 +24,12 @@ import {
 } from './manage'
 import {
   addKeptFolder,
-  addProjectFile,
   addProjectFolder,
   clearKeptFolders,
+  ensureFolderTracked,
   getFavoriteFolders,
   getKeptFolders,
   getKnownFiles,
-  getProjectFiles,
   getProjectFolders,
   recordProjectOpened,
   relocateProjectFolder,
@@ -49,22 +48,17 @@ import type { ProjectFolder } from '../../shared/types'
 
 /**
  * Folder operations (rename / move / delete) are only allowed on folders the launcher
- * already knows: a registered project folder, something inside one, or the folder an
- * individually added file lives in. Anything else — including a path the page could
- * make up — is refused before a single byte moves.
+ * already knows: a registered project folder or something inside one. Anything else —
+ * including a path the page could make up — is refused before a single byte moves.
  */
 async function assertAllowedFolder(folderPath: string): Promise<string> {
   const target = resolve(folderPath)
-  const [folders, files] = await Promise.all([getProjectFolders(), getProjectFiles()])
+  const folders = await getProjectFolders()
   const inRegistered = folders.some((folder) => {
     const rel = relative(resolve(folder), target)
     return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
   })
-  const holdsTrackedFile = files.some((file) => {
-    const rel = relative(target, resolve(file))
-    return !rel.startsWith('..') && !isAbsolute(rel)
-  })
-  if (!inRegistered && !holdsTrackedFile) throw new Error('Folder is outside of the registered projects')
+  if (!inRegistered) throw new Error('Folder is outside of the registered projects')
   return target
 }
 
@@ -82,9 +76,7 @@ function assertSafeFolderTarget(target: string): void {
 
 async function assertAllowed(filePath: string): Promise<string> {
   const target = resolve(filePath)
-  const [folders, files] = await Promise.all([getProjectFolders(), getProjectFiles()])
-  if (files.some((known) => resolve(known) === target)) return target
-  for (const folder of folders) {
+  for (const folder of await getProjectFolders()) {
     const rel = relative(resolve(folder), target)
     if (rel && !rel.startsWith('..') && !isAbsolute(rel)) return target
   }
@@ -105,17 +97,10 @@ async function listFoldersWithStatus(): Promise<ProjectFolder[]> {
 
 // scan with the current config and hand back the missing entries (folder-level
 // unavailability is already excluded by the scan itself)
-async function scanMissingFiles(): Promise<{ missingPaths: string[]; folders: string[] }> {
-  const [folders, files, known] = await Promise.all([
-    getProjectFolders(),
-    getProjectFiles(),
-    getKnownFiles()
-  ])
-  const scan = await scanProjectFiles(folders, files, known)
-  return {
-    missingPaths: scan.files.filter((file) => file.missing).map((file) => file.path),
-    folders
-  }
+async function scanMissingFiles(): Promise<string[]> {
+  const [folders, known] = await Promise.all([getProjectFolders(), getKnownFiles()])
+  const scan = await scanProjectFiles(folders, known)
+  return scan.files.filter((file) => file.missing).map((file) => file.path)
 }
 
 function createEmptyBlend(executable: string, cwd: string, targetPath: string): Promise<void> {
@@ -151,17 +136,6 @@ export function registerProjectsIpc(): void {
       await addProjectFolder(picked.filePaths[0])
     }
     return listFoldersWithStatus()
-  })
-
-  ipcMain.handle('projects:add-file', async () => {
-    const picked = await dialog.showOpenDialog({
-      title: 'Add .blend file',
-      properties: ['openFile'],
-      filters: [{ name: 'Blender files', extensions: ['blend'] }]
-    })
-    if (picked.canceled || !picked.filePaths[0]) return null
-    await addProjectFile(picked.filePaths[0])
-    return picked.filePaths[0]
   })
 
   ipcMain.handle('projects:pick-folder', async (_event, rawStartIn: unknown) => {
@@ -301,8 +275,7 @@ export function registerProjectsIpc(): void {
   })
 
   ipcMain.handle('projects:remove-missing', async () => {
-    const { missingPaths } = await scanMissingFiles()
-    await untrackProjectPaths(missingPaths)
+    await untrackProjectPaths(await scanMissingFiles())
   })
 
   ipcMain.handle('projects:relink-missing', async () => {
@@ -311,8 +284,8 @@ export function registerProjectsIpc(): void {
       properties: ['openDirectory']
     })
     if (picked.canceled || !picked.filePaths[0]) return null
-    const { missingPaths, folders } = await scanMissingFiles()
-    const relinked = await relinkMissingFiles(missingPaths, picked.filePaths[0], folders)
+    const missingPaths = await scanMissingFiles()
+    const relinked = await relinkMissingFiles(missingPaths, picked.filePaths[0])
     if (relinked > 0) refreshTrayMenu()
     return { relinked, total: missingPaths.length }
   })
@@ -323,8 +296,6 @@ export function registerProjectsIpc(): void {
     if (moved.length > 0) refreshTrayMenu()
     return files
   })
-
-  ipcMain.handle('projects:list-tracked-files', async () => getProjectFiles())
 
   ipcMain.handle('projects:rename-file', async (_event, rawPath: unknown, rawName: unknown) => {
     const path = await assertAllowed(requireString(rawPath, 'file path'))
@@ -383,8 +354,8 @@ export function registerProjectsIpc(): void {
 
   ipcMain.handle('projects:find-missing', async (_event, rawPath: unknown) => {
     const path = resolve(requireString(rawPath, 'file path'))
-    const [files, known] = await Promise.all([getProjectFiles(), getKnownFiles()])
-    if (![...files, ...known].some((tracked) => resolve(tracked) === path)) {
+    const known = await getKnownFiles()
+    if (!known.some((tracked) => resolve(tracked) === path)) {
       throw new Error('Not a tracked project file')
     }
     const picked = await dialog.showOpenDialog({
@@ -424,7 +395,8 @@ export function registerProjectsIpc(): void {
 
     const build = await findInstalled(installId)
     await createEmptyBlend(build.executable, build.path, targetPath)
-    await addProjectFile(targetPath)
+    // a project created outside every tracked folder brings its folder into the list
+    await ensureFolderTracked(folder)
     return targetPath
   })
 

@@ -12,7 +12,7 @@ import { uiGet, uiSet } from '../lib/ui-store'
 import { useBackdropClose } from '../lib/use-backdrop-close'
 import { setCompactDragImage } from '../lib/drag-image'
 import type { BlendFileInfo, InstalledBuild, ProjectFolder } from '../../../shared/types'
-import { CubeIcon, WarningIcon, SearchIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon, GridIcon, ListIcon } from './projects/icons'
+import { CubeIcon, WarningIcon, RefreshIcon, PlusIcon, ChevronDownIcon, DotsIcon, CheckIcon, GearIcon, PanelLeftIcon, GridIcon, ListIcon } from './projects/icons'
 import { fileNameOf, readFlag } from './projects/projects-utils'
 import {
   buildProjectTree,
@@ -88,7 +88,6 @@ export default function ProjectsPage({
     uiGet('projects.sortDir') === 'asc' ? 'asc' : 'desc'
   )
   const [query, setQuery] = useState(querySnapshot)
-  const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   const [newProjectOpen, setNewProjectOpen] = useState(false)
   const [npName, setNpName] = useState('')
@@ -103,7 +102,6 @@ export default function ProjectsPage({
   const [cardMenuAt, setCardMenuAt] = useState<{ x: number; y: number } | null>(null)
   // single click marks a card; double click is what opens it
   const [selectedCard, setSelectedCard] = useState<string | null>(null)
-  const [missingOpen, setMissingOpen] = useState(false)
   const [folderMenu, setFolderMenu] = useState<{
     node: TreeNode
     point: { x: number; y: number }
@@ -304,19 +302,6 @@ export default function ProjectsPage({
     }
   }, [projectsApi, folders.length, refreshFiles, alertDialog])
 
-  const addFile = useCallback(async () => {
-    try {
-      const added = await projectsApi.addFile()
-      if (added) {
-        // an active tree filter would hide the just-added file
-        setTreeSelected(null)
-        await refreshFiles()
-      }
-    } catch (cause) {
-      await alertDialog(cleanErrorMessage(cause))
-    }
-  }, [projectsApi, refreshFiles, alertDialog])
-
   const installedSorted = useMemo(
     () => [...installed].sort((a, b) => compareVersionsDesc(a.version, b.version)),
     [installed]
@@ -460,28 +445,6 @@ export default function ProjectsPage({
     [projectsApi, refreshFiles, alertDialog]
   )
 
-  const removeFromList = useCallback(
-    async (file: BlendFileInfo) => {
-      const ok = await confirmDialog({
-        title: t('projects.removeFromListTitle'),
-        // a missing file has nothing left on disk; an existing one stays there
-        message: t(file.missing ? 'projects.removeFromListMessage' : 'projects.untrackFileMessage', {
-          name: file.name
-        }),
-        confirmLabel: t('common.remove')
-      })
-      if (!ok) return
-      try {
-        await projectsApi.removeFromList(file.path)
-        patchFiles((prev) => prev.filter((known) => known.path !== file.path))
-        void refreshFiles()
-      } catch (cause) {
-        await alertDialog(cleanErrorMessage(cause))
-      }
-    },
-    [projectsApi, refreshFiles, patchFiles, confirmDialog, alertDialog, t]
-  )
-
   const deleteProjectFile = useCallback(
     async (file: BlendFileInfo) => {
       const ok = await confirmDialog({
@@ -501,18 +464,6 @@ export default function ProjectsPage({
       }
     },
     [projectsApi, refreshFiles, patchFiles, confirmDialog, alertDialog, t]
-  )
-
-  const findMissing = useCallback(
-    async (file: BlendFileInfo) => {
-      try {
-        const found = await projectsApi.findMissing(file.path)
-        if (found) await refreshFiles()
-      } catch (cause) {
-        await alertDialog(cleanErrorMessage(cause))
-      }
-    },
-    [projectsApi, refreshFiles, alertDialog]
   )
 
   const duplicateFile = useCallback(
@@ -564,47 +515,11 @@ export default function ProjectsPage({
     }
   }, [renameFor, renameValue, projectsApi, refreshFiles, patchFiles, alertDialog])
 
-  const missingFiles = useMemo(
-    () =>
-      (files ?? [])
-        .filter((file) => file.missing)
-        .sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path)),
-    [files]
-  )
+  // Files the scan no longer finds stay in the list but are not surfaced: the strip
+  // that offered to relocate or forget them is gone for now. Only their count matters,
+  // to tell "nothing here yet" apart from "everything here is gone".
+  const liveFileCount = useMemo(() => (files ?? []).filter((file) => !file.missing).length, [files])
   const missingFolders = useMemo(() => folders.filter((folder) => folder.missing), [folders])
-
-  const removeAllMissing = useCallback(async () => {
-    const ok = await confirmDialog({
-      title: t('projects.removeAllMissingTitle'),
-      message: t('projects.removeAllMissingMessage', { count: missingFiles.length }),
-      confirmLabel: t('common.remove')
-    })
-    if (!ok) return
-    try {
-      await projectsApi.removeMissing()
-      patchFiles((prev) => prev.filter((file) => !file.missing))
-      void refreshFiles()
-    } catch (cause) {
-      await alertDialog(cleanErrorMessage(cause))
-    }
-  }, [missingFiles.length, projectsApi, refreshFiles, patchFiles, confirmDialog, alertDialog, t])
-
-  const relinkAllMissing = useCallback(async () => {
-    try {
-      const result = await projectsApi.relinkMissing()
-      if (!result) return
-      await refreshFiles()
-      await alertDialog({
-        title: t('projects.relinkDoneTitle'),
-        message:
-          result.relinked > 0
-            ? t('projects.relinkResult', { relinked: result.relinked, total: result.total })
-            : t('projects.relinkNoneFound')
-      })
-    } catch (cause) {
-      await alertDialog(cleanErrorMessage(cause))
-    }
-  }, [projectsApi, refreshFiles, alertDialog, t])
 
   const relocateMissingFolder = useCallback(
     async (folder: ProjectFolder) => {
@@ -1245,17 +1160,6 @@ export default function ProjectsPage({
       >
         {t('projects.moveProject')}
       </button>
-      {file.tracked && (
-        <button
-          onClick={() => {
-            setCardMenuFor(null)
-            removeFromList(file)
-          }}
-          className="block w-full px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-white/10"
-        >
-          {t('projects.removeFromList')}
-        </button>
-      )}
       <div className="my-1 border-t border-white/5" />
       <button
         onClick={() => {
@@ -1282,41 +1186,13 @@ export default function ProjectsPage({
           >
             <RefreshIcon className={`h-4 w-4 ${scanning ? 'animate-spin' : ''}`} />
           </button>
-          <Dropdown
-            open={addMenuOpen}
-            onClose={() => setAddMenuOpen(false)}
-            align="right"
-            menuClassName="min-w-44 overflow-hidden rounded-lg border border-white/10 bg-surface-menu py-1 shadow-xl"
-            trigger={
-              <button
-                onClick={() => setAddMenuOpen((open) => !open)}
-                disabled={!isDesktop}
-                className="flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
-              >
-                {t('projects.add')}
-                <ChevronDownIcon />
-              </button>
-            }
+          <button
+            onClick={addFolder}
+            disabled={!isDesktop}
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
           >
-            <button
-              onClick={() => {
-                setAddMenuOpen(false)
-                addFolder()
-              }}
-              className="block w-full px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
-            >
-              {t('projects.addFolder')}
-            </button>
-            <button
-              onClick={() => {
-                setAddMenuOpen(false)
-                addFile()
-              }}
-              className="block w-full px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-white/10"
-            >
-              {t('projects.addFile')}
-            </button>
-          </Dropdown>
+            {t('projects.addFolder')}
+          </button>
           <button
             onClick={openNewProject}
             disabled={!isDesktop || noInstalls}
@@ -1393,71 +1269,6 @@ export default function ProjectsPage({
               </div>
             </div>
           ))}
-
-          {missingFiles.length > 0 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-                <button
-                  onClick={() => setMissingOpen((open) => !open)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  <WarningIcon className="h-5 w-5 shrink-0 text-amber-400" />
-                  <span className="truncate text-sm font-medium text-amber-300">
-                    {t('projects.missingCount', { count: missingFiles.length })}
-                  </span>
-                  <ChevronDownIcon
-                    className={`h-3.5 w-3.5 shrink-0 text-amber-400/80 transition-transform ${missingOpen ? 'rotate-180' : ''}`}
-                  />
-                </button>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    onClick={relinkAllMissing}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:bg-white/10"
-                  >
-                    <SearchIcon className="h-3.5 w-3.5" />
-                    {t('projects.relinkInFolder')}
-                  </button>
-                  <button
-                    onClick={removeAllMissing}
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:bg-white/10"
-                  >
-                    {t('projects.removeAllMissing')}
-                  </button>
-                </div>
-              </div>
-              {missingOpen && (
-                <div className="max-h-64 overflow-y-auto border-t border-amber-500/20 p-1.5">
-                  {missingFiles.map((file) => (
-                    <div
-                      key={file.path}
-                      className="flex items-center gap-3 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-white/5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-zinc-200">
-                          {file.name.replace(/\.blend$/i, '')}
-                        </p>
-                        <p className="truncate text-[11px] text-zinc-500" title={file.path}>
-                          {file.path}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => findMissing(file)}
-                        className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-200 transition-colors hover:bg-white/10"
-                      >
-                        {t('projects.findFile')}
-                      </button>
-                      <button
-                        onClick={() => removeFromList(file)}
-                        className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
-                      >
-                        {t('projects.removeFromList')}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           <div className="flex flex-wrap items-end gap-2">
             <button
@@ -1687,10 +1498,10 @@ export default function ProjectsPage({
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
-          {files !== null && files.length - missingFiles.length === 0 && !scanning ? (
-            // nothing but missing entries or an unavailable folder — the strip and
-            // banner above already explain the situation, a "no files" line would lie
-            missingFiles.length === 0 && missingFolders.length === 0 ? (
+          {files !== null && liveFileCount === 0 && !scanning ? (
+            // an unavailable folder has its own banner right above, which says more than
+            // a flat "no files" line would
+            missingFolders.length === 0 ? (
               <p className="text-sm text-zinc-500">{t('projects.noBlendFiles')}</p>
             ) : null
           ) : visibleFiles.length === 0 && !scanning ? (

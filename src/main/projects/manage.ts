@@ -1,14 +1,12 @@
 import { constants, copyFile, cp, mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { shell } from 'electron'
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'path'
+import { basename, dirname, extname, join, resolve } from 'path'
 import {
   addKeptFolder,
-  addProjectFile,
+  ensureFolderTracked,
   forgetProjectPath,
   forgetProjectPathsUnder,
-  getProjectFiles,
-  getProjectFolders,
   isPathUnder,
   migrateProjectPath,
   remapProjectPaths
@@ -119,11 +117,10 @@ export async function moveProject(blendPath: string, destDir: string): Promise<s
   if (sidecar) {
     await moveFile(sidecar, join(dir, basename(sidecar))).catch(() => undefined)
   }
-  // landing inside a tracked folder means the scan finds it again on its own; only a
-  // file that ends up outside every root needs an individual entry to stay listed
-  const roots = await getProjectFolders()
-  const insideTracked = roots.some((root) => isPathUnder(targetPath, root))
-  await migrateProjectPath(blendPath, targetPath, !insideTracked)
+  // a destination outside every tracked folder becomes tracked itself — the project
+  // was moved, not dismissed, so it has to stay on the list
+  await ensureFolderTracked(dir)
+  await migrateProjectPath(blendPath, targetPath)
   await keepIfEmptied(dirname(blendPath))
   return targetPath
 }
@@ -147,7 +144,7 @@ export async function renameProject(blendPath: string, newFileName: string): Pro
       () => undefined
     )
   }
-  await migrateProjectPath(blendPath, targetPath, false)
+  await migrateProjectPath(blendPath, targetPath)
   return targetPath
 }
 
@@ -173,10 +170,6 @@ export async function duplicateProject(
     await copyFile(sidecar, join(dir, `${previewBaseName(targetPath)}${extname(sidecar)}`)).catch(
       () => undefined
     )
-  }
-  const tracked = await getProjectFiles()
-  if (tracked.some((known) => resolve(known) === resolve(blendPath))) {
-    await addProjectFile(targetPath)
   }
   const copyStat = await stat(targetPath)
   return { path: targetPath, mtimeMs: copyStat.mtimeMs, size: copyStat.size }
@@ -271,6 +264,7 @@ async function searchForFile(dir: string, targetLower: string, depth: number): P
 export async function findMissingFile(oldPath: string, searchDir: string): Promise<string | null> {
   const found = await searchForFile(resolve(searchDir), basename(oldPath).toLowerCase(), 0)
   if (!found) return null
+  await ensureFolderTracked(dirname(found))
   await migrateProjectPath(oldPath, found)
   return found
 }
@@ -307,11 +301,7 @@ function tailMatchScore(a: string, b: string): number {
 // Batch findMissingFile: walk the picked folder once, then give each missing project
 // the best same-named candidate. Each candidate is consumed at most once, so two
 // missing files with equal names cannot collapse onto a single file.
-export async function relinkMissingFiles(
-  missingPaths: string[],
-  searchDir: string,
-  registeredFolders: string[]
-): Promise<number> {
+export async function relinkMissingFiles(missingPaths: string[], searchDir: string): Promise<number> {
   const candidates: string[] = []
   await collectBlendCandidates(resolve(searchDir), candidates, 0)
   const byName = new Map<string, string[]>()
@@ -321,12 +311,6 @@ export async function relinkMissingFiles(
     if (list) list.push(candidate)
     else byName.set(key, [candidate])
   }
-  const roots = registeredFolders.map((folder) => resolve(folder))
-  const insideRegistered = (p: string): boolean =>
-    roots.some((root) => {
-      const rel = relative(root, resolve(p))
-      return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
-    })
   const used = new Set<string>()
   let relinked = 0
   for (const oldPath of [...missingPaths].sort()) {
@@ -342,9 +326,10 @@ export async function relinkMissingFiles(
       }
     }
     used.add(best)
-    // a file that lands outside every registered folder must become individually
-    // tracked, or it would vanish from the list right after relinking
-    await migrateProjectPath(oldPath, best, !insideRegistered(best))
+    // found outside every tracked folder: track where it lives, or it would vanish
+    // from the list right after relinking
+    await ensureFolderTracked(dirname(best))
+    await migrateProjectPath(oldPath, best)
     relinked++
   }
   return relinked
